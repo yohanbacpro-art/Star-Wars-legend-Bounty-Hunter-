@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Ranch Dynasty — Prototype V0.1</title>
+<title>Ranch Dynasty</title>
 <style>
   :root{
     --ink:#24170f;
@@ -2592,16 +2592,40 @@ function showGameOver(title,text){
   $("eventModal").classList.remove("hidden");
 }
 
+// `localStorage` lève une exception en navigation privée et dans une iframe
+// cloisonnée. On retombe alors sur une mémoire de session, qui tient le temps
+// de l'onglet — l'export en fichier reste la sauvegarde durable.
+const memoryStore = {};
+let storageWarned = false;
+const safeStorage = {
+  get(key){
+    try{ return localStorage.getItem(key); }
+    catch(e){ return Object.prototype.hasOwnProperty.call(memoryStore,key) ? memoryStore[key] : null; }
+  },
+  set(key,value){
+    try{ localStorage.setItem(key,value); return true; }
+    catch(e){ memoryStore[key] = value; return false; }
+  }
+};
+
 function saveGame(){
   if(!state) return;
   const slot = $("saveSlot") ? $("saveSlot").value : "1";
-  localStorage.setItem("ranchDynastySave_"+slot,JSON.stringify(state));
-  toast("Partie sauvegardée (emplacement "+slot+").");
+  const durable = safeStorage.set("ranchDynastySave_"+slot,JSON.stringify(state));
+  if(durable){
+    toast("Partie sauvegardée (emplacement "+slot+").");
+  } else {
+    toast("Sauvegardé pour cette session seulement — utilisez Exporter pour conserver la partie.");
+    if(!storageWarned){
+      storageWarned = true;
+      addLog("Ce navigateur n’autorise pas la sauvegarde permanente ici. Utilisez « Exporter » pour conserver la partie dans un fichier.", "info");
+    }
+  }
 }
 
 function loadGame(){
   const slot = $("saveSlot") ? $("saveSlot").value : "1";
-  const raw = localStorage.getItem("ranchDynastySave_"+slot) || localStorage.getItem("ranchDynastySave");
+  const raw = safeStorage.get("ranchDynastySave_"+slot) || safeStorage.get("ranchDynastySave");
   if(!raw){ toast("Aucune sauvegarde trouvée dans cet emplacement."); return; }
   try{
     state = JSON.parse(raw);
