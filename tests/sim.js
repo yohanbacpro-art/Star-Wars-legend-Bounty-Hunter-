@@ -173,18 +173,53 @@ for(let run = 0; run < RUNS; run++){
       const cap = Math.max(20, Math.floor(s2.land/3));
       if(s2.feed < 25 && s2.money > sc(60)*2) G.doAction("buyFeed");
       else if(s2.cattle > cap) G.doAction("sellCattle");
+      else if(s2.money < sc(200) && s2.cattle > 32) G.doAction("sellCattle");
       else if(s2.money > sc(1500) && s2.cattle >= cap-6) G.doAction("buyLand");
       else if(s2.cattle < cap && s2.money > (s2.cattlePrice+6)*5*3) G.doAction("buyCattle");
       else G.doAction("family");
       if(POLICY === "outlaw"){
-        if(s2.suspicion > 60 && s2.money > sc(150)) G.doAction("bribe");
-        else G.doAction("illegal");
+        // Un contrebandier avisé laisse retomber les soupçons avant de replonger.
+        if(s2.suspicion > 45 && s2.money > sc(150)) G.doAction("bribe");
+        else if(s2.suspicion > 45) G.doAction("family");
+        else {
+          // Choisit une opération qui rapporte de l'argent et qu'il peut payer.
+          const ops = ev("illegalOps()").filter(o => o.gain[1] && (!o.cost || s2.money > s2.costModifier*o.cost*3));
+          if(ops.length) G.runIllegalOp(ops[Math.floor(rng()*ops.length)].id);
+          else G.doAction("sellCattle");
+        }
       } else {
         if(s2.horses < 3 && s2.money > sc(400)) G.doAction("buyHorse");
         else G.doAction("competition");
       }
-      G.doAction("rivalNegotiate");
-      if((s2.cowboys||[]).length < 8 && s2.money > G.getHireCost()*4) G.hireCowboy();
+      // Troisième action : on la garde pour le troupeau, comme le joueur compétent.
+      { const s3 = ST(); const cap3 = Math.max(20, Math.floor(s3.land/3));
+        if(s3.cattle > cap3) G.doAction("sellCattle");
+        else if(s3.money < sc(300) && s3.cattle > 32) G.doAction("sellCattle");
+        else if(s3.cattle < cap3 && s3.money > (s3.cattlePrice+6)*5*6) G.doAction("buyCattle");
+        else G.doAction("rivalNegotiate"); }
+      // Un cow-boy coûte plus en salaire qu'il ne rapporte : on n'en embauche
+      // que le minimum utile aux coups de main, et seulement si la caisse suit.
+      if((s2.cowboys||[]).length < 4 && s2.money > G.getHireCost()*12) G.hireCowboy();
+    } else if(POLICY === "mixed"){
+      // Joueur compétent qui recourt au crime seulement quand la caisse est
+      // basse et les soupçons retombés : l'usage réaliste, pas le dogme.
+      for(let a = 0; a < 3; a++){
+        const s2 = ST();
+        const sc = n => Math.round(n * s2.costModifier);
+        const cap = Math.max(20, Math.floor(s2.land/3));
+        const buyCost = (s2.cattlePrice+6)*5;
+        if(s2.feed < 25 && s2.money > sc(60)*2) G.doAction("buyFeed");
+        else if(s2.cattle > cap) G.doAction("sellCattle");
+        else if(s2.money < sc(400) && s2.suspicion < 35){
+          const ops = ev("illegalOps()").filter(o => o.gain[1] && (!o.cost || s2.money > s2.costModifier*o.cost*3));
+          if(ops.length) G.runIllegalOp(ops[0].id); else G.doAction("sellCattle");
+        }
+        else if(s2.suspicion > 60 && s2.money > sc(150)) G.doAction("bribe");
+        else if(s2.money > sc(1200) && s2.cattle >= cap-6) G.doAction("buyLand");
+        else if(s2.cattle < cap && s2.money > buyCost*3) G.doAction("buyCattle");
+        else if(s2.horses >= 1 && s2.money > sc(250)) G.doAction("competition");
+        else G.doAction("family");
+      }
     } else if(POLICY === "random"){
       const n = Math.floor(rng()*4);
       for(let a = 0; a < n; a++){

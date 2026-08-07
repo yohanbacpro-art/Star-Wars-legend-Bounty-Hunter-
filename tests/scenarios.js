@@ -76,6 +76,25 @@ function freshGame(){
   s.money = 5000;
   return s;
 }
+// État volontairement « à tout faire » : il satisfait simultanément les
+// conditions de tous les événements conditionnels, pour pouvoir exercer
+// chacune de leurs branches.
+function permissiveGame(){
+  const s = freshGame();
+  s.money = 40000; s.cattle = 300; s.land = 300; s.horses = 5; s.weapons = 3;
+  s.feed = 10; s.suspicion = 60; s.reputation = 75; s.unity = 40;
+  s.rival.relation = -60;
+  s.cowboys = [
+    {name:"Las",loyalty:30,shoot:60,ride:60,salary:10,years:2,trait:"Ambitieux"},
+    {name:"Fidèle",loyalty:80,shoot:60,ride:60,salary:10,years:2,trait:"Fidèle"}
+  ];
+  s.factions.forEach((f,i) => f.relation = i === 0 ? -50 : 70);
+  addAdult(s, "Aîné", {age:35, resentment:80, ambition:70});
+  addAdult(s, "Cadet", {age:25, resentment:60, ambition:90});
+  G.addChild("Petit", {age:10, health:100});
+  return s;
+}
+
 function addAdult(s, name, props){
   const c = G.addChild(name, Object.assign({age:24, ambition:50, resentment:0, bond:50, health:100}, props||{}));
   return c;
@@ -394,11 +413,7 @@ section("Événements conditionnels");
   let branches = 0, errors = [];
   for(let i = 0; i < total; i++){
     for(let j = 0; j < 6; j++){
-      const s2 = freshGame();
-      s2.money = 4000; s2.cattle = 80; s2.land = 400; s2.horses = 5; s2.weapons = 3;
-      addAdult(s2, "Aîné", {age:35, resentment:80, ambition:70});
-      addAdult(s2, "Cadet", {age:25, resentment:60, ambition:90});
-      s2.factions.forEach(f => f.relation = 60);
+      permissiveGame();
       try{
         const applied = ev(`(function(){
           const e = events[${i}];
@@ -419,6 +434,259 @@ section("Événements conditionnels");
   check("toutes les branches d'événements s'appliquent sans erreur",
     errors.length === 0, errors.slice(0,3).join(" | "));
   check("des branches ont bien été exécutées", branches > 100, branches);
+}
+
+// ------------------------------------------- Rythme : brèves et illustrations
+section("Rythme du trimestre");
+{
+  // Une brève doit tomber à chaque trimestre, quel que soit l'état du ranch.
+  const s = freshGame();
+  s.money = 100000; s.feed = 5000; s.rival.relation = 0;
+  let silent = 0;
+  for(let i = 0; i < 40; i++){
+    const before = ST().history.length;
+    G.showBrief();
+    if(ST().history.length === before) silent++;
+  }
+  check("une brève tombe à chaque appel", silent === 0, silent + " trimestres muets");
+
+  // Elles ne doivent jamais interrompre le tour, même sur un état dégradé.
+  const s2 = freshGame();
+  s2.children = []; s2.cowboys = []; s2.factions = []; s2.rival = null;
+  let threw = false;
+  try{ for(let i = 0; i < 30; i++) G.showBrief(); }catch(e){ threw = e.message; }
+  check("une brève ne lance jamais, même sur un état amputé", threw === false, threw);
+
+  // Sur une partie complète, le journal ne doit pas rester vide longtemps.
+  const s3 = freshGame();
+  s3.money = 1000000; s3.feed = 50000;
+  let entries = 0;
+  for(let i = 0; i < 24; i++){
+    const before = ST().history.length;
+    G.endTurn();
+    if(!$el("eventModal")._classes.has("hidden")){
+      const ch = $el("eventChoices").children;
+      if(ch.length) ch[0].onclick();
+    }
+    entries += ST().history.length - before;
+  }
+  check("chaque trimestre laisse une trace au journal", entries >= 24, entries + " entrées pour 24 trimestres");
+}
+{
+  // Illustrations : dessinées dans la page, sans aucune requête réseau.
+  const motifs = Object.keys(ev("ART_MOTIFS"));
+  check("plusieurs scènes sont disponibles", motifs.length >= 8, motifs.length);
+  const svgs = motifs.map(m => ev(`eventArtSVG(${JSON.stringify(m)})`));
+  check("chaque scène produit un SVG", svgs.every(x => x.startsWith("<svg")));
+  // url(#id) référence un dégradé interne : seul url(quelque-chose-d-autre) sortirait.
+  check("aucune scène ne charge de ressource externe",
+    svgs.every(x => !/https?:\/\//.test(x) && !/url\((?!#)/.test(x)));
+  check("les scènes se teintent aux couleurs de l'époque",
+    svgs.every(x => x.includes("var(--")));
+  const ids = svgs.map(x => (x.match(/id="([^"]+)"/)||[])[1]);
+  check("les dégradés ont des identifiants distincts",
+    new Set(ids).size === ids.length, ids.join(","));
+
+  // Le choix de scène doit suivre le sujet de l'événement.
+  check("un événement de loi montre la scène de loi",
+    ev(`pickMotif({title:"Un agent fédéral au ranch", image:"une automobile noire"})`) === "law");
+  check("un événement de troupeau montre le bétail",
+    ev(`pickMotif({title:"Une maladie dans le troupeau", image:""})`) === "herd");
+  check("une scène explicite prime sur la détection",
+    ev(`pickMotif({art:"city", title:"Une maladie dans le troupeau", image:""})`) === "city");
+  check("un événement inconnu retombe sur la scène du ranch",
+    ev(`pickMotif({title:"zzz", image:""})`) === "ranch");
+
+  // Chaque événement du jeu doit obtenir une illustration valable.
+  const bad = [];
+  const total = ev("events.length");
+  for(let i = 0; i < total; i++){
+    permissiveGame();
+    const motif = ev(`pickMotif(events[${i}])`);
+    if(!ev("ART_MOTIFS")[motif]) bad.push(i + " → " + motif);
+  }
+  check("chaque événement obtient une scène connue", bad.length === 0, bad.join(", "));
+
+  // Le titre et le texte peuvent être des fonctions citant la partie en cours.
+  permissiveGame();
+  let threw = false;
+  try{ G.presentEvent(ev("events.find(e=>typeof e.text === 'function')")); }
+  catch(e){ threw = e.message; }
+  check("un événement à texte dynamique s'affiche", threw === false, threw);
+  check("le texte dynamique cite bien la partie",
+    $el("eventText").textContent.includes(ST().familyName), $el("eventText").textContent.slice(0,40));
+  check("l'illustration est bien insérée", $el("eventIllustration").innerHTML.includes("<svg"));
+}
+
+// ------------------------------------------------------------- Diplomatie
+section("Faveurs des factions");
+{
+  const s = freshGame();
+  const types = ["law","trade","media","community"];
+  types.forEach(t => {
+    check("la faveur " + t + " est définie", !!ev(`FACTION_FAVOURS[${JSON.stringify(t)}]`));
+  });
+
+  // Verrouillée tant que l'alliance n'est pas réelle
+  s.factions.forEach(f => f.relation = 0);
+  check("aucune faveur sans alliance", types.every(t => !ev(`favourReady(${JSON.stringify(t)})`)));
+
+  s.factions.forEach(f => f.relation = 80);
+  check("l'alliance déverrouille les faveurs", types.every(t => ev(`favourReady(${JSON.stringify(t)})`)));
+
+  // Une faveur coûte une action, produit son effet, puis se met en délai
+  const s2 = freshGame();
+  s2.factions.forEach(f => f.relation = 80);
+  s2.suspicion = 80; s2.actions = 3;
+  const relBefore = G.factionOfType("law").relation;
+  G.useFavour("law");
+  check("la faveur de l'autorité fait tomber les soupçons", ST().suspicion < 80, ST().suspicion);
+  check("une faveur consomme une action", ST().actions === 2, ST().actions);
+  check("une faveur entame la relation", G.factionOfType("law").relation < relBefore);
+  check("la faveur passe en délai", !ev('favourReady("law")'));
+
+  const susAfter = ST().suspicion;
+  ST().actions = 3;
+  G.useFavour("law");
+  check("la faveur ne peut pas être rejouée aussitôt",
+    ST().suspicion === susAfter && ST().actions === 3);
+
+  // Le délai s'épuise au fil des trimestres
+  ST().factions.forEach(f => f.relation = 80);
+  ST().money = 100000; ST().feed = 5000;
+  for(let i = 0; i < 8; i++) G.endTurn();
+  check("le délai finit par expirer", ev('favourReady("law")'));
+
+  // Chaque faveur s'exécute sans erreur et produit un effet
+  const errors = [];
+  types.forEach(t => {
+    const s3 = freshGame();
+    s3.factions.forEach(f => f.relation = 90);
+    s3.suspicion = 70; s3.reputation = 40; s3.unity = 40; s3.feed = 10;
+    s3.money = 1000; s3.actions = 3;
+    const snapshot = JSON.stringify([ST().suspicion, ST().money, ST().reputation, ST().unity, ST().feed]);
+    try{
+      G.useFavour(t);
+      const after = JSON.stringify([ST().suspicion, ST().money, ST().reputation, ST().unity, ST().feed]);
+      if(after === snapshot) errors.push(t + " sans effet mesurable");
+    }catch(e){ errors.push(t + " : " + e.message); }
+  });
+  check("les quatre faveurs produisent un effet", errors.length === 0, errors.join(" | "));
+
+  // Le bandeau latéral montre l'état diplomatique sans ouvrir de menu
+  const s4 = freshGame();
+  s4.factions.forEach(f => f.relation = 80);
+  G.render();
+  const strip = $el("standingBox").innerHTML;
+  check("le bandeau latéral affiche les pouvoirs locaux", strip.includes("Pouvoirs locaux"));
+  check("le bandeau signale les faveurs disponibles", strip.includes("★"));
+}
+
+// ------------------------------------------------- Opérations clandestines
+section("Coups en douce");
+{
+  // Chaque époque doit proposer ses propres opérations, complètes et chiffrées.
+  const missing = [];
+  ev("ERAS").forEach(era => {
+    const ops = ev(`ILLEGAL_OPS[${JSON.stringify(era.id)}]`);
+    if(!ops || !ops.length){ missing.push(era.id); return; }
+    ops.forEach(op => {
+      ["id","icon","name","what","fail"].forEach(f => {
+        if(!op[f]) missing.push(era.id + "/" + (op.id||"?") + " sans " + f);
+      });
+      if(!Array.isArray(op.gain) || !Array.isArray(op.sus)) missing.push(era.id + "/" + op.id + " sans chiffres");
+      if(!op.gain[1] && !op.reward) missing.push(era.id + "/" + op.id + " sans gain ni contrepartie");
+    });
+  });
+  check("chaque époque a ses opérations, toutes décrites et chiffrées",
+    missing.length === 0, missing.slice(0,4).join(" | "));
+
+  const ids = [];
+  ev("ERAS").forEach(era => ev(`ILLEGAL_OPS[${JSON.stringify(era.id)}]`).forEach(o => ids.push(era.id+"/"+o.id)));
+  check("au moins vingt opérations couvrent la saga", ids.length >= 20, ids.length);
+  ev("ERAS").forEach(era => {
+    const ops = ev(`ILLEGAL_OPS[${JSON.stringify(era.id)}]`);
+    const uniq = new Set(ops.map(o=>o.id));
+    check("identifiants uniques à l'époque " + era.id, uniq.size === ops.length);
+  });
+
+  // Ouvrir le panneau ne doit rien engager : ni action, ni argent.
+  const s = freshGame();
+  s.actions = 3; s.money = 5000;
+  G.openIllegalPanel();
+  check("ouvrir le panneau ne consomme pas d'action", ST().actions === 3, ST().actions);
+  check("ouvrir le panneau ne coûte rien", ST().money === 5000, ST().money);
+  check("le panneau s'affiche", !$el("illegalModal")._classes.has("hidden"));
+  G.renderIllegalPanel();
+  const html = $el("illegalContent").innerHTML;
+  check("le panneau annonce un pourcentage de réussite", /\d+ %/.test(html));
+  check("le panneau annonce les conséquences d'un échec", html.includes("Si ça rate"));
+
+  // Sans action restante, on ne peut pas ouvrir le panneau.
+  const s2 = freshGame();
+  s2.actions = 0;
+  $el("illegalModal").classList.add("hidden");
+  G.openIllegalPanel();
+  check("sans action restante, le panneau reste fermé",
+    $el("illegalModal")._classes.has("hidden"));
+}
+{
+  // Les chances doivent rester dans des bornes lisibles et réagir à l'état.
+  const s = freshGame();
+  const op = ev("illegalOps()")[0];
+  s.suspicion = 0; s.weapons = 10; s.money = 1000000;
+  s.cowboys = [{name:"A",loyalty:80,shoot:95,ride:70,salary:10,years:0,trait:"Fidèle"},
+               {name:"B",loyalty:80,shoot:95,ride:70,salary:10,years:0,trait:"Fidèle"}];
+  const bonnes = ev("illegalOdds(illegalOps()[0])");
+  s.suspicion = 95; s.weapons = 0; s.money = 0; s.cowboys = [];
+  const mauvaises = ev("illegalOdds(illegalOps()[0])");
+  check("les soupçons dégradent les chances", mauvaises < bonnes,
+    Math.round(mauvaises*100) + "% < " + Math.round(bonnes*100) + "%");
+  check("les chances restent bornées", bonnes <= .95 && mauvaises >= .05,
+    Math.round(mauvaises*100) + "–" + Math.round(bonnes*100) + "%");
+}
+{
+  // Une opération engage bien une action, et sa mise est prélevée.
+  const era = ev("ERAS").find(e => ev(`ILLEGAL_OPS["${e.id}"]`).some(o => o.cost));
+  const withCost = ev(`ILLEGAL_OPS["${era.id}"]`).find(o => o.cost);
+  const s = freshGame();
+  s.eraId = era.id; s.costModifier = era.inflation;
+  s.money = 100000; s.actions = 3;
+  const before = ST().money;
+  G.runIllegalOp(withCost.id);
+  check("une opération consomme une action", ST().actions === 2, ST().actions);
+  check("la mise est prélevée", ST().money < before);
+
+  // Mise insuffisante : rien ne se passe.
+  const s2 = freshGame();
+  s2.eraId = era.id; s2.costModifier = era.inflation;
+  s2.money = 0; s2.actions = 3;
+  G.runIllegalOp(withCost.id);
+  check("sans la mise, l'opération est refusée", ST().actions === 3, ST().actions);
+}
+{
+  // Toutes les opérations de toutes les époques doivent s'exécuter sans erreur,
+  // en réussite comme en échec.
+  const errors = [];
+  let wins = 0, fails = 0;
+  ev("ERAS").forEach(era => {
+    ev(`ILLEGAL_OPS[${JSON.stringify(era.id)}]`).forEach(op => {
+      for(let k = 0; k < 12; k++){
+        const s = freshGame();
+        s.eraId = era.id; s.costModifier = era.inflation;
+        s.money = 100000; s.actions = 3; s.weapons = 3; s.cattle = 60; s.land = 300;
+        s.cowboys = [{name:"A",loyalty:70,shoot:70,ride:70,salary:10,years:0,trait:"Fidèle"},
+                     {name:"B",loyalty:70,shoot:70,ride:70,salary:10,years:0,trait:"Fidèle"}];
+        s.suspicion = k % 2 ? 5 : 90;
+        const wonBefore = ST().stats.illegalWins;
+        try{ G.runIllegalOp(op.id); }
+        catch(e){ errors.push(era.id + "/" + op.id + " : " + e.message); }
+        if(ST().stats.illegalWins > wonBefore) wins++; else fails++;
+      }
+    });
+  });
+  check("toutes les opérations s'exécutent sans erreur", errors.length === 0, errors.slice(0,3).join(" | "));
+  check("réussites et échecs sont tous deux atteints", wins > 20 && fails > 20, wins + " / " + fails);
 }
 
 // ------------------------------------------------------------- Équilibrage
@@ -603,12 +871,45 @@ section("Montants et inflation");
   const compet8 = gainAt(8, "competition");
   check("la prime de concours suit l'inflation",
     compet8 > compet1 * 5, Math.round(compet1) + " → " + Math.round(compet8));
-  const illeg1 = gainAt(1, "illegal");
-  const illeg8 = gainAt(8, "illegal");
+  function illegalGainAt(inflation){
+    let total = 0, n = 0;
+    for(let i = 0; i < 200; i++){
+      const s = freshGame();
+      s.costModifier = inflation;
+      s.money = 1000000; s.weapons = 4; s.suspicion = 0; s.actions = 3;
+      const op = ev("illegalOps()")[0];
+      const before = ST().money;
+      G.runIllegalOp(op.id);
+      total += ST().money - before; n++;
+    }
+    return total/n;
+  }
+  const illeg1 = illegalGainAt(1);
+  const illeg8 = illegalGainAt(8);
   check("le gain de contrebande suit l'inflation",
     illeg8 > illeg1 * 5, Math.round(illeg1) + " → " + Math.round(illeg8));
-  check("le concours rapporte autant que la contrebande",
-    compet1 >= illeg1 * 0.8, "concours " + Math.round(compet1) + " vs trafic " + Math.round(illeg1));
+  // Arbitrage voulu : le crime paie davantage sur le coup, l'honnêteté gagne
+  // dans la durée par la réputation, qui majore les revenus du ranch.
+  check("la contrebande paie plus à l'action",
+    illeg1 > compet1, "trafic " + Math.round(illeg1) + " vs concours " + Math.round(compet1));
+  function repDelta(action, setup){
+    let total = 0;
+    for(let i = 0; i < 150; i++){
+      const s = freshGame();
+      s.money = 1000000; s.horses = 6; s.weapons = 4; s.reputation = 50; s.suspicion = 20;
+      s.actions = 3;
+      const before = ST().reputation;
+      if(setup) setup();
+      else G.doAction(action);
+      total += ST().reputation - before;
+    }
+    return total/150;
+  }
+  const repCompet = repDelta("competition");
+  const repIllegal = repDelta(null, () => { G.runIllegalOp(ev("illegalOps()")[0].id); });
+  check("le concours bâtit la réputation, la contrebande l'entame",
+    repCompet > 0 && repIllegal < 0,
+    "concours " + repCompet.toFixed(2) + " / trafic " + repIllegal.toFixed(2));
 }
 {
   // La prime de marché : un nom respecté vaut plus qu'un ranch sous enquête.
@@ -648,7 +949,8 @@ section("Montants et inflation");
   // d'événements : 141 ans de trafic ne peuvent pas finir « dynastie respectée ».
   const s = freshGame();
   s.money = 1000000; s.legacy.greed = 0; s.legacy.honor = 0;
-  for(let i = 0; i < 120; i++){ ST().actions = 3; G.doAction("illegal"); }
+  const opId = ev("illegalOps()")[0].id;
+  for(let i = 0; i < 120; i++){ ST().actions = 3; G.runIllegalOp(opId); }
   check("la contrebande alourdit l'héritage moral", ST().legacy.greed > 20, ST().legacy.greed);
 
   const s2 = freshGame();
@@ -663,17 +965,14 @@ section("Atteignabilité des objectifs");
   // « Les mains propres » exige greed === 0 : chaque événement doit donc offrir
   // au moins une branche qui n'entache pas l'honneur de la famille.
   const total = ev("events.length");
-  const forced = [];
+  const forced = [], untestable = [];
   for(let i = 0; i < total; i++){
     let hasCleanBranch = false;
     const nb = ev("events["+i+"].choices.length");
     for(let j = 0; j < nb; j++){
       let cleanOnce = false;
       for(let k = 0; k < 8 && !cleanOnce; k++){
-        const s = freshGame();
-        s.money = 4000; s.cattle = 80; s.land = 400; s.horses = 5; s.weapons = 3;
-        addAdult(s, "A", {resentment:80}); addAdult(s, "B", {resentment:70});
-        s.factions.forEach(f => f.relation = 60);
+        const s = permissiveGame();
         s.legacy.greed = 0;
         const applied = ev(`(function(){
           const e = events[${i}], c = e.choices[${j}];
@@ -686,10 +985,20 @@ section("Atteignabilité des objectifs");
       }
       if(cleanOnce) hasCleanBranch = true;
     }
-    if(!hasCleanBranch) forced.push(ev("events["+i+"].title"));
+    if(!hasCleanBranch){
+      // Distinguer « toujours compromettant » de « jamais déclenchable ici »
+      permissiveGame();
+      const reachable = ev("(function(){const e=events["+i+"];return !e.condition||!!e.condition();})()");
+      (reachable ? forced : untestable).push(ev("(function(){const t=events["+i+"].title;return typeof t==='function'?t():t;})()"));
+    }
   }
-  check("chaque événement offre une issue sans compromission",
+  if(untestable.length){
+    console.log("       non déclenchables dans l'état de test : " + untestable.join(", "));
+  }
+  check("chaque événement déclenchable offre une issue sans compromission",
     forced.length === 0, forced.join(" | "));
+  check("tous les événements sont déclenchables au moins une fois",
+    untestable.length === 0, untestable.join(" | "));
 
   // Les chapitres du secret aussi
   const secretForced = [];
