@@ -559,6 +559,104 @@ section("Équilibrage");
   check("presque tous les enfants finissent par se marier", married > 180, married + "/200");
 }
 
+// ------------------------------------------- Cohérence des montants et inflation
+section("Montants et inflation");
+{
+  // `cattlePrice` est déjà réévalué à chaque époque. Le repasser par `spend()`
+  // l'inflatait une seconde fois : acheter coûtait 16× le prix de vente en 2020.
+  const ratios = [];
+  ev("ERAS").forEach(era => {
+    const s = freshGame();
+    s.eraId = era.id;
+    s.costModifier = era.inflation;
+    s.cattlePrice = Math.round(28 * era.inflation);
+    s.money = 10000000; s.cattle = 50; s.actions = 3;
+    const before = ST().money;
+    G.doAction("buyCattle");
+    const achat = before - ST().money;
+    ST().actions = 3;
+    const before2 = ST().money;
+    G.doAction("sellCattle");
+    const vente = ST().money - before2;
+    ratios.push({era:era.id, r: achat/vente});
+  });
+  const worst = ratios.reduce((a,b) => b.r > a.r ? b : a, ratios[0]);
+  check("acheter reste proche du prix de vente à toutes les époques",
+    worst.r < 1.4, worst.era + " : " + worst.r.toFixed(1) + "×");
+
+  // Les gains doivent suivre l'inflation, sinon ils deviennent dérisoires.
+  function gainAt(inflation, action, setup){
+    let total = 0, n = 0;
+    for(let i = 0; i < 120; i++){
+      const s = freshGame();
+      s.costModifier = inflation;
+      s.money = 1000000; s.horses = 6; s.weapons = 4; s.reputation = 80;
+      s.actions = 3;
+      if(setup) setup(s);
+      const before = ST().money;
+      G.doAction(action);
+      total += ST().money - before; n++;
+    }
+    return total/n;
+  }
+  const compet1 = gainAt(1, "competition");
+  const compet8 = gainAt(8, "competition");
+  check("la prime de concours suit l'inflation",
+    compet8 > compet1 * 5, Math.round(compet1) + " → " + Math.round(compet8));
+  const illeg1 = gainAt(1, "illegal");
+  const illeg8 = gainAt(8, "illegal");
+  check("le gain de contrebande suit l'inflation",
+    illeg8 > illeg1 * 5, Math.round(illeg1) + " → " + Math.round(illeg8));
+  check("le concours rapporte autant que la contrebande",
+    compet1 >= illeg1 * 0.8, "concours " + Math.round(compet1) + " vs trafic " + Math.round(illeg1));
+}
+{
+  // La prime de marché : un nom respecté vaut plus qu'un ranch sous enquête.
+  function quarterIncome(reputation, suspicion){
+    const s = freshGame();
+    s.reputation = reputation; s.suspicion = suspicion;
+    s.cattle = 60; s.land = 300; s.money = 100000; s.feed = 5000;
+    s.rival.relation = 0; s.children = []; s.cowboys = [];
+    s.factions.forEach(f => f.relation = 0);
+    const realRandom = Math.random;
+    Math.random = () => 0.5;
+    const before = ST().money;
+    G.endTurn();
+    const delta = ST().money - before;
+    Math.random = realRandom;
+    return delta;
+  }
+  const bonNom = quarterIncome(95, 0);
+  const neutre = quarterIncome(50, 0);
+  const suspect = quarterIncome(50, 90);
+  check("une bonne réputation augmente les revenus", bonNom > neutre, bonNom + " > " + neutre);
+  check("les soupçons réduisent les revenus", suspect < neutre, suspect + " < " + neutre);
+}
+{
+  // La renommée doit s'émousser, sinon elle sature à 100 pour tout le monde
+  // et la prime de marché ne récompense plus rien.
+  const s = freshGame();
+  s.reputation = 100; s.cattle = 40; s.land = 200; s.money = 100000;
+  s.feed = 5000; s.rival.relation = 0;
+  s.factions.forEach(f => f.relation = 0);
+  for(let i = 0; i < 40; i++) G.endTurn();
+  check("une réputation non entretenue redescend", ST().reputation < 100, ST().reputation);
+  check("elle ne s'effondre pas non plus", ST().reputation > 40, ST().reputation);
+}
+{
+  // Le verdict final doit refléter la contrebande, pas seulement les choix
+  // d'événements : 141 ans de trafic ne peuvent pas finir « dynastie respectée ».
+  const s = freshGame();
+  s.money = 1000000; s.legacy.greed = 0; s.legacy.honor = 0;
+  for(let i = 0; i < 120; i++){ ST().actions = 3; G.doAction("illegal"); }
+  check("la contrebande alourdit l'héritage moral", ST().legacy.greed > 20, ST().legacy.greed);
+
+  const s2 = freshGame();
+  s2.money = 1000000; s2.legacy.greed = 0; s2.horses = 6;
+  for(let i = 0; i < 120; i++){ ST().actions = 3; G.doAction("competition"); }
+  check("les concours n'entachent pas l'héritage moral", ST().legacy.greed === 0, ST().legacy.greed);
+}
+
 // ------------------------------------------------- Atteignabilité des objectifs
 section("Atteignabilité des objectifs");
 {

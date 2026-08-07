@@ -1521,8 +1521,15 @@ function addLog(text,type="info"){
   ).join("");
 }
 
+// `spend` prend un montant en dollars de 1885 et le met à l'échelle de l'époque.
 function spend(base){
-  const cost = Math.round(base * state.costModifier);
+  return pay(Math.round(base * state.costModifier));
+}
+
+// `pay` prend un montant déjà exprimé dans la monnaie de l'époque courante.
+// À utiliser pour tout ce qui dérive de `state.cattlePrice`, lui-même réévalué
+// à chaque transition : le passer à `spend()` l'inflaterait une seconde fois.
+function pay(cost){
   if(state.money < cost){
     toast("Vous n’avez pas assez d’argent.");
     return false;
@@ -1541,7 +1548,8 @@ function doAction(type){
   if(state.actions <= 0 || state.gameOver) return;
 
   if(type === "buyCattle"){
-    const cost = spend((state.cattlePrice+6) * 5);
+    // `cattlePrice` est déjà à l'échelle de l'époque : ne pas repasser par spend().
+    const cost = pay((state.cattlePrice+6) * 5);
     if(cost === false) return;
     useAction(); state.cattle += 5;
     addLog(`Achat de 5 bovins pour ${cost} $.`, "good");
@@ -1570,12 +1578,12 @@ function doAction(type){
     const avgRide = (state.cowboys&&state.cowboys.length) ? state.cowboys.reduce((s,c)=>s+c.ride,0)/state.cowboys.length : 0;
     const score = rand(1,100) + state.horses*2 + Math.floor(state.reputation/8) + Math.floor(avgRide/10);
     if(score >= 85){
-      const prize = rand(220,360);
+      const prize = sc(rand(300,480));
       state.money += prize; state.reputation = clamp(state.reputation+8);
       state.stats.competitionWins++;
       addLog(`Victoire éclatante au concours équestre : +${prize} $ et +8 réputation.`, "good");
     } else if(score >= 55){
-      const prize = rand(60,130);
+      const prize = sc(rand(110,200));
       state.money += prize; state.reputation = clamp(state.reputation+3);
       addLog(`Belle place au concours : +${prize} $ et +3 réputation.`, "good");
     } else {
@@ -1611,6 +1619,7 @@ function doAction(type){
     const cost = spend(120);
     if(cost === false) return;
     useAction();
+    if(chance(.25)) state.legacy.greed++;
     if(chance(.78 + state.sheriffRelation/200 + factionStance("law")*.1)){
       const reduction = rand(12,24);
       state.suspicion = clamp(state.suspicion-reduction);
@@ -1625,21 +1634,26 @@ function doAction(type){
 
   if(type === "illegal"){
     useAction();
+    // Le trafic pèse sur l'héritage moral : sans cela, une famille pouvait
+    // vivre de contrebande pendant 141 ans et finir « dynastie respectée ».
+    if(chance(.34)) state.legacy.greed++;
     const avgShoot = (state.cowboys&&state.cowboys.length) ? state.cowboys.reduce((s,c)=>s+c.shoot,0)/state.cowboys.length : 0;
     const avgLoyalty = (state.cowboys&&state.cowboys.length) ? state.cowboys.reduce((s,c)=>s+c.loyalty,0)/state.cowboys.length : 100;
     const protection = state.weapons*3 + state.sheriffRelation/3 + avgShoot/5;
     const roll = rand(1,100) + protection;
-    const gain = rand(160,420);
+    const gain = sc(rand(160,420));
     if(roll >= 58){
       state.money += gain;
       state.suspicion = clamp(state.suspicion+rand(9,18));
       state.stats.illegalWins++;
+      // Même réussie, l'affaire se sait un peu : on ne bâtit pas un nom sur ça.
+      state.reputation = clamp(state.reputation - rand(0,2));
       addLog(`Une opération clandestine rapporte ${gain} $. Les soupçons augmentent.`, "good");
       if(chance(.18)) state.cattle += rand(2,6);
     } else {
       state.suspicion = clamp(state.suspicion+rand(18,30));
       state.reputation = clamp(state.reputation-rand(3,8));
-      const loss = Math.min(state.money,rand(60,180));
+      const loss = Math.min(state.money,sc(rand(60,180)));
       state.money -= loss;
       addLog(`L’opération illégale tourne mal. Perte de ${loss} $ et enquête renforcée.`, "bad");
       if(chance(.16)){
@@ -1730,6 +1744,21 @@ function endTurn(){
     upkeep = Math.round(upkeep * 1.15);
     factionEffects.push(`${factionOfType("trade").name} vous fait payer chaque service au prix fort (+15 % de charges).`);
   }
+
+  // Un nom respecté se paie au marché ; un ranch sous enquête fait fuir les
+  // acheteurs. C'est l'avantage composé du jeu honnête, face aux gains bruts
+  // mais ponctuels de la contrebande — qui érode précisément ces deux jauges.
+  const repPremium = 1 + (state.reputation - 50) / 250;
+  const susPenalty = 1 - state.suspicion / 400;
+  const marketFactor = repPremium * susPenalty;
+  ranchIncome = Math.round(ranchIncome * marketFactor);
+  if(Math.abs(marketFactor - 1) >= .06){
+    const pct = Math.round((marketFactor - 1) * 100);
+    factionEffects.push(pct > 0
+      ? `La réputation de la maison fait monter les prix à la vente (+${pct} % de revenus).`
+      : `Les soupçons qui pèsent sur le ranch éloignent les acheteurs (${pct} % de revenus).`);
+  }
+
   state.money += ranchIncome - upkeep;
   if(cowboyBonus>0){
     addLog(`Le savoir-faire des cow-boys améliore le rendement du ranch : +${cowboyBonus} $.`, "good");
@@ -1782,6 +1811,13 @@ function endTurn(){
   // Soupçons et famille évoluent
   state.suspicion = clamp(state.suspicion - rand(0,3));
   state.unity = clamp(state.unity - rand(0,2));
+
+  // La renommée s'émousse si on ne l'entretient pas. Sans cela elle saturait à
+  // 100 pour tout le monde au bout de quelques décennies, et la prime de marché
+  // ne récompensait plus rien.
+  if(state.reputation > 60 && chance(.5)){
+    state.reputation = clamp(state.reputation - 1);
+  }
 
   // L'autorité, l'opinion et le voisinage font sentir leur position chaque trimestre
   const lawStance = factionStance("law");

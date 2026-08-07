@@ -138,7 +138,7 @@ function mulberry32(a){
 
 const RUNS = Number(process.argv[3] || 40);
 const POLICY = process.argv[4] || "random";
-const summary = { ends:{}, achievements:{}, maxYear:0, contested:0, planned:0, designations:0, gens:0, years:[] };
+const summary = { ends:{}, achievements:{}, maxYear:0, contested:0, planned:0, designations:0, gens:0, years:[], wealth:[], rep:[], sus:[] };
 let uiCalls = 0;
 
 for(let run = 0; run < RUNS; run++){
@@ -165,19 +165,24 @@ for(let run = 0; run < RUNS; run++){
       if(s2.land < 900) G.doAction("buyLand");
       G.doAction("competition");
       G.doAction("family");
-    } else if(POLICY === "outlaw"){
-      // Vérifie l'atteignabilité des objectifs de spécialiste : contrebande,
-      // grande équipe fidèle, paix avec le rival.
+    } else if(POLICY === "outlaw" || POLICY === "honest"){
+      // Deux pilotes strictement identiques : seule diffère l'action centrale
+      // du trimestre — concours équestre contre opération clandestine.
       const s2 = ST();
       const sc = n => Math.round(n * s2.costModifier);
       const cap = Math.max(20, Math.floor(s2.land/3));
       if(s2.feed < 25 && s2.money > sc(60)*2) G.doAction("buyFeed");
       else if(s2.cattle > cap) G.doAction("sellCattle");
       else if(s2.money > sc(1500) && s2.cattle >= cap-6) G.doAction("buyLand");
-      else if(s2.cattle < cap && s2.money > (s2.cattlePrice+6)*5*s2.costModifier*3) G.doAction("buyCattle");
+      else if(s2.cattle < cap && s2.money > (s2.cattlePrice+6)*5*3) G.doAction("buyCattle");
       else G.doAction("family");
-      if(s2.suspicion > 60 && s2.money > sc(150)) G.doAction("bribe");
-      else G.doAction("illegal");
+      if(POLICY === "outlaw"){
+        if(s2.suspicion > 60 && s2.money > sc(150)) G.doAction("bribe");
+        else G.doAction("illegal");
+      } else {
+        if(s2.horses < 3 && s2.money > sc(400)) G.doAction("buyHorse");
+        else G.doAction("competition");
+      }
       G.doAction("rivalNegotiate");
       if((s2.cowboys||[]).length < 8 && s2.money > G.getHireCost()*4) G.hireCowboy();
     } else if(POLICY === "random"){
@@ -268,6 +273,12 @@ for(let run = 0; run < RUNS; run++){
   summary.maxYear = Math.max(summary.maxYear, ST().year);
   summary.years.push(ST().year);
   summary.gens += (ST().lineage||[]).length;
+  {
+    const t = ST();
+    // Richesse convertie en dollars de 1885, pour comparer d'une époque à l'autre.
+    summary.wealth.push(Math.round((t.money + t.cattle*t.cattlePrice + t.land*2) / t.costModifier));
+    summary.rep.push(t.reputation); summary.sus.push(t.suspicion);
+  }
   summary.planned += (ST().stats||{}).plannedSuccessions||0;
   summary.contested += (ST().stats||{}).contestedSuccessions||0;
   (ST().achievements||[]).forEach(a => {
@@ -283,6 +294,9 @@ console.log("Successions préparées :", summary.planned, "— contestées :", s
 console.log("\nFins de partie :");
 Object.entries(summary.ends).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>console.log("  "+v+"×  "+k));
 console.log("Générations (lignée) moyenne :", (summary.gens/RUNS).toFixed(2));
+const med = a => { const b=a.slice().sort((x,y)=>x-y); return b[Math.floor(b.length/2)]; };
+console.log("Patrimoine final médian (dollars de 1885) :", med(summary.wealth));
+console.log("Réputation médiane :", med(summary.rep), "— soupçons médians :", med(summary.sus));
 console.log("\nObjectifs débloqués (sur "+RUNS+" parties) :");
 (ev("typeof ACHIEVEMENTS !== \"undefined\" ? ACHIEVEMENTS : []")).forEach(a=>{
   const n = summary.achievements[a.id]||0;

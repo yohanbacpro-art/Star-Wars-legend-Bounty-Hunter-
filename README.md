@@ -1,4 +1,4 @@
-# Ranch Dynasty — V1.5
+# Ranch Dynasty — V1.6
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -79,18 +79,32 @@ chargement et à l'import. **Toute nouvelle propriété de `state` doit y être 
 
 ## Équilibrage
 
-La V1.5 rend la saga jouable jusqu'en 2026. Courbe visée, mesurée sur 80 parties
-par profil (`node tests/sim.js index.html 80 <profil>`) :
+Courbe mesurée sur 100 parties par profil (`node tests/sim.js index.html 100 <profil>`) :
 
-| Profil | Description | 2026 atteint | Année médiane |
+| Profil | Description | 2026 atteint | Patrimoine final médian* |
 |---|---|---|---|
-| `random` | clique au hasard | 0 % | 1895 |
-| `passive` | ne fait rien | 9 % | 1905 |
-| `policy` | joueur compétent | 73 % | 2026+ |
-| `outlaw` | compétent + contrebande | 95 % | 2026+ |
+| `random` | clique au hasard | 0 % | 853 |
+| `passive` | ne fait rien | 0 % | 1 275 |
+| `honest` | concours et négociation | 81 % | 290 788 |
+| `outlaw` | contrebande | 99 % | 95 381 |
+| `policy` | conduite du troupeau | 97 % | 576 992 |
+
+\* patrimoine converti en dollars de 1885, seule façon de comparer d'une époque
+à l'autre.
 
 L'inaction reste sanctionnée, comme le veut le principe du déficit passif ; c'est
 la conduite du ranch qui fait la différence.
+
+### Honnêteté contre contrebande
+
+La contrebande donne du cash immédiat sans mise de fonds : c'est une **béquille
+de survie** (99 % de parties terminées) mais à **faible plafond**. Elle érode la
+réputation, gonfle les soupçons — deux jauges qui pèsent directement sur le prix
+de vente — et alourdit l'héritage moral, jusqu'au verdict final.
+
+Le jeu honnête demande du capital et de la patience, mais rapporte **trois à six
+fois plus** à l'arrivée. C'est l'arbitrage voulu : le crime sauve un trimestre,
+l'honnêteté bâtit une dynastie.
 
 ### Règles structurantes à ne pas casser
 
@@ -111,6 +125,16 @@ la conduite du ranch qui fait la différence.
   s'éteignait d'un bloc au bout de trois ou quatre générations.
 - **Le mariage se retente chaque année** entre 18 et 38 ans. Le tirage unique à
   18 ans laissait la moitié des enfants sans descendance.
+- **`sc()` sur tout montant en dollars de 1885, `pay()` sur tout montant déjà à
+  l'échelle de l'époque.** `spend()` multiplie par `costModifier` : le faire sur
+  un montant dérivé de `state.cattlePrice` (déjà réévalué à chaque transition)
+  l'inflate deux fois — acheter 5 bovins coûtait 35 760 $ en 2020 pour 2 205 $ à
+  la revente. Symétriquement, une prime oubliée sans `sc()` reste figée aux prix
+  de 1885 et devient dérisoire : le concours équestre coûtait 720 $ pour un gain
+  plafonné à 360 $, soit une perte garantie.
+- **La prime de marché** (`repPremium × susPenalty`) fait varier les revenus de
+  ±20 %. C'est l'avantage composé du jeu honnête ; la réputation s'émousse d'elle-
+  même au-dessus de 60, donc elle s'entretient.
 
 ## Vérifier une modification
 
@@ -129,11 +153,11 @@ sans aucune dépendance :
 
 ```bash
 # Tests ciblés : objectifs, succession, factions, équilibrage, migration
-# des sauvegardes. 104 vérifications, sortie non nulle en cas d'échec.
+# des sauvegardes, montants et inflation. 114 vérifications, sortie non nulle en cas d'échec.
 node tests/scenarios.js index.html
 
 # Simulation de masse.
-# Profils : random | passive | policy | outlaw | cheat
+# Profils : random | passive | honest | outlaw | policy | cheat
 node tests/sim.js index.html 80 policy
 
 # Bilan trimestriel détaillé d'une partie, pour diagnostiquer l'économie
