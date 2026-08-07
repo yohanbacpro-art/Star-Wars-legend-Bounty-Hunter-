@@ -1,0 +1,2333 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ranch Dynasty — Prototype V0.1</title>
+<style>
+  :root{
+    --ink:#24170f;
+    --paper:#ead7ad;
+    --paper-2:#d9bd82;
+    --dark:#1d1712;
+    --panel:#f1e2bd;
+    --line:#745636;
+    --good:#386641;
+    --bad:#9b2226;
+    --gold:#b78a3e;
+    --muted:#75634c;
+  }
+  body.era-prohibition{
+    --ink:#181818; --paper:#e8dfc8; --paper-2:#cfc09a; --dark:#0c0c0c;
+    --panel:#efe6d2; --line:#2b2b2b; --gold:#c9a227; --muted:#4a4a4a;
+  }
+  body.era-depression{
+    --ink:#2a2a24; --paper:#d9d3bf; --paper-2:#b9b19a; --dark:#1a1a16;
+    --panel:#e2dcc8; --line:#5c5847; --gold:#8f8262; --muted:#5c5847;
+  }
+  body.era-industrial{
+    --ink:#1c2226; --paper:#d7dde0; --paper-2:#b3bec4; --dark:#12171a;
+    --panel:#e1e6e8; --line:#4c5a61; --gold:#7d94a0; --muted:#4c5a61; --good:#2f6b4f;
+  }
+  body.era-corporate{
+    --ink:#161a2b; --paper:#dde1ee; --paper-2:#b7bedb; --dark:#0d1020;
+    --panel:#e4e7f3; --line:#2e3968; --gold:#7887c9; --muted:#3c4470;
+  }
+  body.era-globalization{
+    --ink:#0e2321; --paper:#d9ecea; --paper-2:#aed6d1; --dark:#081615;
+    --panel:#e3f2f0; --line:#0f6e63; --gold:#17a398; --muted:#2d6b64;
+  }
+  body.era-modern{
+    --ink:#e9ecf1; --paper:#171a21; --paper-2:#252a34; --dark:#0a0c10;
+    --panel:#1c2028; --line:#3a4150; --gold:#d6a94a; --muted:#9aa3b2; --good:#3fb27f;
+  }
+  body{transition:background 1s ease}
+  .panel,.action,.topbar,.small-btn,.setup-card,.modal-card,.family-card,.hero{transition:background .6s ease, box-shadow .3s ease, border-color .6s ease}
+  .panel,.action,.small-btn,.modal-card,.family-card,.end-turn,.primary{border-radius:10px}
+  .topbar{border-radius:12px}
+  .setup-card{border-radius:14px}
+  .action:hover{transform:translateY(-3px);box-shadow:0 10px 18px rgba(0,0,0,.22)}
+  .era-badge{position:absolute;right:16px;top:16px;font-size:2.6rem;opacity:.4;pointer-events:none}
+
+  /* ---- Refonte : frise chronologique de la dynastie (élément signature) ---- */
+  .timeline{
+    margin-top:14px;
+    padding:12px 14px 10px;
+    background:linear-gradient(145deg,var(--panel),var(--paper-2));
+    border:3px double var(--line);
+    border-radius:12px;
+  }
+  .timeline-head{
+    display:flex;justify-content:space-between;align-items:baseline;
+    font-size:.74rem;text-transform:uppercase;letter-spacing:.14em;
+    color:var(--muted);margin-bottom:9px;
+  }
+  .timeline-track{
+    position:relative;height:8px;border-radius:99px;
+    background:repeating-linear-gradient(90deg,var(--line) 0 2px,transparent 2px 7px);
+    opacity:.85;
+  }
+  .timeline-fill{
+    position:absolute;left:0;top:0;height:100%;border-radius:99px;
+    background:var(--gold);transition:width .6s ease;
+  }
+  .timeline-marks{display:flex;justify-content:space-between;margin-top:7px}
+  .timeline-mark{
+    font-size:.62rem;letter-spacing:.06em;color:var(--muted);
+    text-align:center;flex:1;opacity:.55;transition:.3s;
+  }
+  .timeline-mark.active{opacity:1;color:var(--gold);font-weight:700}
+  .timeline-mark.past{opacity:.8}
+
+  /* ---- Refonte : hiérarchie typographique ---- */
+  .panel-title{font-variant:small-caps;letter-spacing:.13em}
+  .stat span:first-child{font-size:.86rem;color:var(--muted);letter-spacing:.03em}
+  .stat span:last-child{font-variant-numeric:tabular-nums;font-size:1.02rem}
+  .hero h2{letter-spacing:.02em}
+  .action strong{letter-spacing:.02em;font-size:.98rem}
+  .action:focus-visible,.small-btn:focus-visible,.choice:focus-visible,.end-turn:focus-visible{
+    outline:3px solid var(--gold);outline-offset:2px;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none!important;animation:none!important}
+  }
+  @media (max-width:900px){
+    .layout{grid-template-columns:1fr}
+    .actions-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .timeline-mark{font-size:.54rem}
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    color:var(--ink);
+    background:
+      radial-gradient(circle at 10% 10%, rgba(255,255,255,.06), transparent 20%),
+      linear-gradient(rgba(25,18,13,.87),rgba(25,18,13,.91)),
+      repeating-linear-gradient(90deg,#5f4630 0 5px,#503923 5px 10px);
+    font-family: Georgia, "Times New Roman", serif;
+    min-height:100vh;
+  }
+  button,input,select{font:inherit}
+  button{cursor:pointer}
+  .hidden{display:none!important}
+  .screen{min-height:100vh}
+  .setup{
+    display:grid;
+    place-items:center;
+    padding:28px 16px;
+  }
+  .setup-card{
+    width:min(760px,100%);
+    background:linear-gradient(135deg,var(--paper),#f5e8c8);
+    border:4px double var(--line);
+    box-shadow:0 20px 55px rgba(0,0,0,.45);
+    padding:30px;
+    position:relative;
+  }
+  .setup-card:before,.setup-card:after{
+    content:"✦";
+    position:absolute;
+    top:12px;
+    font-size:26px;
+    color:var(--gold);
+  }
+  .setup-card:before{left:18px}.setup-card:after{right:18px}
+  h1,h2,h3,p{margin-top:0}
+  .title{
+    text-align:center;
+    letter-spacing:.11em;
+    text-transform:uppercase;
+    margin-bottom:8px;
+  }
+  .subtitle{
+    text-align:center;
+    color:var(--muted);
+    margin-bottom:28px;
+  }
+  .form-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:16px;
+  }
+  label{
+    display:block;
+    font-weight:700;
+    margin-bottom:7px;
+  }
+  input,select{
+    width:100%;
+    border:2px solid var(--line);
+    background:#fff8e7;
+    padding:11px 12px;
+    color:var(--ink);
+    outline:none;
+  }
+  input:focus,select:focus{box-shadow:0 0 0 3px rgba(183,138,62,.28)}
+  .full{grid-column:1/-1}
+  .primary{
+    border:2px solid #4b321d;
+    background:linear-gradient(#bd8d48,#8b5e2f);
+    color:#fff8e7;
+    padding:13px 18px;
+    font-weight:700;
+    letter-spacing:.05em;
+    box-shadow:0 4px 0 #543419;
+  }
+  .primary:hover{filter:brightness(1.08)}
+  .primary:active{transform:translateY(2px);box-shadow:0 2px 0 #543419}
+  .game{
+    width:min(1500px,100%);
+    margin:auto;
+    padding:14px;
+  }
+  .topbar{
+    background:linear-gradient(135deg,#ead8ae,#d4b778);
+    border:3px double var(--line);
+    padding:13px 16px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+    position:sticky;
+    top:0;
+    z-index:5;
+    box-shadow:0 8px 20px rgba(0,0,0,.25);
+  }
+  .brand strong{font-size:1.2rem;letter-spacing:.07em}
+  .brand small{display:block;color:var(--muted);margin-top:3px}
+  .timebox{text-align:center;min-width:180px}
+  .timebox strong{display:block;font-size:1.1rem}
+  .top-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+  .small-btn{
+    background:#f7edcf;
+    border:1px solid var(--line);
+    color:var(--ink);
+    padding:8px 10px;
+    font-weight:700;
+  }
+  .small-btn:hover{background:#fff8e9}
+  .layout{
+    display:grid;
+    grid-template-columns:280px minmax(0,1fr) 330px;
+    gap:14px;
+    margin-top:14px;
+  }
+  .panel{
+    background:linear-gradient(145deg,var(--panel),#dfc994);
+    border:3px double var(--line);
+    box-shadow:0 10px 28px rgba(0,0,0,.25);
+  }
+  .panel-title{
+    padding:11px 14px;
+    border-bottom:2px solid var(--line);
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    font-size:.95rem;
+    background:rgba(87,58,31,.09);
+  }
+  .panel-body{padding:14px}
+  .stats{display:grid;gap:9px}
+  .stat{
+    display:flex;
+    justify-content:space-between;
+    gap:12px;
+    padding-bottom:7px;
+    border-bottom:1px dotted rgba(80,53,31,.48);
+  }
+  .stat span:last-child{font-weight:700}
+  .meters{margin-top:16px;display:grid;gap:11px}
+  .meter-row small{display:flex;justify-content:space-between;margin-bottom:5px}
+  .meter{
+    height:12px;
+    border:1px solid #5c432c;
+    background:#bda574;
+    overflow:hidden;
+  }
+  .meter > div{height:100%;background:var(--good);transition:.25s}
+  .meter.danger > div{background:var(--bad)}
+  .family-card{
+    margin-top:14px;
+    padding:11px;
+    background:rgba(255,248,231,.58);
+    border:1px solid var(--line);
+  }
+  .family-card strong{display:block}
+  .family-card small{color:var(--muted)}
+  .center{display:grid;gap:14px}
+  .hero{
+    min-height:170px;
+    color:#fff8e7;
+    display:flex;
+    align-items:flex-end;
+    padding:22px;
+    border:3px double #9c7d50;
+    position:relative;
+    overflow:hidden;
+    background:
+      linear-gradient(0deg,rgba(20,13,8,.86),rgba(20,13,8,.08)),
+      radial-gradient(circle at 25% 30%,rgba(255,205,108,.5),transparent 18%),
+      linear-gradient(150deg,#7f9a86 0 42%,#a77d48 42% 61%,#4c3422 61%);
+    box-shadow:inset 0 0 50px rgba(0,0,0,.3);
+  }
+  .hero h2{font-size:2rem;margin-bottom:4px;text-shadow:0 2px 4px #000}
+  .hero p{margin:0;color:#efe0ba}
+  .actions-grid{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:10px;
+  }
+  .action{
+    min-height:118px;
+    text-align:left;
+    border:2px solid var(--line);
+    background:linear-gradient(145deg,#f8eccd,#d7b978);
+    padding:13px;
+    color:var(--ink);
+    transition:.15s;
+  }
+  .action:hover{transform:translateY(-2px);box-shadow:0 6px 12px rgba(0,0,0,.18)}
+  .action:disabled{filter:grayscale(.75);opacity:.55;cursor:not-allowed;transform:none}
+  .action .icon{font-size:1.6rem;display:block;margin-bottom:8px}
+  .action strong{display:block;margin-bottom:5px}
+  .action small{color:var(--muted);line-height:1.3}
+  .action-cost{margin-top:7px;font-weight:700;font-size:.82rem}
+  .turn-footer{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    background:rgba(255,248,231,.55);
+    border:2px solid var(--line);
+    padding:12px;
+  }
+  .ap{
+    font-weight:700;
+  }
+  .end-turn{
+    background:#5f351f;
+    border:2px solid #2f1c12;
+    color:#fff1cc;
+    padding:12px 16px;
+    font-weight:700;
+  }
+  .end-turn:disabled{opacity:.5;cursor:not-allowed}
+  .log{
+    height:390px;
+    overflow:auto;
+    background:rgba(255,250,237,.63);
+    border:1px solid var(--line);
+    padding:10px;
+  }
+  .entry{
+    border-bottom:1px dotted rgba(70,47,29,.45);
+    padding:9px 3px;
+    line-height:1.35;
+  }
+  .entry.good{color:#275d35}.entry.bad{color:#8b1e21}.entry.info{color:#4d3b2d}
+  .journal-head{
+    text-align:center;
+    border-bottom:3px double var(--line);
+    margin-bottom:8px;
+  }
+  .journal-head h3{margin-bottom:3px;letter-spacing:.08em}
+  .journal-head small{color:var(--muted)}
+  .objective{
+    background:#2d241c;
+    color:#f3e3bb;
+    padding:11px;
+    border:1px solid #9b7446;
+    margin-top:12px;
+    line-height:1.35;
+  }
+  .modal{
+    position:fixed;
+    inset:0;
+    z-index:20;
+    background:rgba(11,8,6,.74);
+    display:grid;
+    place-items:center;
+    padding:18px;
+  }
+  .modal-card{
+    width:min(680px,100%);
+    max-height:90vh;
+    overflow:auto;
+    background:linear-gradient(145deg,#f3e4bd,#d8bd82);
+    border:4px double var(--line);
+    box-shadow:0 22px 70px rgba(0,0,0,.55);
+    padding:22px;
+  }
+  .event-illustration{
+    height:190px;
+    border:2px solid var(--line);
+    margin-bottom:17px;
+    display:flex;
+    align-items:flex-end;
+    padding:16px;
+    color:#fff8e7;
+    font-size:1.15rem;
+    font-weight:700;
+    text-shadow:0 2px 3px #000;
+    background:
+      linear-gradient(0deg,rgba(20,12,7,.8),rgba(20,12,7,.04)),
+      radial-gradient(circle at 70% 25%,#f2cd78 0 7%,transparent 8%),
+      linear-gradient(150deg,#829481 0 43%,#a77a46 43% 64%,#4b3422 64%);
+  }
+  .event-text{line-height:1.55}
+  .choices{display:grid;gap:9px;margin-top:16px}
+  .choice{
+    text-align:left;
+    padding:12px;
+    border:2px solid var(--line);
+    background:#fff4d7;
+    color:var(--ink);
+  }
+  .choice:hover{background:#fffaf0}
+  .toast{
+    position:fixed;
+    left:50%;
+    bottom:24px;
+    transform:translateX(-50%);
+    background:#24170f;
+    color:#fff1cf;
+    padding:11px 16px;
+    border:1px solid #c49a5a;
+    z-index:30;
+    box-shadow:0 8px 22px rgba(0,0,0,.35);
+  }
+  @media(max-width:1050px){
+    .layout{grid-template-columns:240px 1fr}
+    .right{grid-column:1/-1}
+    .log{height:260px}
+  }
+  @media(max-width:760px){
+    .form-grid,.layout{grid-template-columns:1fr}
+    .actions-grid{grid-template-columns:1fr 1fr}
+    .topbar{position:static;align-items:flex-start;flex-direction:column}
+    .timebox{text-align:left}
+  }
+  @media(max-width:480px){
+    .actions-grid{grid-template-columns:1fr}
+    .setup-card{padding:24px 18px}
+  }
+</style>
+</head>
+<body>
+
+<section id="setupScreen" class="screen setup">
+  <div class="setup-card">
+    <h1 class="title">Ranch Dynasty</h1>
+    <p class="subtitle">Fondez une famille. Bâtissez un ranch. Protégez votre héritage.</p>
+    <div class="form-grid">
+      <div>
+        <label for="familyName">Nom de la famille</label>
+        <input id="familyName" maxlength="24" value="Duflot" />
+      </div>
+      <div>
+        <label for="ranchName">Nom du ranch</label>
+        <input id="ranchName" maxlength="32" value="Ranch de l’Aigle Noir" />
+      </div>
+      <div>
+        <label for="founderName">Prénom du fondateur</label>
+        <input id="founderName" maxlength="20" value="Yohan" />
+      </div>
+      <div>
+        <label for="spouseName">Prénom du conjoint</label>
+        <input id="spouseName" maxlength="20" value="Élise" />
+      </div>
+      <div>
+        <label for="difficulty">Difficulté</label>
+        <select id="difficulty">
+          <option value="easy">Clémente</option>
+          <option value="normal" selected>Frontière</option>
+          <option value="hard">Impitoyable</option>
+        </select>
+      </div>
+      <div>
+        <label for="origin">Origine</label>
+        <select id="origin">
+          <option value="settler" selected>Colons déterminés</option>
+          <option value="breeder">Éleveurs expérimentés</option>
+          <option value="outlaw">Passé hors-la-loi</option>
+        </select>
+      </div>
+      <div class="full">
+        <button class="primary" id="startBtn">Fonder le ranch — Printemps 1885</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="gameScreen" class="screen hidden">
+  <main class="game">
+    <header class="topbar">
+      <div class="brand">
+        <strong id="headerRanch">Ranch Dynasty</strong>
+        <small id="headerFamily">Famille</small>
+        <small id="headerEra" style="color:var(--gold);font-weight:700;"></small>
+      </div>
+      <div class="timebox">
+        <strong id="seasonLabel">Printemps 1885</strong>
+        <span id="turnLabel">Tour 1</span>
+      </div>
+      <div class="top-actions">
+        <button class="small-btn" id="saveBtn">Sauvegarder</button>
+        <button class="small-btn" id="loadBtn">Charger</button>
+        <button class="small-btn" id="exportBtn">Exporter</button>
+        <button class="small-btn" id="importBtn">Importer</button>
+        <input type="file" id="importFile" accept="application/json" style="display:none">
+        <select id="saveSlot" style="margin-left:6px;">
+          <option value="1">Emplacement 1</option>
+          <option value="2">Emplacement 2</option>
+          <option value="3">Emplacement 3</option>
+        </select>
+        <button class="small-btn" id="familyBtn">Famille</button><button class="small-btn" id="cowboyBtn">Cow-boys</button><button class="small-btn" id="chronicleBtn">Chroniques</button><button class="small-btn" id="lineageBtn">Généalogie</button><button class="small-btn" id="diplomacyBtn">Diplomatie</button><button class="small-btn" id="restartBtn">Nouvelle partie</button>
+      </div>
+    </header>
+
+    <div class="timeline">
+      <div class="timeline-head">
+        <span>Chronique de la dynastie</span>
+        <span id="timelineYear">1885</span>
+      </div>
+      <div class="timeline-track"><div class="timeline-fill" id="timelineFill" style="width:0%"></div></div>
+      <div class="timeline-marks" id="timelineMarks"></div>
+    </div>
+
+    <div class="layout">
+      <aside class="panel">
+        <div class="panel-title">Le domaine</div>
+        <div class="panel-body">
+          <div class="stats">
+            <div class="stat"><span>Argent</span><span id="moneyStat">0 $</span></div>
+            <div class="stat"><span>Terres</span><span id="landStat">0 ha</span></div>
+            <div class="stat"><span>Bétail</span><span id="cattleStat">0</span></div>
+            <div class="stat"><span>Chevaux</span><span id="horsesStat">0</span></div>
+            <div class="stat"><span>Armes</span><span id="weaponsStat">0</span></div>
+            <div class="stat"><span>Fourrage</span><span id="feedStat">0</span></div>
+            <div class="stat"><span>Prix du bétail</span><span id="cattlePriceStat">0 $</span></div>
+          </div>
+
+          <div class="meters">
+            <div class="meter-row">
+              <small><span>Réputation</span><b id="repText">0/100</b></small>
+              <div class="meter"><div id="repMeter"></div></div>
+            </div>
+            <div class="meter-row">
+              <small><span>Unité familiale</span><b id="unityText">0/100</b></small>
+              <div class="meter"><div id="unityMeter"></div></div>
+            </div>
+            <div class="meter-row">
+              <small><span>Soupçons</span><b id="susText">0/100</b></small>
+              <div class="meter danger"><div id="susMeter"></div></div>
+            </div>
+          </div>
+
+          <div id="familyCard" class="family-card"></div>
+          <div class="objective">
+            <strong>Objectif</strong><br>
+            Préserver le ranch et transmettre le domaine à la génération suivante.
+          </div>
+        </div>
+      </aside>
+
+      <section class="center">
+        <div class="hero" id="heroPanel">
+          <div class="era-badge" id="eraBadge">🤠</div>
+          <div>
+            <h2 id="heroTitle">Votre ranch</h2>
+            <p id="heroText">Le vent souffle sur les terres encore sauvages de 1885.</p>
+          </div>
+        </div>
+        <div id="photoCredit" style="text-align:right;font-size:.72rem;color:var(--muted);margin-top:2px;"></div>
+
+        <div class="panel">
+          <div class="panel-title">Décisions du trimestre</div>
+          <div class="panel-body">
+            <div class="actions-grid">
+              <button class="action" data-action="buyCattle">
+                <span class="icon">🐂</span>
+                <strong>Acheter 5 bovins</strong>
+                <small>Agrandit le troupeau et les revenus futurs.</small>
+                <div class="action-cost" id="buyCattleCost">Coût : 140 $</div>
+              </button>
+              <button class="action" data-action="sellCattle">
+                <span class="icon">💰</span>
+                <strong>Vendre 5 bovins</strong>
+                <small>Liquidité immédiate au prix du marché.</small>
+                <div class="action-cost" id="sellValue">Gain : variable</div>
+              </button>
+              <button class="action" data-action="buyHorse">
+                <span class="icon" id="horseIcon">🐎</span>
+                <strong id="horseLabel">Acheter un cheval</strong>
+                <small id="horseDesc">Utile au ranch et pour les compétitions.</small>
+                <div class="action-cost">Coût : 180 $</div>
+              </button>
+              <button class="action" data-action="competition">
+                <span class="icon" id="competitionIcon">🏆</span>
+                <strong id="competitionLabel">Concours équestre</strong>
+                <small>Tentez de gagner argent et réputation.</small>
+                <div class="action-cost">Coût : 45 $</div>
+              </button>
+              <button class="action" data-action="buyWeapon">
+                <span class="icon" id="weaponIcon">🔫</span>
+                <strong id="weaponLabel">Acheter une arme</strong>
+                <small id="weaponDesc">Renforce la défense et les actions risquées.</small>
+                <div class="action-cost">Coût : 95 $</div>
+              </button>
+              <button class="action" data-action="buyLand">
+                <span class="icon">🌾</span>
+                <strong>Acheter 20 hectares</strong>
+                <small>Plus de pâturages, mais plus de charges.</small>
+                <div class="action-cost">Coût : 260 $</div>
+              </button>
+              <button class="action" data-action="bribe">
+                <span class="icon">🤝</span>
+                <strong id="bribeLabel">Soudoyer le shérif</strong>
+                <small id="bribeDesc">Réduit les soupçons, avec un risque politique.</small>
+                <div class="action-cost">Coût : 120 $</div>
+              </button>
+              <button class="action" data-action="illegal">
+                <span class="icon">🌙</span>
+                <strong id="illegalLabel">Action illégale</strong>
+                <small id="illegalDesc">Vol de bétail ou contrebande. Très rentable, très risqué.</small>
+                <div class="action-cost">Risque élevé</div>
+              </button>
+              <button class="action" data-action="rivalAction">
+                <span class="icon">⚔️</span>
+                <strong id="rivalLabel">Affronter le rival</strong>
+                <small id="rivalDesc">Tente d'affaiblir la famille rivale par la force ou l'intimidation.</small>
+                <div class="action-cost">Coût : 70 $</div>
+              </button>
+              <button class="action" data-action="rivalNegotiate">
+                <span class="icon">🕊️</span>
+                <strong>Négocier avec le rival</strong>
+                <small>Tente d'apaiser durablement la relation.</small>
+                <div class="action-cost">Coût : 50 $</div>
+              </button>
+              <button class="action" data-action="family">
+                <span class="icon">👨‍👩‍👧‍👦</span>
+                <strong>Temps en famille</strong>
+                <small>Renforce l’unité et prépare la succession.</small>
+                <div class="action-cost">Aucun coût</div>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="turn-footer">
+          <div>
+            <div class="ap">Actions restantes : <span id="apLabel">3</span>/3</div>
+            <small>Terminez le trimestre pour calculer revenus, dépenses et événements.</small>
+          </div>
+          <button class="end-turn" id="endTurnBtn">Terminer le trimestre</button>
+        </div>
+      </section>
+
+      <aside class="panel right">
+        <div class="panel-title">La Gazette de la Frontière</div>
+        <div class="panel-body">
+          <div class="journal-head">
+            <h3 id="journalDate">PRINTEMPS 1885</h3>
+            <small>Nouvelles du ranch et du territoire</small>
+          </div>
+          <div id="log" class="log"></div>
+        </div>
+      </aside>
+    </div>
+  </main>
+</section>
+
+<div id="eventModal" class="modal hidden">
+  <div class="modal-card">
+    <div class="event-illustration" id="eventIllustration">Événement</div>
+    <h2 id="eventTitle">Événement</h2>
+    <p id="eventText" class="event-text"></p>
+    <div id="eventChoices" class="choices"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script>
+"use strict";
+
+const seasons = ["Printemps","Été","Automne","Hiver"];
+
+const ERAS = [
+  {
+    id:"foundation", start:1885, end:1919, inflation:1, emoji:"🤠",
+    photo:"https://commons.wikimedia.org/wiki/Special:FilePath/Working_with_cattle_Empire_Ranch_Arizona_1890s.jpg",
+    photoCredit:"Empire Ranch, Arizona, 1890s — domaine public, Wikimedia Commons",
+    name:"La Fondation (1885–1919)",
+    desc:"Les terres de la frontière se disputent entre colons, ranchs rivaux et bandits. La loi est encore lointaine.",
+    rivalType:"le ranch rival", rivalVerb:"des hommes de",
+    factionNames:["la Coopérative des Éleveurs","le fort militaire voisin","la ville de Redemption"],
+    horseLabel:"Acheter un cheval", horseDesc:"Utile au ranch et pour les compétitions.", horseIcon:"🐎",
+    competitionLabel:"Concours équestre",
+    weaponLabel:"Acheter une arme", weaponDesc:"Renforce la défense et les actions risquées.", weaponIcon:"🔫",
+    bribeLabel:"Soudoyer le shérif", bribeDesc:"Réduit les soupçons, avec un risque politique.",
+    illegalLabel:"Action illégale", illegalDesc:"Vol de bétail ou contrebande. Très rentable, très risqué."
+  },
+  {
+    id:"prohibition", start:1920, end:1932, inflation:1.4, emoji:"🥃",
+    photo:"https://commons.wikimedia.org/wiki/Special:FilePath/Prohibition_agents_destroying_barrels_of_alcohol_(United_States,_prohibition_era).jpg",
+    photoCredit:"Agents de la Prohibition, 1921 — domaine public, Wikimedia Commons",
+    name:"La Prohibition (1920–1932)",
+    desc:"L'alcool est interdit. Le crime organisé prospère en ville, et des syndicats cherchent à mettre la main sur les terres rurales.",
+    rivalType:"le syndicat rival", rivalVerb:"des hommes de main de",
+    factionNames:["la police locale","le journal du comté","l'église réformée"],
+    horseLabel:"Acheter un cheval", horseDesc:"Utile au ranch et pour les compétitions.", horseIcon:"🐎",
+    competitionLabel:"Concours équestre",
+    weaponLabel:"Acheter une arme", weaponDesc:"Se protéger du crime organisé qui gagne du terrain.", weaponIcon:"🔫",
+    bribeLabel:"Soudoyer le shérif", bribeDesc:"Réduit les soupçons, avec un risque politique.",
+    illegalLabel:"Contrebande d'alcool", illegalDesc:"Fournir les réseaux clandestins. Très rentable, très risqué."
+  },
+  {
+    id:"depression", start:1933, end:1945, inflation:1.3, emoji:"🌾",
+    photo:"https://commons.wikimedia.org/wiki/Special:FilePath/Dust_Bowl_-_Dallas,_South_Dakota_1936.jpg",
+    photoCredit:"Dust Bowl, Dakota du Sud, 1936 — domaine public (USDA), Wikimedia Commons",
+    name:"Crise et Guerre (1933–1945)",
+    desc:"La Grande Dépression frappe durement, puis le pays entre en guerre. Le rationnement et l'effort national bouleversent le ranch.",
+    rivalType:"le ranch rival", rivalVerb:"des hommes de",
+    factionNames:["la banque du comté","le bureau d'aide fédérale","les fermiers voisins"],
+    horseLabel:"Acheter un cheval", horseDesc:"Utile au ranch et pour les compétitions.", horseIcon:"🐎",
+    competitionLabel:"Concours équestre",
+    weaponLabel:"Acheter une arme", weaponDesc:"Renforce la défense du domaine.", weaponIcon:"🔫",
+    bribeLabel:"Soudoyer le shérif", bribeDesc:"Réduit les soupçons, avec un risque politique.",
+    illegalLabel:"Marché noir", illegalDesc:"Contourner le rationnement. Très rentable, très risqué."
+  },
+  {
+    id:"industrial", start:1946, end:1969, inflation:2.5, emoji:"🚜",
+    photo:"https://commons.wikimedia.org/wiki/Special:FilePath/Farmall_(International_Harvester)_Tractor_(1950s)_(5897877779).jpg",
+    photoCredit:"Tracteur Farmall, années 1950 — CC BY-SA 2.0, Don Graham, Wikimedia Commons",
+    name:"L'Industrialisation (1946–1969)",
+    desc:"Les tracteurs et les camions remplacent peu à peu les chevaux. Les syndicats ouvriers et la mécanisation transforment l'élevage.",
+    rivalType:"l'exploitation concurrente", rivalVerb:"des ouvriers de",
+    factionNames:["le syndicat des routiers","la coopérative agricole","la presse régionale"],
+    horseLabel:"Acheter un véhicule", horseDesc:"Utile au ranch et pour les courses automobiles.", horseIcon:"🚚",
+    competitionLabel:"Course automobile",
+    weaponLabel:"Acheter une arme", weaponDesc:"Renforce la défense du domaine.", weaponIcon:"🔫",
+    bribeLabel:"Arranger l'inspecteur", bribeDesc:"Réduit les soupçons, avec un risque politique.",
+    illegalLabel:"Trafic sur les marchés", illegalDesc:"Contourner les nouvelles réglementations. Très rentable, très risqué."
+  },
+  {
+    id:"corporate", start:1970, end:1989, inflation:5, emoji:"🏢",
+    photo:"https://commons.wikimedia.org/wiki/Special:FilePath/Skyscraper.jpg",
+    photoCredit:"Wikimedia Commons",
+    name:"L'ère des Grandes Sociétés (1970–1989)",
+    desc:"Des groupes agroalimentaires rachètent les petites exploitations aux alentours. La compétition devient économique et juridique.",
+    rivalType:"la société concurrente", rivalVerb:"des avocats de",
+    factionNames:["le sénateur local","la chambre de commerce","l'agence de presse"],
+    horseLabel:"Acheter un véhicule", horseDesc:"Utile au ranch et pour les courses automobiles.", horseIcon:"🚚",
+    competitionLabel:"Course automobile",
+    weaponLabel:"Renforcer la sécurité", weaponDesc:"Dissuade les intrusions et les pressions.", weaponIcon:"🛡️",
+    bribeLabel:"Arranger le fonctionnaire", bribeDesc:"Réduit les soupçons, avec un risque politique.",
+    illegalLabel:"Magouilles financières", illegalDesc:"Contourner la loi pour dégager du cash. Très rentable, très risqué."
+  },
+  {
+    id:"globalization", start:1990, end:2009, inflation:9, emoji:"🌍",
+    photo:"https://commons.wikimedia.org/wiki/Special:FilePath/Wind_Power_in_Rural_Iowa.jpg",
+    photoCredit:"Énergie éolienne, Iowa — domaine public, Wikimedia Commons",
+    name:"Mondialisation (1990–2009)",
+    desc:"Les marchés s'ouvrent, la spéculation immobilière commence à grignoter les terres agricoles autour du ranch.",
+    rivalType:"le groupe concurrent", rivalVerb:"des représentants de",
+    factionNames:["l'office du tourisme","la banque d'investissement","les écologistes locaux"],
+    horseLabel:"Acheter un véhicule", horseDesc:"Utile au ranch et pour les courses automobiles.", horseIcon:"🚙",
+    competitionLabel:"Course automobile",
+    weaponLabel:"Renforcer la sécurité", weaponDesc:"Dissuade les intrusions et les pressions.", weaponIcon:"🛡️",
+    bribeLabel:"Arranger le fonctionnaire", bribeDesc:"Réduit les soupçons, avec un risque politique.",
+    illegalLabel:"Magouilles financières", illegalDesc:"Contourner la loi pour dégager du cash. Très rentable, très risqué."
+  },
+  {
+    id:"modern", start:2010, end:2026, inflation:16, emoji:"🏙️",
+    photo:"https://commons.wikimedia.org/wiki/Special:FilePath/Gallatin_Mountains_Montana.jpg",
+    photoCredit:"Chaîne des Gallatin, Montana — Wikimedia Commons",
+    name:"L'Ère Moderne (2010–2026)",
+    desc:"Des promoteurs immobiliers et des agences convoitent les terres pour le tourisme et l'urbanisation. Le ranch devient un symbole à défendre.",
+    rivalType:"l'agence immobilière rivale", rivalVerb:"des promoteurs de",
+    factionNames:["le conseil municipal","les influenceurs locaux","l'association de préservation des terres"],
+    horseLabel:"Acheter un véhicule", horseDesc:"Utile au ranch et pour les compétitions.", horseIcon:"🚙",
+    competitionLabel:"Rodéo professionnel",
+    weaponLabel:"Renforcer la sécurité", weaponDesc:"Dissuade les intrusions et les pressions des promoteurs.", weaponIcon:"🛡️",
+    bribeLabel:"Arranger l'élu local", bribeDesc:"Réduit les soupçons, avec un risque politique.",
+    illegalLabel:"Contourner la loi", illegalDesc:"Pressions, dessous-de-table, terrains gris. Très rentable, très risqué."
+  }
+];
+
+function getEra(year){
+  for(const era of ERAS){
+    if(year >= era.start && year <= era.end) return era;
+  }
+  return ERAS[ERAS.length-1];
+}
+
+function sc(n){ return Math.round(n * (state.costModifier || 1)); }
+
+const CHILD_ROLES = {
+  none:  {label:"Sans affectation", desc:"—"},
+  ranch: {label:"Travaux du ranch", desc:"Améliore les revenus du domaine"},
+  business:{label:"Affaires et comptes", desc:"Réduit les charges d'entretien"},
+  diplomacy:{label:"Relations locales", desc:"Améliore les relations avec les factions"},
+  security:{label:"Sécurité du domaine", desc:"Réduit les risques de raids"}
+};
+
+const COWBOY_TRAITS = [
+  {name:"Vétéran", desc:"Gagne en loyauté avec les années"},
+  {name:"Fidèle", desc:"Loyauté très stable"},
+  {name:"Tête brûlée", desc:"Excellent au combat, loyauté instable"},
+  {name:"Taciturne", desc:"Discret, ne trahit presque jamais"},
+  {name:"Ambitieux", desc:"Réclame de meilleurs salaires"},
+  {name:"Dresseur", desc:"Améliore la valeur des chevaux"}
+];
+
+const SECRET_TYPES = ["landClaim","hiddenCrime","buriedTreasure"];
+
+const SECRETS = {
+  landClaim: {
+    stage1:{
+      title:"Un acte de propriété douteux",
+      text:"En rangeant de vieux papiers, un descendant tombe sur un acte de propriété du ranch aux origines troubles : une partie des terres n'a peut-être jamais été légalement acquise.",
+      image:"Un document jauni refait surface",
+      choices:[
+        {label:"Détruire le document",apply:()=>{state.legacy.greed++;addLog("Le document disparaît dans la cheminée. Le secret reste enfoui.","info");}},
+        {label:"Le conserver et enquêter discrètement",apply:()=>{state.legacy.honor++;state.suspicion=clamp(state.suspicion+8);addLog("La famille commence à enquêter sur l'origine véritable des terres.","info");}}
+      ]
+    },
+    stage2:{
+      title:"Une créance refait surface",
+      text:"Un cabinet d'avocats contacte la famille : des descendants des propriétaires originels des terres du ranch réclament un dédommagement.",
+      image:"Une lettre d'avocat arrive au ranch",
+      choices:[
+        {label:"Négocier un règlement à l'amiable",apply:()=>{const cost=sc(220);state.money-=Math.min(state.money,cost);state.legacy.honor++;state.reputation=clamp(state.reputation+10);addLog(`Un règlement de ${cost} $ referme le dossier honorablement.`,"good");}},
+        {label:"Contester devant les tribunaux",apply:()=>{state.legacy.greed++;if(chance(.5)){state.reputation=clamp(state.reputation+3);addLog("Le tribunal donne raison à la famille. L'affaire est classée.","good");}else{state.reputation=clamp(state.reputation-12);state.money-=Math.min(state.money,sc(150));addLog("Le tribunal condamne la famille. Le scandale ternit sa réputation.","bad");}}}
+      ]
+    },
+    stage3:{
+      title:"Le dernier chapitre",
+      text:"Plus d'un siècle après la fondation, l'origine des terres du ranch est enfin éclaircie aux yeux de tous.",
+      image:"La saga touche à sa conclusion",
+      choices:[
+        {label:"Faire don d'une partie des terres en réparation",apply:()=>{state.land=Math.max(20,state.land-20);state.legacy.honor+=2;state.reputation=clamp(state.reputation+15);addLog("La famille répare symboliquement une injustice vieille de plusieurs générations.","good");}},
+        {label:"Défendre l'héritage familial tel quel",apply:()=>{state.legacy.greed+=2;addLog("La famille choisit de défendre son héritage sans concession.","info");}}
+      ]
+    }
+  },
+  hiddenCrime: {
+    stage1:{
+      title:"Un vieux carnet",
+      text:"Un carnet intime du fondateur évoque, à demi-mots, la disparition brutale d'un rival lors des premières années du ranch.",
+      image:"Des pages jaunies racontent un secret",
+      choices:[
+        {label:"Brûler le carnet",apply:()=>{state.legacy.greed++;addLog("Le carnet part en fumée. L'histoire officielle reste intacte.","info");}},
+        {label:"Le conserver précieusement",apply:()=>{state.legacy.honor++;addLog("Le carnet est conservé, comme un rappel du prix payé pour bâtir le ranch.","info");}}
+      ]
+    },
+    stage2:{
+      title:"Un enquêteur curieux",
+      text:"Un journaliste ou un généalogiste s'intéresse de trop près à la disparition évoquée dans le vieux carnet familial.",
+      image:"Quelqu'un pose trop de questions",
+      choices:[
+        {label:"L'acheter pour qu'il abandonne",condition:()=>state.money>=sc(150),apply:()=>{state.money-=sc(150);state.legacy.greed++;addLog("L'enquêteur est payé pour tourner la page.","info");}},
+        {label:"Le laisser publier ses conclusions",apply:()=>{state.legacy.honor++;state.reputation=clamp(state.reputation-8);addLog("Une partie du secret familial devient publique.","bad");}}
+      ]
+    },
+    stage3:{
+      title:"Le dernier chapitre",
+      text:"La vérité sur les origines violentes du ranch refait surface une dernière fois, plus d'un siècle plus tard.",
+      image:"La saga touche à sa conclusion",
+      choices:[
+        {label:"Reconnaître publiquement les faits",apply:()=>{state.legacy.honor+=2;state.reputation=clamp(state.reputation+10);addLog("La famille assume enfin son passé, au prix d'un choc dans l'opinion locale.","good");}},
+        {label:"Emporter le secret dans l'oubli",apply:()=>{state.legacy.greed+=2;addLog("Le secret s'éteint avec la dernière génération qui le connaissait.","info");}}
+      ]
+    }
+  },
+  buriedTreasure: {
+    stage1:{
+      title:"Une carte mystérieuse",
+      text:"Derrière une pierre descellée de la cheminée, une carte griffonnée par le fondateur semble indiquer l'emplacement d'un trésor caché sur les terres du ranch.",
+      image:"Une carte usée par le temps",
+      choices:[
+        {label:"Partir à sa recherche",apply:()=>{if(chance(.4)){const g=sc(rand(150,300));state.money+=g;addLog(`Une petite cache est retrouvée : +${g} $.`,"good");}else{addLog("Les recherches ne mènent à rien pour l'instant.","info");}state.legacy.greed++;}},
+        {label:"Ranger la carte pour plus tard",apply:()=>{state.legacy.honor++;addLog("La carte est rangée précieusement pour les générations futures.","info");}}
+      ]
+    },
+    stage2:{
+      title:"Un chasseur de trésor",
+      text:"Un aventurier de passage prétend connaître l'existence d'un trésor enfoui sur le domaine et propose un partenariat.",
+      image:"Un inconnu montre une vieille carte similaire",
+      choices:[
+        {label:"Accepter le partenariat",apply:()=>{if(chance(.45)){const g=sc(rand(250,450));state.money+=g;addLog(`Le partenariat porte ses fruits : +${g} $.`,"good");}else{state.money-=Math.min(state.money,sc(80));addLog("L'aventurier disparaît avec une partie des fonds avancés.","bad");}state.legacy.greed++;}},
+        {label:"Refuser et le renvoyer",apply:()=>{state.legacy.honor++;addLog("L'inconnu repart bredouille.","info");}}
+      ]
+    },
+    stage3:{
+      title:"Le dernier chapitre",
+      text:"Après des générations de rumeurs, la vérité sur le trésor du fondateur est enfin sur le point d'être révélée.",
+      image:"La saga touche à sa conclusion",
+      choices:[
+        {label:"Trouver le trésor et le partager avec la région",apply:()=>{const g=sc(rand(300,600));state.money+=g;state.legacy.honor+=2;state.reputation=clamp(state.reputation+12);addLog(`Le trésor est retrouvé et en partie reversé à la communauté : +${g} $ et un immense prestige.`,"good");}},
+        {label:"Le garder secrètement pour la famille",apply:()=>{const g=sc(rand(400,800));state.money+=g;state.legacy.greed+=2;addLog(`Le trésor est retrouvé et gardé discrètement : +${g} $.`,"good");}}
+      ]
+    }
+  }
+};
+
+function maybeShowSecretEvent(){
+  if(!state.secret || state.secret.stage >= 3) return false;
+  const nextStage = state.secret.stage + 1;
+  const windowStart = {1:1890, 2:1950, 3:2015}[nextStage];
+  if(state.year < windowStart) return false;
+  if(!chance(nextStage === 3 ? 1 : .15)) return false;
+  const data = SECRETS[state.secret.type]["stage"+nextStage];
+  const event = {
+    title:data.title, text:data.text, image:data.image,
+    choices:data.choices.map(c=>({
+      label:c.label,
+      condition:c.condition,
+      apply:()=>{ c.apply(); state.secret.stage = nextStage; }
+    }))
+  };
+  presentEvent(event);
+  return true;
+}
+
+function generateFactions(era){
+  return era.factionNames.map(n => ({name:n, relation:rand(-10,30)}));
+}
+
+const moneyFmt = new Intl.NumberFormat("fr-FR");
+
+let state = null;
+
+const $ = (id) => document.getElementById(id);
+const clamp = (v,min=0,max=100) => Math.max(min,Math.min(max,v));
+const rand = (min,max) => Math.floor(Math.random()*(max-min+1))+min;
+const chance = (p) => Math.random() < p;
+
+function baseState() {
+  const diff = $("difficulty").value;
+  const origin = $("origin").value;
+  const modifiers = {
+    easy:{money:450,event:.82,cost:.9},
+    normal:{money:0,event:1,cost:1},
+    hard:{money:-250,event:1.18,cost:1.12}
+  }[diff];
+
+  const s = {
+    version:"0.1",
+    familyName:$("familyName").value.trim() || "Carter",
+    ranchName:$("ranchName").value.trim() || "Ranch de la Frontière",
+    founder:{
+      name:$("founderName").value.trim() || "William",
+      age:28,
+      health:100,
+      alive:true,
+      traits:["Déterminé","Cavalier"]
+    },
+    spouse:{
+      name:$("spouseName").value.trim() || "Mary",
+      age:25,
+      health:100,
+      alive:true,
+      traits:["Travailleuse"]
+    },
+    children:[],
+    year:1885,
+    season:0,
+    turn:1,
+    actions:3,
+    money:1100 + modifiers.money,
+    land:160,
+    cattle:38,
+    horses:4,
+    weapons:1,
+    feed:70,
+    reputation:12,
+    unity:72,
+    suspicion:0,
+    sheriffRelation:0,
+    cattlePrice:28,
+    cattlePriceMin:16,
+    cattlePriceMax:46,
+    difficulty:diff,
+    costModifier:modifiers.cost,
+    eventModifier:modifiers.event,
+    origin:origin,
+    gameOver:false,
+    history:[],
+    rival:{
+      name:["Dawson","Hargrove","Kessler","McAllister","Voss"][rand(0,4)],
+      relation:rand(-20,10),
+      strength:rand(30,55)
+    },
+    eraId:getEra(1885).id,
+    factions:generateFactions(getEra(1885)),
+    secret:{type:SECRET_TYPES[rand(0,SECRET_TYPES.length-1)], stage:0},
+    legacy:{honor:0, greed:0, grudges:[]},
+    lineage:[{name:$("founderName").value.trim() || "William", role:"Fondateur", startYear:1885, endYear:null}]
+  };
+  if(origin === "breeder"){
+    s.cattle += 12; s.money -= 200; s.reputation += 5;
+    s.founder.traits.push("Éleveur");
+  } else if(origin === "outlaw"){
+    s.money += 300; s.weapons += 2; s.suspicion += 12;
+    s.founder.traits.push("Rusé");
+  } else {
+    s.land += 20; s.feed += 10;
+  }
+  return s;
+}
+
+function startGame(){
+  state = baseState();
+  ensureCowboys();
+  $("setupScreen").classList.add("hidden");
+  $("gameScreen").classList.remove("hidden");
+  addLog(`La famille ${state.familyName} prend possession du ${state.ranchName}.`, "good");
+  addLog("Le territoire est rude, mais la terre promet un avenir.", "info");
+  render();
+}
+
+function render(){
+  if(!state) return;
+  if(!state.eraId) state.eraId = getEra(state.year).id;
+  const era = ERAS.find(e=>e.id===state.eraId) || getEra(state.year);
+  $("headerRanch").textContent = state.ranchName;
+  $("headerFamily").textContent = `Famille ${state.familyName}`;
+  $("headerEra").textContent = era.name;
+  document.body.className = "era-" + era.id;
+  $("eraBadge").textContent = era.emoji;
+  if(era.photo){
+    $("heroPanel").style.backgroundImage = `linear-gradient(0deg,rgba(20,13,8,.82),rgba(20,13,8,.35)), url('${era.photo}')`;
+    $("heroPanel").style.backgroundSize = "cover";
+    $("heroPanel").style.backgroundPosition = "center";
+  }
+  $("photoCredit").textContent = era.photoCredit || "";
+  renderTimeline(era);
+  $("horseLabel").textContent = era.horseLabel;
+  $("horseDesc").textContent = era.horseDesc;
+  $("horseIcon").textContent = era.horseIcon;
+  $("competitionLabel").textContent = era.competitionLabel;
+  $("weaponLabel").textContent = era.weaponLabel;
+  $("weaponDesc").textContent = era.weaponDesc;
+  $("weaponIcon").textContent = era.weaponIcon;
+  $("bribeLabel").textContent = era.bribeLabel;
+  $("bribeDesc").textContent = era.bribeDesc;
+  $("illegalLabel").textContent = era.illegalLabel;
+  $("illegalDesc").textContent = era.illegalDesc;
+  $("seasonLabel").textContent = `${seasons[state.season]} ${state.year}`;
+  $("turnLabel").textContent = `Tour ${state.turn}`;
+  $("journalDate").textContent = `${seasons[state.season].toUpperCase()} ${state.year}`;
+  $("heroTitle").textContent = state.ranchName;
+  $("heroText").textContent = getSeasonText();
+
+  $("moneyStat").textContent = `${moneyFmt.format(state.money)} $`;
+  $("landStat").textContent = `${state.land} ha`;
+  $("cattleStat").textContent = state.cattle;
+  $("horsesStat").textContent = state.horses;
+  $("weaponsStat").textContent = state.weapons;
+  $("feedStat").textContent = state.feed;
+  $("cattlePriceStat").textContent = `${state.cattlePrice} $/tête`;
+
+  setMeter("rep",state.reputation);
+  setMeter("unity",state.unity);
+  setMeter("sus",state.suspicion);
+
+  $("apLabel").textContent = state.actions;
+  $("sellValue").textContent = `Gain estimé : ${state.cattlePrice*5} $`;
+  $("buyCattleCost").textContent = `Coût : ${(state.cattlePrice+6)*5} $`;
+
+  const childrenText = state.children.length
+    ? state.children.map(c => `${c.name}, ${c.age} an${c.age>1?"s":""}`).join("<br>")
+    : "Aucun enfant pour le moment";
+  $("familyCard").innerHTML = `
+    <strong>${state.founder.alive ? state.founder.name : "Fondateur décédé"} ${state.familyName}</strong>
+    <small>${state.founder.age} ans — Santé ${state.founder.health}%</small>
+    <hr>
+    <strong>${state.spouse.alive ? state.spouse.name : "Conjoint décédé"} ${state.familyName}</strong>
+    <small>${state.spouse.age} ans — Santé ${state.spouse.health}%</small>
+    <hr>
+    <strong>Enfants</strong>
+    <small>${childrenText}</small>
+  `;
+
+  document.querySelectorAll(".action").forEach(btn => {
+    btn.disabled = state.actions <= 0 || state.gameOver;
+  });
+  $("endTurnBtn").disabled = state.gameOver;
+}
+
+function renderTimeline(era){
+  const START = 1885, END = 2026;
+  const pct = Math.max(0, Math.min(100, ((state.year - START) / (END - START)) * 100));
+  $("timelineFill").style.width = pct + "%";
+  $("timelineYear").textContent = state.year + " · " + seasons[state.season];
+  const marks = $("timelineMarks");
+  if(marks.dataset.built !== "1"){
+    marks.innerHTML = ERAS.map(e =>
+      `<span class="timeline-mark" data-era="${e.id}">${e.emoji}<br>${e.start}</span>`
+    ).join("");
+    marks.dataset.built = "1";
+  }
+  Array.from(marks.children).forEach(el => {
+    const id = el.dataset.era;
+    const e = ERAS.find(x=>x.id===id);
+    el.classList.toggle("active", id === era.id);
+    el.classList.toggle("past", e.end < state.year);
+  });
+}
+
+function setMeter(prefix,value){
+  const v = clamp(Math.round(value));
+  $(`${prefix}Text`).textContent = `${v}/100`;
+  $(`${prefix}Meter`).style.width = `${v}%`;
+}
+
+function getSeasonText(){
+  return {
+    0:"Les pâturages reverdisent. C’est le temps des naissances et des grands projets.",
+    1:"La chaleur pèse sur les hommes et les bêtes. Les marchés s’animent.",
+    2:"Les troupeaux sont vendus et les réserves doivent être préparées avant le froid.",
+    3:"La neige isole les terres. Chaque manque de fourrage peut devenir fatal."
+  }[state.season];
+}
+
+function addLog(text,type="info"){
+  state.history.unshift({text,type,stamp:`${seasons[state.season]} ${state.year}`});
+  state.history = state.history.slice(0,80);
+  $("log").innerHTML = state.history.map(e =>
+    `<div class="entry ${e.type}"><strong>${e.stamp}</strong><br>${e.text}</div>`
+  ).join("");
+}
+
+function spend(base){
+  const cost = Math.round(base * state.costModifier);
+  if(state.money < cost){
+    toast("Vous n’avez pas assez d’argent.");
+    return false;
+  }
+  state.money -= cost;
+  return cost;
+}
+
+function useAction(){
+  if(state.actions <= 0 || state.gameOver) return false;
+  state.actions--;
+  return true;
+}
+
+function doAction(type){
+  if(state.actions <= 0 || state.gameOver) return;
+
+  if(type === "buyCattle"){
+    const cost = spend((state.cattlePrice+6) * 5);
+    if(cost === false) return;
+    useAction(); state.cattle += 5;
+    addLog(`Achat de 5 bovins pour ${cost} $.`, "good");
+  }
+
+  if(type === "sellCattle"){
+    if(state.cattle < 5){ toast("Le troupeau est trop petit."); return; }
+    useAction();
+    const gain = state.cattlePrice * 5;
+    state.cattle -= 5; state.money += gain;
+    addLog(`Vente de 5 bovins au marché pour ${gain} $.`, "good");
+  }
+
+  if(type === "buyHorse"){
+    const cost = spend(180);
+    if(cost === false) return;
+    useAction(); state.horses++;
+    addLog(`Un nouveau cheval rejoint les écuries pour ${cost} $.`, "good");
+  }
+
+  if(type === "competition"){
+    if(state.horses < 1){ toast("Il faut au moins un cheval."); return; }
+    const cost = spend(45);
+    if(cost === false) return;
+    useAction();
+    const avgRide = (state.cowboys&&state.cowboys.length) ? state.cowboys.reduce((s,c)=>s+c.ride,0)/state.cowboys.length : 0;
+    const score = rand(1,100) + state.horses*2 + Math.floor(state.reputation/8) + Math.floor(avgRide/10);
+    if(score >= 85){
+      const prize = rand(220,360);
+      state.money += prize; state.reputation = clamp(state.reputation+8);
+      addLog(`Victoire éclatante au concours équestre : +${prize} $ et +8 réputation.`, "good");
+    } else if(score >= 55){
+      const prize = rand(60,130);
+      state.money += prize; state.reputation = clamp(state.reputation+3);
+      addLog(`Belle place au concours : +${prize} $ et +3 réputation.`, "good");
+    } else {
+      addLog("Le cheval n’a pas réussi à se classer au concours.", "bad");
+      if(chance(.12)){
+        state.horses--; addLog("Le cheval s’est gravement blessé et a dû être abattu.", "bad");
+      }
+    }
+  }
+
+  if(type === "buyWeapon"){
+    const cost = spend(95);
+    if(cost === false) return;
+    useAction(); state.weapons++;
+    addLog(`Une arme supplémentaire est achetée pour ${cost} $.`, "info");
+  }
+
+  if(type === "buyLand"){
+    const cost = spend(260);
+    if(cost === false) return;
+    useAction(); state.land += 20;
+    addLog(`Le domaine s’agrandit de 20 hectares pour ${cost} $.`, "good");
+  }
+
+  if(type === "bribe"){
+    const cost = spend(120);
+    if(cost === false) return;
+    useAction();
+    if(chance(.78 + state.sheriffRelation/200)){
+      const reduction = rand(12,24);
+      state.suspicion = clamp(state.suspicion-reduction);
+      state.sheriffRelation = clamp(state.sheriffRelation+8,-100,100);
+      addLog(`Le shérif accepte l’argent. Soupçons réduits de ${reduction}.`, "good");
+    } else {
+      state.suspicion = clamp(state.suspicion+14);
+      state.reputation = clamp(state.reputation-4);
+      addLog("Le shérif refuse le pot-de-vin. Les rumeurs se multiplient.", "bad");
+    }
+  }
+
+  if(type === "illegal"){
+    useAction();
+    const avgShoot = (state.cowboys&&state.cowboys.length) ? state.cowboys.reduce((s,c)=>s+c.shoot,0)/state.cowboys.length : 0;
+    const avgLoyalty = (state.cowboys&&state.cowboys.length) ? state.cowboys.reduce((s,c)=>s+c.loyalty,0)/state.cowboys.length : 100;
+    const protection = state.weapons*3 + state.sheriffRelation/3 + avgShoot/5;
+    const roll = rand(1,100) + protection;
+    const gain = rand(160,420);
+    if(roll >= 58){
+      state.money += gain;
+      state.suspicion = clamp(state.suspicion+rand(9,18));
+      addLog(`Une opération clandestine rapporte ${gain} $. Les soupçons augmentent.`, "good");
+      if(chance(.18)) state.cattle += rand(2,6);
+    } else {
+      state.suspicion = clamp(state.suspicion+rand(18,30));
+      state.reputation = clamp(state.reputation-rand(3,8));
+      const loss = Math.min(state.money,rand(60,180));
+      state.money -= loss;
+      addLog(`L’opération illégale tourne mal. Perte de ${loss} $ et enquête renforcée.`, "bad");
+      if(chance(.16)){
+        state.founder.health = clamp(state.founder.health-rand(8,22));
+        addLog(`${state.founder.name} revient blessé de l’expédition.`, "bad");
+      }
+    }
+    if(avgLoyalty < 45 && chance(.15)){
+      state.suspicion = clamp(state.suspicion+rand(10,20));
+      addLog("Un cow-boy peu loyal vend des informations au shérif.", "bad");
+    }
+  }
+
+  if(type === "rivalAction"){
+    const cost = spend(70);
+    if(cost === false) return;
+    useAction();
+    const currentEra = ERAS.find(e=>e.id===state.eraId) || getEra(state.year);
+    const avgShoot = (state.cowboys&&state.cowboys.length) ? state.cowboys.reduce((s,c)=>s+c.shoot,0)/state.cowboys.length : 0;
+    const power = state.weapons*5 + avgShoot*0.6 + rand(1,40);
+    if(power > state.rival.strength){
+      state.rival.strength = clamp(state.rival.strength - rand(6,14), 10, 100);
+      state.rival.relation = clamp(state.rival.relation - rand(4,10), -100, 100);
+      addLog(`Une confrontation directe affaiblit ${currentEra.rivalType} des ${state.rival.name}.`, "good");
+    } else {
+      state.suspicion = clamp(state.suspicion + rand(5,15));
+      state.founder.health = clamp(state.founder.health - rand(4,12));
+      addLog(`La tentative d’affronter ${currentEra.rivalType} des ${state.rival.name} tourne mal.`, "bad");
+    }
+  }
+
+  if(type === "rivalNegotiate"){
+    const cost = spend(50);
+    if(cost === false) return;
+    useAction();
+    const currentEra = ERAS.find(e=>e.id===state.eraId) || getEra(state.year);
+    if(chance(.55)){
+      state.rival.relation = clamp(state.rival.relation + rand(12,22), -100, 100);
+      addLog(`La négociation avec ${currentEra.rivalType} des ${state.rival.name} porte ses fruits.`, "good");
+    } else {
+      state.rival.relation = clamp(state.rival.relation - rand(2,6), -100, 100);
+      addLog(`${currentEra.rivalType.charAt(0).toUpperCase()+currentEra.rivalType.slice(1)} des ${state.rival.name} reste méfiante malgré les efforts.`, "info");
+    }
+  }
+
+  if(type === "family"){
+    useAction();
+    const gain = rand(6,12);
+    state.unity = clamp(state.unity+gain);
+    if(state.children.length && chance(.45)){
+      const child = state.children[rand(0,state.children.length-1)];
+      child.bond = clamp((child.bond||50)+8);
+      addLog(`Le temps passé avec ${child.name} renforce les liens familiaux.`, "good");
+    } else {
+      addLog(`La famille partage un trimestre plus paisible. Unité +${gain}.`, "good");
+    }
+  }
+
+  render();
+}
+
+function endTurn(){
+  if(state.gameOver) return;
+  $("endTurnBtn").disabled = true;
+
+  // Revenus du troupeau
+  const capacity = Math.max(20, Math.floor(state.land / 3));
+  const healthyCattle = Math.min(state.cattle, capacity);
+  const cowboyBonus = Math.round((state.cowboys||[]).length * 6 * state.costModifier);
+  const workers = state.children.filter(c=>c.alive!==false && c.age>=16 && c.role==="ranch").length;
+  const accountants = state.children.filter(c=>c.alive!==false && c.age>=16 && c.role==="business").length;
+  const ranchIncome = Math.round(healthyCattle * rand(2,4) * state.costModifier * (1 + workers*0.08)) + cowboyBonus;
+  const cowboySalaries = (state.cowboys||[]).reduce((sum,c)=>sum+c.salary,0);
+  const upkeepRaw = (state.cattle*1.7 + state.horses*8 + state.land*.17 + cowboySalaries) * state.costModifier;
+  const upkeep = Math.round(upkeepRaw * Math.max(0.7, 1 - accountants*0.07));
+  state.money += ranchIncome - upkeep;
+  if(cowboyBonus>0){
+    addLog(`Le savoir-faire des cow-boys améliore le rendement du ranch : +${cowboyBonus} $.`, "good");
+  }
+  if(cowboySalaries>0){
+    addLog(`Salaires versés aux cow-boys : ${Math.round(cowboySalaries*state.costModifier)} $.`, "info");
+  }
+
+  if(ranchIncome >= upkeep){
+    addLog(`Résultat du ranch : +${ranchIncome-upkeep} $ après entretien.`, "good");
+  } else {
+    addLog(`Résultat du ranch : -${upkeep-ranchIncome} $ après entretien.`, "bad");
+  }
+
+  // Fourrage
+  const feedUse = Math.ceil(state.cattle/8) + state.horses;
+  state.feed -= feedUse;
+  if(state.feed < 0){
+    const losses = Math.min(state.cattle,rand(1,Math.max(1,Math.ceil(Math.abs(state.feed)/2))));
+    state.cattle -= losses;
+    state.feed = 0;
+    addLog(`Le manque de fourrage coûte ${losses} tête${losses>1?"s":""} de bétail.`, "bad");
+  }
+
+  // Production et reproduction
+  if(state.season === 0 && state.cattle >= 10){
+    const calves = Math.max(1,Math.floor(state.cattle * (rand(5,12)/100)));
+    state.cattle += calves;
+    addLog(`${calves} veau${calves>1?"x sont nés":" est né"} ce printemps.`, "good");
+  }
+  if(state.season === 2){
+    state.feed += Math.max(8,Math.floor(state.land/8));
+    addLog("Les récoltes d’automne remplissent les réserves de fourrage.", "good");
+  }
+
+  // Prix du bétail
+  state.cattlePrice = clamp(state.cattlePrice + rand(-5,5)*Math.max(1,Math.round(state.costModifier)), state.cattlePriceMin, state.cattlePriceMax);
+
+  // Soupçons et famille évoluent
+  state.suspicion = clamp(state.suspicion - rand(0,3));
+  state.unity = clamp(state.unity - rand(0,2));
+
+  // Les enfants affectés aux relations locales améliorent la diplomatie
+  const diplomats = state.children.filter(c=>c.alive!==false && c.age>=16 && c.role==="diplomacy").length;
+  if(diplomats && state.factions && chance(.4)){
+    state.factions.forEach(f => f.relation = clamp(f.relation + diplomats, -100, 100));
+  }
+
+  // Rivalité entre héritiers : plusieurs adultes ambitieux fragilisent l'unité
+  const adultHeirs = state.children.filter(c=>c.alive!==false && c.age>=18);
+  if(adultHeirs.length >= 2 && chance(.12)){
+    const a = adultHeirs[rand(0,adultHeirs.length-1)];
+    let b = adultHeirs[rand(0,adultHeirs.length-1)];
+    if(a !== b){
+      state.unity = clamp(state.unity - rand(3,8));
+      addLog(`Tension entre ${a.name} et ${b.name} au sujet de l'avenir du ranch.`, "bad");
+    }
+  } else if(adultHeirs.length >= 2 && state.unity > 70 && chance(.1)){
+    state.unity = clamp(state.unity + 3);
+    addLog("Les héritiers s'accordent sur la direction à donner au domaine.", "good");
+  }
+
+  // La rivalité avec la famille adverse évolue
+  if(!state.rival) state.rival = {name:"Dawson",relation:0,strength:40};
+  const currentEra = ERAS.find(e=>e.id===state.eraId) || getEra(state.year);
+  state.rival.relation = clamp(state.rival.relation + rand(-3,2), -100, 100);
+  state.rival.strength = clamp(state.rival.strength + rand(-2,3), 10, 100);
+  const avgShootDef = (state.cowboys&&state.cowboys.length) ? state.cowboys.reduce((s,c)=>s+c.shoot,0)/state.cowboys.length : 0;
+  const guards = state.children.filter(c=>c.alive!==false && c.age>=16 && c.role==="security").length;
+  const defense = state.weapons*4 + avgShootDef*0.4 + guards*10;
+  const raidChance = clamp((state.rival.strength - defense) / 300, .03, .35);
+  if(state.rival.relation < -40 && chance(raidChance)){
+    const loss = Math.min(state.cattle, rand(2, 4 + Math.floor(state.rival.strength/20)));
+    state.cattle -= loss;
+    addLog(`${currentEra.rivalVerb.charAt(0).toUpperCase()+currentEra.rivalVerb.slice(1)} ${state.rival.name} font disparaître ${loss} tête${loss>1?"s":""} de bétail durant la nuit.`, "bad");
+  } else if(state.rival.relation > 40 && chance(.15)){
+    state.reputation = clamp(state.reputation+3);
+    addLog(`Un accord tacite avec ${currentEra.rivalType} des ${state.rival.name} apaise la région.`, "good");
+  }
+  if(state.rival.relation > 60 && chance(.25)){
+    const bonus = Math.round(rand(15,40) * state.costModifier);
+    state.money += bonus;
+    addLog(`L'alliance avec les ${state.rival.name} profite discrètement au ranch (+${bonus} $).`, "good");
+  }
+
+  // Fin du trimestre
+  state.season++;
+  if(state.season > 3){
+    state.season = 0;
+    state.year++;
+    ageFamily();
+  }
+  state.turn++;
+  state.actions = 3;
+
+  // Changement d'époque
+  const newEra = getEra(state.year);
+  if(newEra.id !== state.eraId){
+    const oldEra = ERAS.find(e=>e.id===state.eraId) || newEra;
+    const ratio = newEra.inflation / oldEra.inflation;
+    state.money = Math.round(state.money * ratio);
+    state.cattlePrice = Math.round(state.cattlePrice * ratio);
+    state.cattlePriceMin = Math.round(state.cattlePriceMin * ratio);
+    state.cattlePriceMax = Math.round(state.cattlePriceMax * ratio);
+    state.costModifier = state.costModifier * ratio;
+    (state.cowboys||[]).forEach(c => c.salary = Math.round(c.salary * ratio));
+    state.eraId = newEra.id;
+    state.factions = generateFactions(newEra);
+    if(state.legacy && state.legacy.grudges && state.legacy.grudges.length){
+      const penalty = Math.min(40, state.legacy.grudges.length * 12);
+      state.factions.forEach(f => f.relation = clamp(f.relation - penalty, -100, 100));
+      addLog(`Les rancunes accumulées par les générations précédentes pèsent sur les nouvelles relations locales.`, "bad");
+    }
+    if(state.legacy && state.legacy.honor > state.legacy.greed + 2){
+      state.factions.forEach(f => f.relation = clamp(f.relation + 12, -100, 100));
+      addLog(`La réputation d'intégrité de la famille facilite les relations à cette nouvelle époque.`, "good");
+    }
+    showEraTransition(newEra);
+    return;
+  }
+
+  // Événement
+  const eventChance = .62 * state.eventModifier;
+  if(maybeShowSecretEvent()){
+    return;
+  } else if(chance(eventChance)){
+    showRandomEvent();
+  } else {
+    finishTurn();
+  }
+}
+
+function showEraTransition(era){
+  $("eventTitle").textContent = era.name;
+  $("eventText").textContent = era.desc;
+  $("eventIllustration").textContent = "Une nouvelle époque commence";
+  $("eventChoices").innerHTML = "";
+  const btn = document.createElement("button");
+  btn.className = "choice";
+  btn.textContent = "Continuer";
+  btn.onclick = () => {
+    $("eventModal").classList.add("hidden");
+    addLog(`Une nouvelle époque commence : ${era.name}.`, "info");
+    finishTurn();
+  };
+  $("eventChoices").appendChild(btn);
+  $("eventModal").classList.remove("hidden");
+}
+
+function ageCowboys(){
+  if(!state.cowboys) return;
+  const paidWell = state.money > sc(400);
+  for(let i = state.cowboys.length - 1; i >= 0; i--){
+    const c = state.cowboys[i];
+    c.years = (c.years || 0) + 1;
+
+    // La loyauté évolue selon le trait, l'ancienneté, l'argent et l'unité familiale
+    let drift = 0;
+    if(c.trait === "Vétéran") drift += 2;
+    if(c.trait === "Fidèle") drift += 1;
+    if(c.trait === "Tête brûlée") drift += rand(-4,3);
+    if(c.trait === "Ambitieux") drift -= paidWell ? 0 : 3;
+    if(c.years >= 5) drift += 1;
+    if(c.years >= 15) drift += 1;
+    drift += paidWell ? 1 : -1;
+    drift += state.unity > 60 ? 1 : -1;
+    c.loyalty = clamp(c.loyalty + drift);
+
+    // Les vétérans très anciens finissent par prendre leur retraite
+    if(c.years >= 30 && chance(.35)){
+      addLog(`${c.name} prend sa retraite après ${c.years} ans de service au ranch.`, "info");
+      state.cowboys.splice(i,1);
+      continue;
+    }
+    // Un cow-boy trop peu loyal peut partir de lui-même
+    if(c.loyalty < 20 && chance(.25)){
+      addLog(`${c.name} quitte le ranch, lassé des conditions.`, "bad");
+      state.cowboys.splice(i,1);
+      continue;
+    }
+    // Les ambitieux réclament une augmentation
+    if(c.trait === "Ambitieux" && c.years > 0 && c.years % 5 === 0){
+      c.salary = Math.round(c.salary * 1.15);
+      addLog(`${c.name} obtient une augmentation : ${c.salary} $/trimestre.`, "info");
+    }
+  }
+  // Les dresseurs améliorent la valeur des chevaux
+  const dresseurs = state.cowboys.filter(c=>c.trait==="Dresseur").length;
+  if(dresseurs && state.horses > 0 && chance(.3)){
+    const g = sc(rand(20,50)) * dresseurs;
+    state.money += g;
+    addLog(`Le travail des dresseurs valorise les chevaux du ranch : +${g} $.`, "good");
+  }
+}
+
+function ageFamily(){
+  ageCowboys();
+  [state.founder,state.spouse].forEach(p => {
+    if(!p.alive) return;
+    p.age++;
+    if(p.age > 45) p.health = clamp(p.health-rand(0,2));
+    if(p.age > 65) p.health = clamp(p.health-rand(1,4));
+  });
+
+  state.children.forEach(c => {
+    c.age++;
+    if(c.age >= 16 && !c.traitAdded){
+      c.traitAdded = true;
+      c.trait = ["Courageux","Ambitieux","Prudent","Charismatique","Rebelle"][rand(0,4)];
+      addLog(`${c.name} atteint l’adolescence et révèle un tempérament ${c.trait.toLowerCase()}.`, "info");
+    }
+    if(c.age >= 18 && !c.marriageChecked && c.alive !== false){
+      c.marriageChecked = true;
+      if(chance(.5)){
+        const partners = ["Sarah","John","Mary","Robert","Anna","George","Emma","William","Grace","Daniel"];
+        c.married = true;
+        c.spouseName = partners[rand(0,partners.length-1)];
+        state.unity = clamp(state.unity+6);
+        addLog(`${c.name} épouse ${c.spouseName}. Toute la famille célèbre ce mariage.`, "good");
+      }
+    }
+  });
+
+  // Naissance potentielle : la probabilité diminue avec le nombre d'enfants déjà présents,
+  // et chute nettement après 40 ans
+  const livingChildrenCount = state.children.filter(c => c.alive !== false).length;
+  const familyCapFactor = Math.max(0, 1 - livingChildrenCount * 0.16);
+  let spouseAgeFactor = 1;
+  if(state.spouse.age >= 40){
+    spouseAgeFactor = Math.max(0.04, 1 - (state.spouse.age - 40) * 0.14);
+  }
+  const birthChance = .28 * familyCapFactor * spouseAgeFactor;
+  if(state.spouse.alive && state.spouse.age < 48 && livingChildrenCount < 8 && chance(birthChance)){
+    const boys = ["Thomas","Samuel","Arthur","Joseph","Henry","Louis","Elias"];
+    const girls = ["Eleanor","Clara","Rose","Alice","Margaret","Louise","Jeanne"];
+    const name = chance(.5) ? boys[rand(0,boys.length-1)] : girls[rand(0,girls.length-1)];
+    state.children.push({name,age:0,bond:55,health:100});
+    state.unity = clamp(state.unity+5);
+    addLog(`Un enfant vient de naître : ${name} ${state.familyName}.`, "good");
+  }
+
+  // Petits-enfants : les enfants mariés en âge peuvent fonder leur propre famille,
+  // avec la même logique de probabilité dégressive
+  const eligibleParents = state.children.filter(c => c.alive !== false && c.married && c.age >= 18 && c.age <= 45);
+  if(eligibleParents.length && livingChildrenCount < 12){
+    const parent = eligibleParents[rand(0,eligibleParents.length-1)];
+    let parentAgeFactor = 1;
+    if(parent.age >= 40){
+      parentAgeFactor = Math.max(0.04, 1 - (parent.age - 40) * 0.14);
+    }
+    const grandchildChance = .2 * familyCapFactor * parentAgeFactor;
+    if(chance(grandchildChance)){
+      const boys = ["Elias","Noah","Isaac","Caleb","Owen","Silas"];
+      const girls = ["Ruth","Nora","Ivy","Faith","June","Ada"];
+      const name = chance(.5) ? boys[rand(0,boys.length-1)] : girls[rand(0,girls.length-1)];
+      state.children.push({name,age:0,bond:55,health:100,parentName:parent.name});
+      state.unity = clamp(state.unity+4);
+      addLog(`${parent.name} et ${parent.spouseName} accueillent un enfant : ${name} ${state.familyName}.`, "good");
+    }
+  }
+
+  // Mortalité
+  [state.founder,state.spouse].forEach(p => {
+    if(!p.alive) return;
+    let mortality = 0;
+    if(p.health < 35) mortality += .12;
+    if(p.age > 65) mortality += (p.age-64)*.018;
+    if(chance(mortality)){
+      p.alive = false;
+      addLog(`${p.name} ${state.familyName} est décédé à l’âge de ${p.age} ans.`, "bad");
+    }
+  });
+
+  state.children.forEach(c => {
+    if(c.alive === false) return;
+    if(c.health < 25 && chance(.08)){
+      c.alive = false;
+      addLog(`${c.name} ${state.familyName} est décédé.`, "bad");
+    }
+  });
+
+  // Succession : si le fondateur est décédé, l'enfant adulte le plus âgé reprend le ranch
+  if(!state.founder.alive){
+    const heirIndex = state.children.reduce((best,c,i) => {
+      if(c.alive === false || c.age < 18) return best;
+      if(best === -1 || c.age > state.children[best].age) return i;
+      return best;
+    }, -1);
+    if(heirIndex !== -1){
+      const heir = state.children[heirIndex];
+      state.children.splice(heirIndex, 1);
+      if(state.lineage && state.lineage.length){
+        state.lineage[state.lineage.length-1].endYear = state.year;
+      }
+      state.founder = {
+        name: heir.name,
+        age: heir.age,
+        health: heir.health !== undefined ? heir.health : 90,
+        alive: true,
+        traits: heir.trait ? [heir.trait] : ["Héritier"]
+      };
+      if(!state.lineage) state.lineage = [];
+      state.lineage.push({name:state.founder.name, role:"Héritier", startYear:state.year, endYear:null});
+      addLog(`${state.founder.name} ${state.familyName} reprend les rênes du ranch en tant que nouveau chef de famille.`, "good");
+    }
+  }
+}
+
+const events = [
+  {
+    title:"Une clôture déplacée",
+    text:"La famille Dawson affirme que votre nouvelle clôture empiète sur ses terres. Ses hommes attendent une réponse avant la tombée de la nuit.",
+    image:"Un conflit de frontière éclate",
+    choices:[
+      {label:"Reculer la clôture — paix mais perte de prestige",apply:()=>{state.reputation=clamp(state.reputation-2);state.unity=clamp(state.unity+2);addLog("La clôture est reculée pour éviter un conflit.","info");}},
+      {label:"Maintenir votre position — risque d’affrontement",apply:()=>{if(chance(.58+state.weapons*.03)){state.reputation=clamp(state.reputation+6);addLog("Les Dawson reculent. Votre fermeté est remarquée.","good");}else{state.cattle=Math.max(0,state.cattle-rand(2,5));state.suspicion=clamp(state.suspicion+7);addLog("L’affrontement dégénère et plusieurs bêtes disparaissent.","bad");}}},
+      {label:"Payer un géomètre",condition:()=>state.money>=sc(90),apply:()=>{state.money-=sc(90);state.reputation=clamp(state.reputation+2);addLog("Un géomètre règle légalement le litige.","good");}}
+    ]
+  },
+  {
+    title:"La sécheresse",
+    text:"La pluie n’est pas venue. Les points d’eau diminuent et le bétail commence à perdre du poids.",
+    image:"Le soleil brûle les pâturages",
+    choices:[
+      {label:"Acheter du fourrage",condition:()=>state.money>=sc(130),apply:()=>{state.money-=sc(130);state.feed+=35;addLog("Du fourrage est acheté avant que les prix n’explosent.","good");}},
+      {label:"Vendre 8 bêtes avant qu’elles ne meurent",condition:()=>state.cattle>=8,apply:()=>{state.cattle-=8;const g=8*Math.max(sc(14),state.cattlePrice-6);state.money+=g;addLog(`Huit bêtes sont vendues en urgence pour ${g} $.`,"info");}},
+      {label:"Prendre le risque",apply:()=>{const loss=Math.min(state.cattle,rand(3,9));state.cattle-=loss;addLog(`${loss} bêtes meurent pendant la sécheresse.`,"bad");}}
+    ]
+  },
+  {
+    title:"Un organisateur de course",
+    text:"Un promoteur itinérant propose d’inscrire votre meilleur cheval à une grande course régionale.",
+    image:"Une course attire toute la région",
+    choices:[
+      {label:"Payer l’inscription",condition:()=>state.money>=sc(70)&&state.horses>0,apply:()=>{state.money-=sc(70);if(chance(.48+state.horses*.03)){const g=sc(rand(250,450));state.money+=g;state.reputation=clamp(state.reputation+8);addLog(`Votre cheval gagne la course : +${g} $.`,"good");}else{addLog("Votre cheval termine loin du podium.","bad");}}},
+      {label:"Refuser poliment",apply:()=>{addLog("La famille préfère préserver ses chevaux.","info");}},
+      {label:"Truquer la course",condition:()=>state.money>=sc(50)&&state.horses>0,apply:()=>{state.money-=sc(50);if(chance(.58)){const g=sc(rand(300,520));state.money+=g;state.suspicion=clamp(state.suspicion+16);addLog(`La course truquée rapporte ${g} $.`,"good");}else{state.suspicion=clamp(state.suspicion+28);state.reputation=clamp(state.reputation-9);addLog("La fraude est découverte. Le scandale éclate.","bad");}}}
+    ]
+  },
+  {
+    title:"Le hors-la-loi blessé",
+    text:"Un homme recherché se présente de nuit. Il demande un abri et promet une part de son butin.",
+    image:"Un cavalier blessé frappe à la porte",
+    choices:[
+      {label:"Le cacher dans la grange",apply:()=>{state.money+=sc(rand(120,260));state.suspicion=clamp(state.suspicion+18);addLog("Le fugitif paie sa dette avant de repartir.","good");}},
+      {label:"Prévenir le shérif",apply:()=>{state.reputation=clamp(state.reputation+5);state.sheriffRelation=clamp(state.sheriffRelation+12,-100,100);addLog("Le shérif arrête le fugitif et vous remercie.","good");}},
+      {label:"Prendre son argent et le chasser",apply:()=>{state.money+=sc(rand(60,120));state.reputation=clamp(state.reputation-2);addLog("Vous prenez une partie de son argent avant de le renvoyer.","info");}}
+    ]
+  },
+  {
+    title:"Une maladie dans le troupeau",
+    text:"Plusieurs bovins présentent les mêmes symptômes. Sans intervention, la maladie pourrait se répandre.",
+    image:"Le troupeau est menacé",
+    choices:[
+      {label:"Faire venir un vétérinaire",condition:()=>state.money>=sc(110),apply:()=>{state.money-=sc(110);addLog("Le vétérinaire contient rapidement la maladie.","good");}},
+      {label:"Abattre les bêtes malades",apply:()=>{const loss=Math.min(state.cattle,rand(2,5));state.cattle-=loss;addLog(`${loss} bêtes sont abattues pour sauver le troupeau.`,"bad");}},
+      {label:"Attendre",apply:()=>{const loss=Math.min(state.cattle,rand(4,12));state.cattle-=loss;addLog(`La maladie se propage : ${loss} bêtes perdues.`,"bad");}}
+    ]
+  },
+  {
+    title:"Une occasion d’agrandir la famille",
+    text:"Malgré les difficultés, votre foyer traverse une période de proximité. Cette année pourrait marquer l’arrivée d’un nouvel enfant.",
+    image:"La maison du ranch s’illumine",
+    choices:[
+      {label:"Donner la priorité à la famille",apply:()=>{state.unity=clamp(state.unity+10);if(state.spouse.age<43&&state.children.length<6&&chance(.7)){const names=["Eleanor","Samuel","Rose","Arthur","Clara","Henry"];const n=names[rand(0,names.length-1)];state.children.push({name:n,age:0,bond:60,health:100});addLog(`Naissance de ${n} ${state.familyName}.`,"good");}else addLog("La famille ressort plus unie de cette période.","good");}},
+      {label:"Le ranch passe avant tout",apply:()=>{state.money+=sc(80);state.unity=clamp(state.unity-5);addLog("La famille consacre toute son énergie au ranch.","info");}}
+    ]
+  },
+  {
+    title:"Provocation des voisins",
+    text:"La famille rivale multiplie les provocations : bétail délibérément égaré sur vos terres, rumeurs colportées en ville.",
+    image:"La tension monte avec les voisins",
+    choices:[
+      {label:"Aller négocier directement",apply:()=>{if(chance(.55)){state.rival.relation=clamp(state.rival.relation+18,-100,100);addLog(`La rencontre avec la famille ${state.rival.name} apaise les tensions.`,"good");}else{state.rival.relation=clamp(state.rival.relation-10,-100,100);addLog(`La négociation avec les ${state.rival.name} tourne court.`,"bad");}}},
+      {label:"Envoyer un message ferme (armes visibles)",condition:()=>state.weapons>0,apply:()=>{state.rival.strength=clamp(state.rival.strength-6,10,100);state.rival.relation=clamp(state.rival.relation-8,-100,100);state.reputation=clamp(state.reputation+4);addLog(`Une démonstration de force refroidit les ${state.rival.name}, mais la rancune grandit.`,"info");}},
+      {label:"Ignorer la provocation",apply:()=>{state.unity=clamp(state.unity+2);addLog("La famille choisit de ne pas répondre aux provocations.","info");}}
+    ]
+  },
+  {
+    title:"Une offre d'alliance",
+    text:"Un émissaire de la famille rivale propose une trêve, scellée par un accord commercial.",
+    image:"Un émissaire se présente au ranch",
+    choices:[
+      {label:"Accepter l'accord commercial",apply:()=>{const g=sc(rand(80,180));state.money+=g;state.rival.relation=clamp(state.rival.relation+25,-100,100);addLog(`L'accord avec les ${state.rival.name} rapporte ${g} $ et apaise durablement la relation.`,"good");}},
+      {label:"Refuser poliment",apply:()=>{state.rival.relation=clamp(state.rival.relation-4,-100,100);addLog(`L'offre des ${state.rival.name} est déclinée.`,"info");}}
+    ]
+  },
+  {
+    title:"Un journaliste itinérant",
+    text:"Un journaliste de la ville propose d'écrire un article sur votre famille, en bien ou en mal selon ce que vous lui offrez.",
+    image:"Un homme note tout dans un carnet",
+    choices:[
+      {label:"Le payer généreusement",condition:()=>state.money>=sc(60),apply:()=>{state.money-=sc(60);state.reputation=clamp(state.reputation+10);addLog("L'article est élogieux. Votre réputation grandit.","good");}},
+      {label:"Le laisser écrire librement",apply:()=>{if(chance(.5)){state.reputation=clamp(state.reputation+4);addLog("L'article est plutôt flatteur.","good");}else{state.reputation=clamp(state.reputation-5);addLog("L'article évoque des rumeurs peu flatteuses.","bad");}}},
+      {label:"Le chasser du ranch",apply:()=>{state.reputation=clamp(state.reputation-3);addLog("Le journaliste repart furieux et écrit un article acide.","bad");}}
+    ]
+  },
+  {
+    title:"Une tempête de grêle",
+    text:"Un orage violent s'abat sur la région, menaçant les cultures, les clôtures et le bétail à découvert.",
+    image:"Le ciel s'assombrit brutalement",
+    choices:[
+      {label:"Rassembler le troupeau en urgence",apply:()=>{if(chance(.6)){addLog("Le troupeau est mis à l'abri à temps.","good");}else{const loss=Math.min(state.cattle,rand(2,6));state.cattle-=loss;addLog(`Malgré les efforts, ${loss} bêtes sont perdues dans la tempête.`,"bad");}}},
+      {label:"Protéger la maison et attendre",apply:()=>{const loss=Math.min(state.cattle,rand(3,8));state.cattle-=loss;addLog(`La tempête passe sans intervention : ${loss} bêtes perdues.`,"bad");}}
+    ]
+  },
+  {
+    title:"Un investisseur de la ville",
+    text:"Un homme d'affaires propose d'investir dans le ranch en échange d'une part des profits futurs.",
+    image:"Un costume trois-pièces descend de la diligence",
+    choices:[
+      {label:"Accepter l'investissement",apply:()=>{const g=sc(rand(200,350));state.money+=g;state.reputation=clamp(state.reputation-2);addLog(`L'investissement apporte ${g} $, mais une part des profits sera due plus tard.`,"good");}},
+      {label:"Refuser pour rester indépendant",apply:()=>{state.reputation=clamp(state.reputation+2);addLog("La famille préfère rester maîtresse de son destin.","info");}}
+    ]
+  },
+  {
+    eraId:"prohibition",
+    title:"Une proposition du syndicat",
+    text:"Des hommes en costume proposent d'utiliser vos terres isolées comme entrepôt pour l'alcool de contrebande, contre une somme conséquente.",
+    image:"Des caisses discrètes attendent près de la grange",
+    choices:[
+      {label:"Accepter",apply:()=>{state.money+=sc(200);state.suspicion=clamp(state.suspicion+20);addLog("Le ranch devient un point de stockage clandestin.","good");}},
+      {label:"Refuser fermement",apply:()=>{state.rival.relation=clamp(state.rival.relation-6,-100,100);addLog("Le syndicat n'apprécie pas le refus.","info");}}
+    ]
+  },
+  {
+    eraId:"depression",
+    title:"La banque menace de saisir des terres voisines",
+    text:"Un voisin ruiné par la crise propose de vous vendre ses terres à bas prix avant la saisie bancaire.",
+    image:"Un fermier désespéré frappe à la porte",
+    choices:[
+      {label:"Racheter les terres",condition:()=>state.money>=sc(180),apply:()=>{state.money-=sc(180);state.land+=15;addLog("Le domaine s'agrandit aux dépens d'un voisin ruiné.","info");}},
+      {label:"L'aider sans contrepartie",apply:()=>{state.unity=clamp(state.unity+3);state.reputation=clamp(state.reputation+6);addLog("La générosité de la famille est remarquée dans toute la région.","good");}}
+    ]
+  },
+  {
+    eraId:"industrial",
+    title:"Le syndicat ouvrier",
+    text:"Les cow-boys et employés du ranch évoquent la possibilité de se syndiquer pour négocier de meilleurs salaires.",
+    image:"Une réunion se tient dans la grange",
+    choices:[
+      {label:"Négocier de bonne foi",apply:()=>{state.money-=Math.min(state.money,sc(80));state.unity=clamp(state.unity+4);addLog("Un accord est trouvé avec les employés du ranch.","good");}},
+      {label:"Refuser toute négociation",apply:()=>{state.suspicion=clamp(state.suspicion+10);addLog("Le refus crée des tensions durables avec les employés.","bad");}}
+    ]
+  },
+  {
+    eraId:"corporate",
+    title:"Une offre de rachat",
+    text:"Une grande société agroalimentaire propose de racheter une partie du ranch pour l'intégrer à ses circuits industriels.",
+    image:"Des costumes de la ville visitent le domaine",
+    choices:[
+      {label:"Vendre une partie du troupeau à prix fort",apply:()=>{const g=sc(rand(250,400));state.money+=g;state.cattle=Math.max(0,state.cattle-10);addLog(`La vente rapporte ${g} $, mais réduit le troupeau familial.`,"good");}},
+      {label:"Refuser et rester indépendant",apply:()=>{state.reputation=clamp(state.reputation+3);addLog("La famille refuse de céder à la pression industrielle.","info");}}
+    ]
+  },
+  {
+    eraId:"globalization",
+    title:"La spéculation immobilière commence",
+    text:"Des promoteurs commencent à démarcher les propriétaires terriens de la région, attirés par le potentiel touristique.",
+    image:"Une pancarte \"À vendre\" apparaît chez un voisin",
+    choices:[
+      {label:"Vendre quelques hectares en périphérie",condition:()=>state.land>=40,apply:()=>{const g=sc(rand(300,500));state.money+=g;state.land-=20;addLog(`La vente de terres périphériques rapporte ${g} $.`,"good");}},
+      {label:"Refuser toute vente",apply:()=>{state.reputation=clamp(state.reputation+3);addLog("Le ranch reste intact, malgré les offres alléchantes.","info");}}
+    ]
+  },
+  {
+    eraId:"modern",
+    title:"Une agence immobilière insiste",
+    text:"Une agence bien connue de la région multiplie les offres, de plus en plus pressantes, pour racheter le ranch et le transformer en complexe touristique.",
+    image:"Un hélicoptère survole le domaine",
+    choices:[
+      {label:"Écouter l'offre — négocier",apply:()=>{const g=sc(rand(150,300));state.money+=g;state.rival.relation=clamp(state.rival.relation+10,-100,100);addLog(`Une négociation ponctuelle rapporte ${g} $ et apaise temporairement la pression.`,"good");}},
+      {label:"Refuser catégoriquement",apply:()=>{state.rival.relation=clamp(state.rival.relation-12,-100,100);state.reputation=clamp(state.reputation+5);addLog("La famille défend farouchement l'héritage du ranch.","good");}}
+    ]
+  },
+  {
+    eraId:"foundation",
+    title:"Une délégation autochtone",
+    text:"Des représentants d'une nation autochtone voisine demandent un droit de passage saisonnier sur vos terres, comme cela se faisait avant la clôture des pâturages.",
+    image:"Des cavaliers attendent à la limite du domaine",
+    choices:[
+      {label:"Accorder le passage",apply:()=>{state.reputation=clamp(state.reputation+6);state.legacy.honor++;addLog("Le droit de passage est accordé. La parole donnée fait le tour de la région.","good");}},
+      {label:"Refuser et renforcer les clôtures",apply:()=>{state.legacy.greed++;state.suspicion=clamp(state.suspicion+6);addLog("Les clôtures sont renforcées. Le refus laisse des rancœurs.","bad");}}
+    ]
+  },
+  {
+    eraId:"foundation",
+    title:"Des bandits sur la route du bétail",
+    text:"Une bande armée écume les pistes de convoyage. Le prochain troupeau mené au marché risque gros.",
+    image:"Des traces de chevaux près du canyon",
+    choices:[
+      {label:"Escorter le convoi avec les cow-boys",condition:()=>state.cowboys&&state.cowboys.length>0,apply:()=>{const avg=state.cowboys.reduce((s,c)=>s+c.shoot,0)/state.cowboys.length;if(rand(1,100)+avg/2>60){const g=sc(rand(120,250));state.money+=g;addLog(`Le convoi arrive intact au marché : +${g} $.`,"good");}else{const loss=Math.min(state.cattle,rand(3,8));state.cattle-=loss;addLog(`L'embuscade coûte ${loss} bêtes.`,"bad");}}},
+      {label:"Attendre des jours meilleurs",apply:()=>{addLog("Le convoi est reporté. Le troupeau reste au ranch.","info");}}
+    ]
+  },
+  {
+    eraId:"prohibition",
+    title:"Un agent fédéral au ranch",
+    text:"Un agent du Bureau de la Prohibition inspecte les granges et pose beaucoup de questions sur les allées et venues nocturnes.",
+    image:"Une automobile noire remonte l'allée",
+    choices:[
+      {label:"Coopérer pleinement",apply:()=>{state.suspicion=clamp(state.suspicion-18);state.legacy.honor++;addLog("La coopération dissipe les soupçons.","good");}},
+      {label:"Le soudoyer",condition:()=>state.money>=sc(120),apply:()=>{state.money-=sc(120);state.legacy.greed++;if(chance(.65)){state.suspicion=clamp(state.suspicion-12);addLog("L'agent referme son carnet et repart.","good");}else{state.suspicion=clamp(state.suspicion+25);addLog("La tentative de corruption aggrave le dossier.","bad");}}}
+    ]
+  },
+  {
+    eraId:"depression",
+    title:"Une file de journaliers affamés",
+    text:"La crise jette sur les routes des familles entières. Une dizaine d'hommes demandent du travail contre le gîte et le couvert.",
+    image:"Des silhouettes au portail du ranch",
+    choices:[
+      {label:"Les embaucher pour la saison",apply:()=>{state.money-=Math.min(state.money,sc(90));state.reputation=clamp(state.reputation+9);state.legacy.honor++;addLog("Le ranch nourrit des familles entières cet hiver.","good");}},
+      {label:"Les renvoyer",apply:()=>{state.reputation=clamp(state.reputation-6);state.legacy.greed++;addLog("Les journaliers repartent vers la ville voisine.","bad");}}
+    ]
+  },
+  {
+    eraId:"industrial",
+    title:"L'électrification du domaine",
+    text:"Les lignes électriques atteignent enfin la vallée. Raccorder le ranch coûte cher mais changerait le quotidien.",
+    image:"Des poteaux plantés le long de la route",
+    choices:[
+      {label:"Financer le raccordement",condition:()=>state.money>=sc(300),apply:()=>{state.money-=sc(300);state.unity=clamp(state.unity+8);state.reputation=clamp(state.reputation+5);addLog("Le ranch est électrifié. La vie quotidienne s'en trouve transformée.","good");}},
+      {label:"Attendre encore quelques années",apply:()=>{addLog("Le ranch reste à la lampe à pétrole pour le moment.","info");}}
+    ]
+  },
+  {
+    eraId:"corporate",
+    title:"Un contrôle sanitaire strict",
+    text:"De nouvelles normes fédérales imposent des mises aux normes coûteuses pour continuer à vendre la viande du ranch.",
+    image:"Un inspecteur en blouse blanche parcourt les enclos",
+    choices:[
+      {label:"Se mettre aux normes",condition:()=>state.money>=sc(250),apply:()=>{state.money-=sc(250);state.reputation=clamp(state.reputation+7);state.legacy.honor++;addLog("Le ranch obtient sa certification sanitaire.","good");}},
+      {label:"Contourner discrètement le contrôle",apply:()=>{state.legacy.greed++;state.suspicion=clamp(state.suspicion+20);addLog("Le contrôle est contourné, mais le dossier reste ouvert.","bad");}}
+    ]
+  },
+  {
+    eraId:"globalization",
+    title:"Le tourisme frappe à la porte",
+    text:"Une agence propose de transformer une partie du ranch en gîte pour citadins en quête d'authenticité.",
+    image:"Un dépliant glacé sur la table de la cuisine",
+    choices:[
+      {label:"Ouvrir un gîte au ranch",apply:()=>{const g=sc(rand(200,380));state.money+=g;state.unity=clamp(state.unity-4);addLog(`Le gîte rapporte ${g} $, mais la famille perd un peu d'intimité.`,"good");}},
+      {label:"Garder le ranch fermé au public",apply:()=>{state.unity=clamp(state.unity+4);addLog("Le ranch reste un lieu de vie familial, pas une attraction.","info");}}
+    ]
+  },
+  {
+    eraId:"modern",
+    title:"Une campagne sur les réseaux",
+    text:"Une vidéo tournée au ranch devient virale. L'attention soudaine peut servir la famille comme lui nuire.",
+    image:"Des milliers de vues en quelques heures",
+    choices:[
+      {label:"Surfer sur la vague et vendre en direct",apply:()=>{const g=sc(rand(180,400));state.money+=g;state.reputation=clamp(state.reputation+6);addLog(`La vente directe explose : +${g} $.`,"good");}},
+      {label:"Rester discret",apply:()=>{state.reputation=clamp(state.reputation+2);state.unity=clamp(state.unity+3);addLog("La famille laisse retomber l'agitation.","info");}}
+    ]
+  }
+];
+
+function presentEvent(event){
+  $("eventTitle").textContent = event.title;
+  $("eventText").textContent = event.text;
+  $("eventText").style.whiteSpace = "normal";
+  $("eventIllustration").textContent = event.image;
+  $("eventChoices").innerHTML = "";
+
+  event.choices.forEach(choice => {
+    if(choice.condition && !choice.condition()) return;
+    const btn = document.createElement("button");
+    btn.className = "choice";
+    btn.textContent = choice.label;
+    btn.onclick = () => {
+      choice.apply();
+      $("eventModal").classList.add("hidden");
+      finishTurn();
+    };
+    $("eventChoices").appendChild(btn);
+  });
+
+  $("eventModal").classList.remove("hidden");
+}
+
+function showRandomEvent(){
+  const pool = events.filter(e => !e.eraId || e.eraId === state.eraId);
+  const event = pool[rand(0,pool.length-1)];
+  presentEvent(event);
+}
+
+function finishTurn(){
+  checkGameOver();
+  render();
+}
+
+function checkGameOver(){
+  if(state.year > 2026){
+    state.gameOver = true;
+    showDynastyEnding();
+    return;
+  }
+
+  if(state.money < sc(-500)){
+    state.gameOver = true;
+    addLog("La banque saisit le domaine. La dynastie du ranch prend fin.", "bad");
+    showGameOver("Faillite", "Les dettes ont englouti le ranch.");
+    return;
+  }
+
+  if(state.cattle <= 0 && state.money < 100){
+    state.gameOver = true;
+    addLog("Sans troupeau ni argent, le ranch est abandonné.", "bad");
+    showGameOver("Le dernier troupeau", "La famille ne peut plus maintenir le domaine.");
+    return;
+  }
+
+  const livingChildren = state.children.filter(c => c.alive !== false);
+  if(!state.founder.alive && !state.spouse.alive && livingChildren.length === 0){
+    state.gameOver = true;
+    showGameOver("Fin de la lignée", "Aucun héritier ne peut reprendre le ranch.");
+    return;
+  }
+
+  if(state.suspicion >= 100){
+    state.suspicion = 75;
+    const fine = Math.min(state.money,sc(rand(250,500)));
+    state.money -= fine;
+    state.reputation = clamp(state.reputation-15);
+    addLog(`Une vaste enquête frappe le ranch. Amende : ${fine} $.`, "bad");
+  }
+}
+
+function showDynastyEnding(){
+  const l = state.legacy || {honor:0,greed:0,grudges:[]};
+  const generations = (state.lineage||[]).length;
+  const livingChildren = state.children.filter(c=>c.alive!==false).length;
+
+  let verdict, verdictText;
+  if(l.honor > l.greed + 1){
+    verdict = "La dynastie respectée";
+    verdictText = "Après 141 ans, la famille "+state.familyName+" est devenue une institution locale, respectée pour son intégrité autant que pour ses terres.";
+  } else if(l.greed > l.honor + 1){
+    verdict = "L'empire bâti à tout prix";
+    verdictText = "La famille "+state.familyName+" a survécu à tout, mais son nom reste associé aux compromis et aux secrets qui ont bâti sa fortune.";
+  } else {
+    verdict = "La dynastie tenace";
+    verdictText = "Ni sainte ni damnée, la famille "+state.familyName+" a simplement tenu bon là où tant d'autres ont vendu et sont partis.";
+  }
+
+  let bilan = "\n\nBILAN DE LA DYNASTIE (1885–2026)\n";
+  bilan += "• Générations à la tête du ranch : "+generations+"\n";
+  bilan += "• Terres : "+state.land+" ha\n";
+  bilan += "• Troupeau : "+state.cattle+" bêtes\n";
+  bilan += "• Fortune : "+state.money+" $\n";
+  bilan += "• Réputation : "+state.reputation+"/100\n";
+  bilan += "• Unité familiale : "+state.unity+"/100\n";
+  bilan += "• Descendants vivants : "+livingChildren+"\n";
+  bilan += "• Rancunes héritées : "+(l.grudges?l.grudges.length:0)+"\n";
+  if(state.secret && state.secret.stage >= 3){
+    bilan += "• Le secret du fondateur a été résolu.\n";
+  } else if(state.secret){
+    bilan += "• Le secret du fondateur n'a jamais été entièrement élucidé.\n";
+  }
+
+  showGameOver(verdict, verdictText + bilan);
+}
+
+function showGameOver(title,text){
+  $("eventTitle").textContent = title;
+  $("eventText").textContent = text;
+  $("eventText").style.whiteSpace = "pre-line";
+  $("eventIllustration").textContent = "La chronique de la famille s’achève";
+  $("eventChoices").innerHTML = "";
+  const btn = document.createElement("button");
+  btn.className = "choice";
+  btn.textContent = "Revenir à l’écran de création";
+  btn.onclick = () => location.reload();
+  $("eventChoices").appendChild(btn);
+  $("eventModal").classList.remove("hidden");
+}
+
+function saveGame(){
+  if(!state) return;
+  const slot = $("saveSlot") ? $("saveSlot").value : "1";
+  localStorage.setItem("ranchDynastySave_"+slot,JSON.stringify(state));
+  toast("Partie sauvegardée (emplacement "+slot+").");
+}
+
+function loadGame(){
+  const slot = $("saveSlot") ? $("saveSlot").value : "1";
+  const raw = localStorage.getItem("ranchDynastySave_"+slot) || localStorage.getItem("ranchDynastySave");
+  if(!raw){ toast("Aucune sauvegarde trouvée dans cet emplacement."); return; }
+  try{
+    state = JSON.parse(raw);
+    $("setupScreen").classList.add("hidden");
+    $("gameScreen").classList.remove("hidden");
+    addLog("La partie sauvegardée a été chargée.", "info");
+    render();
+  }catch(e){ toast("La sauvegarde est illisible."); }
+}
+
+function exportGame(){
+  if(!state){ toast("Aucune partie en cours à exporter."); return; }
+  const blob = new Blob([JSON.stringify(state,null,2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "ranch-dynasty-"+(state.familyName||"famille")+"-"+state.year+".json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast("Fichier de sauvegarde téléchargé.");
+}
+
+function importGame(file){
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try{
+      state = JSON.parse(e.target.result);
+      $("setupScreen").classList.add("hidden");
+      $("gameScreen").classList.remove("hidden");
+      addLog("Une sauvegarde importée a été chargée.", "info");
+      render();
+      toast("Sauvegarde importée avec succès.");
+    }catch(err){ toast("Le fichier importé est invalide."); }
+  };
+  reader.readAsText(file);
+}
+
+function toast(text){
+  $("toast").textContent = text;
+  $("toast").classList.remove("hidden");
+  clearTimeout(window.toastTimer);
+  window.toastTimer = setTimeout(()=>$("toast").classList.add("hidden"),2200);
+}
+
+$("startBtn").addEventListener("click",startGame);
+$("endTurnBtn").addEventListener("click",endTurn);
+$("saveBtn").addEventListener("click",saveGame);
+$("loadBtn").addEventListener("click",loadGame);
+$("exportBtn").addEventListener("click",exportGame);
+$("importBtn").addEventListener("click",()=>$("importFile").click());
+$("importFile").addEventListener("change",(e)=>importGame(e.target.files[0]));
+$("restartBtn").addEventListener("click",()=> {
+  if(confirm("Abandonner la partie actuelle et recommencer ?")) location.reload();
+});
+document.querySelectorAll(".action").forEach(btn =>
+  btn.addEventListener("click",()=>doAction(btn.dataset.action))
+);
+</script>
+
+<div id="familyModal" class="modal hidden">
+<div class="modal-card">
+<h2>Famille</h2>
+<div id="familyContent"></div>
+<button class="choice" onclick="document.getElementById('familyModal').classList.add('hidden')">Fermer</button>
+</div></div>
+
+<script>
+function renderFamily(){
+ if(!state)return;
+ let h="<h3>"+state.familyName+"</h3>";
+ h+="<p><b>Chef :</b> "+state.founder.name+" ("+state.founder.age+" ans)</p>";
+ h+="<p><b>Épouse :</b> "+state.spouse.name+" ("+state.spouse.age+" ans)</p>";
+ h+="<h4>Enfants</h4>";
+ if(state.children.length===0){h+="<i>Aucun enfant</i>";}
+ else{
+   h+="<ul>";
+   state.children.forEach((c,i)=>{
+     if(!c.trait)c.trait=["Travailleur","Ambitieux","Calme","Impulsif","Charismatique"][Math.floor(Math.random()*5)];
+     if(!c.goal)c.goal=["Reprendre le ranch","Devenir riche","Partir en ville","Élever des chevaux"][Math.floor(Math.random()*4)];
+   h+="<li><b>"+c.name+"</b> - "+c.age+" ans"+(c.married?" (marié·e à "+c.spouseName+")":"")+(c.parentName?" — enfant de "+c.parentName:"")+"<br><input type=\"text\" id=\"childNameInput"+i+"\" value=\""+c.name.replace(/"/g,"&quot;")+"\" style=\"width:130px;\"> <button class=\"choice\" onclick=\"renameChild("+i+")\">Renommer</button><br>Trait : "+c.trait+"<br>Ambition : "+c.goal;
+     if(c.age>=16){
+       h+="<br>Affectation : <select id=\"childRole"+i+"\" onchange=\"setChildRole("+i+")\">";
+       Object.keys(CHILD_ROLES).forEach(k=>{
+         const sel = (c.role||"none")===k ? " selected" : "";
+         h+="<option value=\""+k+"\""+sel+">"+CHILD_ROLES[k].label+"</option>";
+       });
+       h+="</select><br><small>"+CHILD_ROLES[c.role||"none"].desc+"</small>";
+     } else {
+       h+="<br><small><i>Trop jeune pour être affecté à une tâche (16 ans requis)</i></small>";
+     }
+   h+="</li>";
+   });
+   h+="</ul>";
+ }
+ document.getElementById("familyContent").innerHTML=h;
+}
+function setChildRole(i){
+ const c = state.children[i];
+ if(!c) return;
+ const sel = document.getElementById("childRole"+i);
+ if(!sel) return;
+ c.role = sel.value;
+ addLog(`${c.name} est désormais affecté·e : ${CHILD_ROLES[c.role].label}.`, "info");
+ renderFamily();
+ render();
+}
+function renameChild(i){
+ const c = state.children[i];
+ if(!c) return;
+ const input = document.getElementById("childNameInput"+i);
+ const name = input ? input.value : "";
+ if(name && name.trim()){
+   c.name = name.trim();
+   renderFamily();
+ }
+}
+document.getElementById("familyBtn").addEventListener("click",()=>{renderFamily();document.getElementById("familyModal").classList.remove("hidden");});
+</script>
+
+<div id="cowboyModal" class="modal hidden"><div class="modal-card"><h2>Cow-boys</h2><div id="cowboyContent"></div><button class="choice" onclick="cowboyModal.classList.add('hidden')">Fermer</button></div></div>
+<div id="chronicleModal" class="modal hidden"><div class="modal-card"><h2>Chroniques</h2><div id="chronicleContent"></div><button class="choice" onclick="chronicleModal.classList.add('hidden')">Fermer</button></div></div>
+<div id="lineageModal" class="modal hidden"><div class="modal-card"><h2>Généalogie de la dynastie</h2><div id="lineageContent"></div><button class="choice" onclick="lineageModal.classList.add('hidden')">Fermer</button></div></div>
+<div id="diplomacyModal" class="modal hidden"><div class="modal-card"><h2>Diplomatie locale</h2><div id="diplomacyContent"></div><button class="choice" onclick="diplomacyModal.classList.add('hidden')">Fermer</button></div></div>
+<script>
+function ensureCowboys(){
+ if(!state.cowboys){
+ state.cowboys=[
+ {name:"Jake Morgan",loyalty:68,shoot:72,ride:84,salary:12,years:0,trait:"Vétéran"},
+ {name:"Bill Cooper",loyalty:81,shoot:60,ride:70,salary:10,years:0,trait:"Fidèle"},
+ {name:"Ethan Ross",loyalty:55,shoot:80,ride:66,salary:14,years:0,trait:"Tête brûlée"}
+ ];
+ state.chronicles=[];
+ }
+ state.cowboys.forEach(c=>{
+   if(c.years===undefined) c.years=0;
+   if(!c.trait) c.trait=COWBOY_TRAITS[rand(0,COWBOY_TRAITS.length-1)].name;
+ });
+}
+function renderCowboys(){
+ ensureCowboys();
+ let h="<ul>";
+ state.cowboys.forEach((c,i)=>{
+   const anc = c.years>=15?"Vétéran du ranch":(c.years>=5?"Confirmé":"Nouveau");
+   const loyLabel = c.loyalty>70?"Dévoué":(c.loyalty>45?"Loyal":(c.loyalty>25?"Distant":"Sur le départ"));
+   h+="<li><b>"+c.name+"</b> — <i>"+c.trait+"</i><br><small>"+anc+" · "+c.years+" an"+(c.years>1?"s":"")+" de service · "+loyLabel+"</small><br><input type=\"text\" id=\"cowboyNameInput"+i+"\" value=\""+c.name.replace(/"/g,"&quot;")+"\" style=\"width:130px;\"> <button class=\"choice\" onclick=\"renameCowboy("+i+")\">Renommer</button> <button class=\"choice\" onclick=\"fireCowboy("+i+")\">Renvoyer</button><br>Tir:"+c.shoot+" Equitation:"+c.ride+" Loyauté:"+c.loyalty+" Salaire:"+c.salary+"$/trimestre</li>";
+ });
+ h+="</ul>";
+ const totalSalary = state.cowboys.reduce((s,c)=>s+c.salary,0);
+ h+="<p><i>Salaires totaux dus chaque trimestre : "+totalSalary+" $</i></p>";
+ const hireCost = getHireCost();
+ h+="<button class=\"choice\" onclick=\"hireCowboy()\">Embaucher un cow-boy ("+hireCost+" $)</button>";
+ cowboyContent.innerHTML=h;
+}
+function getHireCost(){
+ return Math.round((100 + Math.max(0,state.cowboys.length-3)*35) * (state.costModifier||1));
+}
+function fireCowboy(i){
+ const c = state.cowboys[i];
+ if(!c) return;
+ if(state.cowboys.length<=1){ toast("Il vous faut au moins un cow-boy."); return; }
+ if(confirm("Renvoyer "+c.name+" ?")){
+   state.cowboys.splice(i,1);
+   addLog(c.name+" quitte le ranch.", "info");
+   renderCowboys();
+ }
+}
+function renameCowboy(i){
+ const c = state.cowboys[i];
+ if(!c) return;
+ const input = document.getElementById("cowboyNameInput"+i);
+ const name = input ? input.value : "";
+ if(name && name.trim()){
+   c.name = name.trim();
+   renderCowboys();
+ }
+}
+function hireCowboy(){
+ const cost = getHireCost();
+ if(state.money < cost){ toast("Vous n’avez pas assez d’argent."); return; }
+ state.money -= cost;
+ const firstNames=["Tom","Sam","Luke","Frank","Charlie","Walt","Dan","Pete","Cole","Reed"];
+ const lastNames=["Reeves","Hayes","Dalton","Carson","Boone","McCoy","Lowry","Sutton","Grant","Wade"];
+ const name = firstNames[Math.floor(Math.random()*firstNames.length)]+" "+lastNames[Math.floor(Math.random()*lastNames.length)];
+ state.cowboys.push({
+   name:name,
+   loyalty:rand(40,80),
+   shoot:rand(40,85),
+   ride:rand(40,85),
+   salary:Math.round(rand(8,16)*state.costModifier),
+   years:0,
+   trait:COWBOY_TRAITS[rand(0,COWBOY_TRAITS.length-1)].name
+ });
+ addLog(name+" rejoint le ranch comme cow-boy pour "+cost+" $.", "good");
+ renderCowboys();
+ render();
+}
+familyBtn.addEventListener("click",()=>ensureCowboys());
+cowboyBtn.addEventListener("click",()=>{renderCowboys();cowboyModal.classList.remove("hidden");});
+chronicleBtn.addEventListener("click",()=>{ ensureCowboys();
+ chronicleContent.innerHTML=(state.chronicles.length?state.chronicles.join("<hr>"):"Aucune chronique.");
+ chronicleModal.classList.remove("hidden");
+});
+lineageBtn.addEventListener("click",()=>{
+ renderLineage();
+ lineageModal.classList.remove("hidden");
+});
+diplomacyBtn.addEventListener("click",()=>{
+ renderDiplomacy();
+ diplomacyModal.classList.remove("hidden");
+});
+function renderDiplomacy(){
+ if(!state.factions || !state.factions.length){
+   const currentEra = ERAS.find(e=>e.id===state.eraId) || getEra(state.year);
+   state.factions = generateFactions(currentEra);
+ }
+ const currentEra = ERAS.find(e=>e.id===state.eraId) || getEra(state.year);
+ let h = "";
+ if(state.rival){
+   const r = state.rival;
+   const status = r.relation>60?"Alliance":(r.relation>20?"Cordiale":(r.relation<-60?"Guerre ouverte":(r.relation<-20?"Hostile":"Neutre")));
+   h += "<div style='margin-bottom:14px;padding:10px;border:2px solid var(--line);'>";
+   h += "<b>"+r.name+"</b> — "+currentEra.rivalType+" <i>(rival principal de la saga)</i><br>";
+   h += "Statut : <b>"+status+"</b> (relation : "+r.relation+", force : "+r.strength+")<br>";
+   h += "<button class=\"choice\" onclick=\"doAction('rivalNegotiate');renderDiplomacy();\">Négocier ("+sc(50)+" $)</button> ";
+   h += "<button class=\"choice\" onclick=\"doAction('rivalAction');renderDiplomacy();\">Affronter ("+sc(70)+" $)</button>";
+   if(r.relation>60) h += "<br><small>Une alliance solide profite discrètement au ranch chaque trimestre.</small>";
+   if(r.relation<-60) h += "<br><small>La guerre ouverte expose le troupeau à des raids fréquents.</small>";
+   h += "</div>";
+ }
+ h += "<ul>";
+ state.factions.forEach((f,i)=>{
+   const status = f.relation>40 ? "Alliée" : (f.relation<-30 ? "Hostile" : "Neutre");
+   h += "<li><b>"+f.name+"</b> — "+status+" (relation : "+f.relation+")<br>";
+   h += "<button class=\"choice\" onclick=\"allyFaction("+i+")\">S'allier ("+sc(40)+" $)</button> ";
+   h += "<button class=\"choice\" onclick=\"harmFaction("+i+")\">Nuire ("+sc(30)+" $)</button></li>";
+ });
+ h += "</ul>";
+ diplomacyContent.innerHTML = h;
+}
+function allyFaction(i){
+ const f = state.factions[i];
+ if(!f) return;
+ const cost = sc(40);
+ if(state.money < cost){ toast("Vous n'avez pas assez d'argent."); return; }
+ state.money -= cost;
+ if(chance(.6)){
+   f.relation = clamp(f.relation + rand(12,22), -100, 100);
+   const bonus = sc(rand(20,60));
+   state.money += bonus;
+   state.reputation = clamp(state.reputation+3);
+   addLog(`Un rapprochement avec ${f.name} porte ses fruits (+${bonus} $).`, "good");
+ } else {
+   f.relation = clamp(f.relation + rand(0,5), -100, 100);
+   addLog(`La tentative de rapprochement avec ${f.name} reste timide.`, "info");
+ }
+ renderDiplomacy();
+ render();
+}
+function harmFaction(i){
+ const f = state.factions[i];
+ if(!f) return;
+ const cost = sc(30);
+ if(state.money < cost){ toast("Vous n'avez pas assez d'argent."); return; }
+ state.money -= cost;
+ if(chance(.5)){
+   f.relation = clamp(f.relation - rand(15,25), -100, 100);
+   state.suspicion = clamp(state.suspicion + rand(5,12));
+   addLog(`Des manœuvres discrètes affaiblissent ${f.name}.`, "good");
+ } else {
+   f.relation = clamp(f.relation - rand(2,8), -100, 100);
+   state.reputation = clamp(state.reputation - rand(3,8));
+   addLog(`La manœuvre contre ${f.name} est découverte et nuit à votre réputation.`, "bad");
+   if(!state.legacy) state.legacy = {honor:0,greed:0,grudges:[]};
+   if(!state.legacy.grudges.some(g=>g.name===f.name)){
+     state.legacy.grudges.push({name:f.name, year:state.year});
+     addLog(`${f.name} n'oubliera pas cet affront — la rancune se transmettra.`, "bad");
+   }
+ }
+ renderDiplomacy();
+ render();
+}
+function renderLineage(){
+ const lineage = state.lineage || [];
+ let h = "<ul>";
+ lineage.forEach(l=>{
+   const end = l.endYear ? l.endYear : (state.founder.alive ? "aujourd'hui" : l.endYear);
+   const era = getEra(l.startYear);
+   h += "<li><b>"+l.name+"</b> "+state.familyName+" — "+l.role+"<br>"+l.startYear+" – "+(end||"...")+" ("+era.name.split(" (")[0]+")</li>";
+ });
+ h += "</ul>";
+ if(state.rival){
+   const currentEra = ERAS.find(e=>e.id===state.eraId) || getEra(state.year);
+   h += "<hr><p><b>Rivaux traversant les générations :</b><br>La lignée "+state.rival.name+", aujourd'hui incarnée par "+currentEra.rivalType+", relation actuelle : "+state.rival.relation+"</p>";
+ }
+ const l = state.legacy;
+ if(l){
+   h += "<hr><p><b>Héritage moral :</b><br>";
+   h += "Actes honorables : "+l.honor+" — Compromissions : "+l.greed+"<br>";
+   if(l.grudges && l.grudges.length){
+     h += "Rancunes héritées : "+l.grudges.map(g=>g.name+" ("+g.year+")").join(", ");
+   } else {
+     h += "Aucune rancune durable accumulée.";
+   }
+   h += "</p>";
+ }
+ if(state.secret){
+   const labels = {landClaim:"l'origine douteuse des terres", hiddenCrime:"une disparition jamais élucidée", buriedTreasure:"un trésor caché par le fondateur"};
+   h += "<p><b>Secret de famille :</b> ";
+   if(state.secret.stage === 0){
+     h += "<i>rien n'a encore refait surface...</i>";
+   } else if(state.secret.stage >= 3){
+     h += "l'affaire concernant "+labels[state.secret.type]+" a été résolue.";
+   } else {
+     h += "l'affaire concernant "+labels[state.secret.type]+" reste en suspens (chapitre "+state.secret.stage+"/3).";
+   }
+   h += "</p>";
+ }
+ lineageContent.innerHTML = h;
+}
+const oldEnd=endTurn;
+endTurn=function(){
+ oldEnd();
+ ensureCowboys();
+ if(state.season===0){
+ state.chronicles.push("<b>"+(state.year-1)+"</b><br>Le ranch possède "+state.cattle+" bovins et "+state.land+" hectares.");
+ if(state.chronicles.length>20)state.chronicles.shift();
+ }
+ state.cowboys.forEach(c=>{
+  c.loyalty=Math.max(0,Math.min(100,c.loyalty+(Math.random()<0.5?-2:2)));
+ });
+}
+</script>
+<script>
+document.addEventListener("DOMContentLoaded",function(){
+ const fam=document.getElementById("familyBtn");
+ if(fam){
+   fam.onclick=function(){
+      if(typeof renderFamily==="function"){renderFamily();}
+      const m=document.getElementById("familyModal");
+      if(m)m.classList.remove("hidden");
+   };
+ }
+ const cow=document.getElementById("cowboyBtn");
+ if(cow){
+   cow.onclick=function(){
+      if(typeof ensureCowboys==="function")ensureCowboys();
+      if(typeof renderCowboys==="function")renderCowboys();
+      const m=document.getElementById("cowboyModal");
+      if(m)m.classList.remove("hidden");
+   };
+ }
+});
+</script>
+</body>
+</html>
