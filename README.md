@@ -1,4 +1,4 @@
-# Ranch Dynasty — V2.0
+# Ranch Dynasty — V2.1
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -49,6 +49,30 @@ désigné prime sur l'aîné, et un frère ou une sœur rongé par la rancune pe
 en emportant terres et argent.
 
 Désigner un successeur se fait depuis le panneau **Famille**.
+
+## Personnes
+
+Chaque personne — fondateur, conjoint, enfants — porte un `sex` (`"m"` / `"f"`).
+Il commande le prénom, l'accord des textes (`married()`, `heirWord()`), le
+conjoint choisi au mariage (toujours du sexe opposé) et surtout la fertilité.
+
+Les naissances dépendent de l'âge de la **mère du foyer** (`motherOfHousehold`,
+`coupleCanConceive`) : la fertilité décline dès 30 ans et s'arrête à 40 ans
+révolus. Même règle pour les petits-enfants côté fille.
+
+Le conjoint du chef de famille peut prendre une **affectation** au ranch, comme
+les enfants majeurs (`roleCount` compte les deux).
+
+## Les chevaux
+
+Le ranch a un **cheval de tête** nommé (`state.champion`), qui apparaît dès
+qu'il y a un cheval à l'écurie. Il a une vitesse propre, un dressage et un
+compteur de victoires. `championForm()` combine les trois, l'âge finissant par
+peser. L'action « Entraîner les chevaux » élève le dressage ; les cow-boys au
+trait *Dresseur* y aident.
+
+Il peut être volé au rival (opération `horseTheft`) — on récupère alors une bête
+déjà dressée — et volé au ranch si l'on néglige la garde.
 
 ## Coups en douce
 
@@ -123,12 +147,12 @@ Courbe mesurée sur 100 parties par profil (`node tests/sim.js index.html 100 <p
 
 | Profil | Description | 2026 atteint | Patrimoine final médian* |
 |---|---|---|---|
-| `random` | clique au hasard | 0 % | 191 |
-| `passive` | ne fait rien | 12 % | 452 |
-| `outlaw` | contrebande à chaque trimestre | 13 % | 368 |
-| `honest` | concours et négociation | 97 % | 460 143 |
-| `mixed` | troupeau + crime d'appoint | 93 % | 640 408 |
-| `policy` | conduite du troupeau | 95 % | 648 183 |
+| `random` | clique au hasard | 1 % | 421 |
+| `passive` | ne fait rien | 15 % | 621 |
+| `outlaw` | contrebande à chaque trimestre | 59 % | 244 711 |
+| `honest` | concours et élevage | 97 % | 1 023 032 |
+| `mixed` | troupeau + crime d'appoint | 93 % | 1 587 309 |
+| `policy` | conduite du troupeau | 97 % | 1 675 328 |
 
 \* patrimoine converti en dollars de 1885, seule façon de comparer d'une époque
 à l'autre.
@@ -152,6 +176,11 @@ rognés en permanence.
 
 ### Règles structurantes à ne pas casser
 
+- **Les bras servent à proportion du troupeau** : un homme pour vingt-cinq bêtes
+  utiles. En deçà, chaque cow-boy majore le rendement de 9 % (plafond +55 %) ;
+  au-delà, il touche son salaire sans contrepartie. C'est ce qui rend l'embauche
+  décisive sur un grand ranch et ruineuse sur un petit — auparavant un cow-boy
+  rapportait 6 $ forfaitaires pour 8 à 16 $ de salaire, donc jamais rentable.
 - **La reproduction est bornée par la capacité** (`land / 3`). Les revenus sont
   plafonnés à `min(bétail, capacité)` alors que l'entretien porte sur *toutes* les
   bêtes : un troupeau qui s'emballe ruine mécaniquement le ranch. Pour agrandir le
@@ -203,7 +232,8 @@ sans aucune dépendance :
 ```bash
 # Tests ciblés : objectifs, succession, factions, équilibrage, migration
 # des sauvegardes, coups en douce, faveurs, rythme, illustrations,
-# montants et inflation. 169 vérifications, sortie non nulle en cas d'échec.
+# montants et inflation, sexes et fertilité, chevaux, apport des cow-boys.
+# 204 vérifications, sortie non nulle en cas d'échec.
 node tests/scenarios.js index.html
 
 # Simulation de masse.
@@ -223,10 +253,6 @@ profils : il compare facilement deux versions du fichier
 
 ## Pistes ouvertes
 
-- **Les cow-boys sont économiquement irrationnels** : chacun apporte 6 $ de
-  rendement par trimestre pour 8 à 16 $ de salaire. Ils ne se justifient que par
-  leur tir (coups en douce) et leur équitation (concours). À revoir : soit leur
-  apport, soit leur rôle.
 - Rendre le rival principal plus présent hors des raids
 - Donner un poids narratif aux traits des cow-boys vétérans
 - Quelques objectifs restent des jalons plus que des défis (`united`, `oldHand`

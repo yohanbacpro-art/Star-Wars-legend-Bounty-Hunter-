@@ -600,6 +600,13 @@
         <input id="spouseName" maxlength="20" value="Élise" />
       </div>
       <div>
+        <label for="founderSex">Sexe du fondateur</label>
+        <select id="founderSex">
+          <option value="m" selected>Homme</option>
+          <option value="f">Femme</option>
+        </select>
+      </div>
+      <div>
         <label for="difficulty">Difficulté</label>
         <select id="difficulty">
           <option value="easy">Clémente</option>
@@ -758,6 +765,12 @@
                 <strong id="weaponLabel">Acheter une arme</strong>
                 <small id="weaponDesc">Renforce la défense et les actions risquées.</small>
                 <div class="action-cost">Coût : 95 $</div>
+              </button>
+              <button class="action" data-action="trainHorse">
+                <span class="icon">🏇</span>
+                <strong>Entraîner les chevaux</strong>
+                <small id="trainDesc">Améliore le dressage du cheval de tête.</small>
+                <div class="action-cost" id="trainCost">Coût : 40 $</div>
               </button>
               <button class="action" data-action="buyFeed">
                 <span class="icon">🌿</span>
@@ -1002,9 +1015,11 @@ const CHILD_ROLES = {
 // Tout enfant passe par ici : c'est le seul endroit qui attribue un `cid`,
 // identifiant stable indispensable pour désigner un héritier.
 function addChild(name, extra){
+  const sex = (extra && extra.sex) || guessSex(name);
   const child = Object.assign({
     cid: state.nextCid++,
     name: name,
+    sex: sex,
     age: 0,
     bond: 55,
     health: 100,
@@ -1013,6 +1028,14 @@ function addChild(name, extra){
   }, extra || {});
   state.children.push(child);
   return child;
+}
+
+// Compte qui tient un rôle donné : les enfants en âge de travailler, et le
+// conjoint du chef de famille, qui n'avait jusqu'ici aucune prise sur le ranch.
+function roleCount(role){
+  let n = (state.children||[]).filter(c => c.alive !== false && c.age >= 16 && c.role === role).length;
+  if(state.spouse && state.spouse.alive && state.spouse.role === role) n++;
+  return n;
 }
 
 function adultHeirs(){
@@ -1049,7 +1072,7 @@ function designateHeir(cid){
     addLog(`${child.name} remplace ${previous.name} comme héritier désigné. La décision fait grand bruit dans la famille.`, "bad");
   } else {
     if(others.length) state.unity = clamp(state.unity - rand(1,4));
-    addLog(`${child.name} est officiellement désigné·e héritier·ère du ${state.ranchName}.`, "good");
+    addLog(`${child.name} est officiellement désigné${child.sex==="f"?"e":""} ${heirWord(child)} du ${state.ranchName}.`, "good");
   }
 }
 
@@ -1132,20 +1155,25 @@ function resolveSuccession(){
   }
   state.founder = {
     name: heir.name,
+    sex: heir.sex || "m",
     age: heir.age,
     health: heir.health !== undefined ? heir.health : 90,
     alive: true,
-    traits: heir.trait ? [heir.trait] : ["Héritier"]
+    traits: heir.trait ? [heir.trait] : [heirWord(heir)]
   };
   // Le conjoint de l'héritier devient celui du foyer : sans cela la lignée
   // s'éteint mécaniquement après la première génération.
   if(heir.married && heir.spouseName && !state.spouse.alive){
     state.spouse = {
       name: heir.spouseName,
-      age: Math.max(18, heir.age + rand(-4,4)),
+      sex: otherSex(heir.sex || "m"),
+      // Souvent un peu plus jeune : sans quoi la lignée s'arrêtait net, la
+      // conjointe arrivant déjà passé l'âge d'avoir des enfants.
+      age: Math.max(18, heir.age - rand(0,8)),
       health: 100,
       alive: true,
-      traits: ["Pièce rapportée"]
+      traits: ["Pièce rapportée"],
+      role: "none"
     };
     addLog(`${state.spouse.name} ${state.familyName} s'installe à la maison du ranch aux côtés de ${heir.name}.`, "info");
   }
@@ -1153,7 +1181,8 @@ function resolveSuccession(){
   if(!state.lineage) state.lineage = [];
   state.lineage.push({
     name: state.founder.name,
-    role: designated ? "Héritier désigné" : "Héritier par droit d'aînesse",
+    role: designated ? (heirWord(heir).charAt(0).toUpperCase()+heirWord(heir).slice(1)) + " désigné"
+                     : (heirWord(heir).charAt(0).toUpperCase()+heirWord(heir).slice(1)) + " par droit d'aînesse",
     startYear: state.year,
     endYear: null
   });
@@ -1188,8 +1217,117 @@ function resolveSuccession(){
   }
 }
 
-const PARTNER_NAMES = ["Sarah","John","Mary","Robert","Anna","George","Emma",
-  "William","Grace","Daniel","Martha","Edward","Lucy","Frank","Nellie","Walter"];
+// ---- Les chevaux ----
+// Le ranch a un cheval de tête, nommé et suivi. On l'entraîne, il gagne les
+// concours, il vieillit — et il peut être volé, ou volé à d'autres.
+const HORSE_NAMES = ["Comanche","Cendre","Bayard","Tonnerre","Sirocco","Braise","Ombre",
+  "Mustang","Pampa","Silver","Vaillant","Alezan","Rafale","Nuage","Épervier","Séquoia"];
+
+function newChampion(quality){
+  const q = quality || 0;
+  return {
+    name: HORSE_NAMES[rand(0,HORSE_NAMES.length-1)],
+    age: rand(3,6),
+    speed: clamp(rand(35,60) + q),
+    training: 0,
+    wins: 0,
+    alive: true
+  };
+}
+
+// Le cheval de tête existe dès qu'il y a un cheval à l'écurie.
+function ensureChampion(){
+  if(!state) return null;
+  if(state.horses > 0 && (!state.champion || state.champion.alive === false)){
+    state.champion = newChampion();
+    addLog(`${state.champion.name} se distingue à l'écurie : ce sera le cheval de tête du ranch.`, "good");
+  }
+  if(state.horses <= 0) state.champion = null;
+  return state.champion;
+}
+
+// Valeur en compétition : vitesse propre plus dressage, l'âge finissant par peser.
+function championForm(){
+  const c = state.champion;
+  if(!c || c.alive === false) return 0;
+  const agePenalty = c.age > 12 ? (c.age - 12) * 4 : 0;
+  return Math.max(0, c.speed + c.training * .6 - agePenalty);
+}
+
+function trainHorses(){
+  if(state.horses < 1){ toast("Il faut au moins un cheval à l'écurie."); return; }
+  const cost = spend(40);
+  if(cost === false) return;
+  useAction();
+  const champ = ensureChampion();
+  const riders = (state.cowboys||[]);
+  const avgRide = riders.length ? riders.reduce((s,c)=>s+c.ride,0)/riders.length : 30;
+  const dresseurs = riders.filter(c=>c.trait==="Dresseur").length;
+  const gain = rand(5,11) + Math.floor(avgRide/25) + dresseurs*3;
+  champ.training = clamp(champ.training + gain);
+  addLog(`${champ.name} travaille au manège : dressage ${champ.training}/100 (+${gain}).`, "good");
+  if(chance(.12)){
+    champ.speed = clamp(champ.speed + rand(1,3));
+    addLog(`${champ.name} s'étoffe : sa vitesse progresse.`, "good");
+  }
+  checkAchievements();
+  render();
+}
+
+// Vieillissement annuel de l'écurie, appelé depuis ageFamily().
+function ageHorses(){
+  const c = state.champion;
+  if(!c || c.alive === false) return;
+  c.age++;
+  if(c.age > 14 && chance(.25)){
+    addLog(`${c.name} prend une retraite méritée après ${c.wins} victoire${c.wins>1?"s":""}.`, "info");
+    state.champion = null;
+    ensureChampion();
+    return;
+  }
+  if(c.age > 10) c.training = clamp(c.training - rand(0,3));
+}
+
+// Chaque personne a un sexe. Sans lui, un fils pouvait épouser un Daniel et
+// la fertilité ne pouvait pas dépendre de l'âge de la mère.
+const FIRST_NAMES = {
+  m:["Thomas","Samuel","Arthur","Joseph","Henry","Louis","Elias","Noah","Isaac","Caleb","Owen","Silas"],
+  f:["Eleanor","Clara","Rose","Alice","Margaret","Louise","Jeanne","Ruth","Nora","Ivy","Faith","June","Ada"]
+};
+const PARTNER_NAMES = {
+  m:["John","Robert","George","William","Daniel","Edward","Frank","Walter","Charles","Albert"],
+  f:["Sarah","Mary","Anna","Emma","Grace","Martha","Lucy","Nellie","Bessie","Cora"]
+};
+
+const otherSex = (s) => s === "f" ? "m" : "f";
+const pickName = (sex) => FIRST_NAMES[sex][rand(0,FIRST_NAMES[sex].length-1)];
+const pickPartnerName = (sex) => PARTNER_NAMES[sex][rand(0,PARTNER_NAMES[sex].length-1)];
+
+// Accords en français, pour ne pas écrire « marié·e » partout.
+const married = (p) => p.sex === "f" ? "mariée" : "marié";
+const heirWord = (p) => p.sex === "f" ? "héritière" : "héritier";
+const bornWord = (p) => p.sex === "f" ? "née" : "né";
+
+// Retrouve le sexe d'un prénom déjà tiré, pour migrer les vieilles sauvegardes.
+function guessSex(name){
+  if(FIRST_NAMES.f.includes(name) || PARTNER_NAMES.f.includes(name)) return "f";
+  if(FIRST_NAMES.m.includes(name) || PARTNER_NAMES.m.includes(name)) return "m";
+  return chance(.5) ? "m" : "f";
+}
+
+// L'âge de la mère commande les naissances. Selon qui, du chef de famille ou de
+// son conjoint, est la femme du couple.
+function motherOfHousehold(){
+  if(state.founder.sex === "f" && state.founder.alive) return state.founder;
+  if(state.spouse.sex === "f" && state.spouse.alive) return state.spouse;
+  return null;
+}
+function coupleCanConceive(){
+  const mother = motherOfHousehold();
+  if(!mother) return false;
+  const father = mother === state.founder ? state.spouse : state.founder;
+  return mother.age < 40 && !!father && father.alive;
+}
 
 const COWBOY_TRAITS = [
   {name:"Vétéran", desc:"Gagne en loyauté avec les années"},
@@ -1222,6 +1360,26 @@ const ILLEGAL_OPS = {
      fail:"Un maquignon repère la retouche et le fait savoir en ville.",
      onFail:()=>{ state.reputation=clamp(state.reputation-rand(5,10));
        addLog("La fraude aux marques se sait : les acheteurs se méfient.","bad"); }},
+    {id:"horseTheft", icon:"🐎", name:"Voler le cheval du rival",
+     what:"Le meilleur cheval du ranch d'en face passe la nuit dans votre écurie, et n'en ressort pas.",
+     gain:[0,0], sus:[14,22], base:.50, edge:"shoot",
+     reward:"un cheval de tête déjà dressé",
+     needs:()=>({ok:(state.cowboys||[]).length>=1, why:"Il faut au moins un cow-boy."}),
+     fail:"On vous attendait à l'écurie. Le rival sait, et il n'oubliera pas.",
+     onWin:()=>{ state.horses++;
+       const stolen = newChampion(rand(10,25));
+       stolen.training = rand(20,45);
+       const old = state.champion;
+       if(!old || championForm() < stolen.speed + stolen.training*.6){
+         state.champion = stolen;
+         addLog(`${stolen.name} est désormais le cheval de tête du ranch. Personne ne pose de questions.`, "good");
+       } else {
+         addLog("Le cheval volé rejoint l'écurie sans détrôner le vôtre.", "good");
+       }
+       state.rival.relation = clamp(state.rival.relation-12,-100,100); },
+     onFail:()=>{ state.rival.relation = clamp(state.rival.relation-22,-100,100);
+       state.rival.strength = clamp(state.rival.strength+6,10,100);
+       addLog("L'expédition à l'écurie du rival tourne à l'humiliation.", "bad"); }},
     {id:"claim", icon:"📜", name:"Occuper une concession abandonnée",
      what:"Vous installez vos clôtures sur des terres dont personne ne réclame le titre. Pour l'instant.",
      gain:[0,0], sus:[12,20], base:.55, edge:"relation",
@@ -1500,13 +1658,26 @@ function ensureProgress(){
     if(typeof state.stats[k] !== "number") state.stats[k] = 0;
   });
   if(state.heirId === undefined) state.heirId = null;
+  if(state.champion === undefined) state.champion = null;
+  if(state.champion){
+    if(typeof state.champion.training !== "number") state.champion.training = 0;
+    if(typeof state.champion.wins !== "number") state.champion.wins = 0;
+  }
   if(!state.favourCooldown) state.favourCooldown = {};
   ["law","trade","media","community"].forEach(t => {
     if(typeof state.favourCooldown[t] !== "number") state.favourCooldown[t] = 0;
   });
   if(typeof state.nextCid !== "number") state.nextCid = 1;
+  if(!state.founder.sex) state.founder.sex = "m";
+  if(!state.spouse.sex) state.spouse.sex = otherSex(state.founder.sex);
+  if(state.spouse.role === undefined) state.spouse.role = "none";
   (state.children||[]).forEach(c => {
     if(c.cid === undefined) c.cid = state.nextCid++;
+    if(!c.sex) c.sex = guessSex(c.name);
+    // Un mariage d'avant les sexes a pu apparier deux prénoms du même sexe.
+    if(c.married && c.spouseName && guessSex(c.spouseName) === c.sex){
+      c.spouseName = pickPartnerName(otherSex(c.sex));
+    }
     if(typeof c.ambition !== "number") c.ambition = c.age >= 16 ? rand(30,90) : 0;
     if(typeof c.resentment !== "number") c.resentment = 0;
     if(typeof c.bond !== "number") c.bond = 50;
@@ -1794,6 +1965,7 @@ const chance = (p) => Math.random() < p;
 function baseState() {
   const diff = $("difficulty").value;
   const origin = $("origin").value;
+  const founderSex = ($("founderSex") && $("founderSex").value) || "m";
   const modifiers = {
     easy:{money:450,event:.82,cost:.9},
     normal:{money:0,event:1,cost:1},
@@ -1806,6 +1978,7 @@ function baseState() {
     ranchName:$("ranchName").value.trim() || "Ranch de la Frontière",
     founder:{
       name:$("founderName").value.trim() || "William",
+      sex:founderSex,
       age:28,
       health:100,
       alive:true,
@@ -1813,10 +1986,12 @@ function baseState() {
     },
     spouse:{
       name:$("spouseName").value.trim() || "Mary",
+      sex:otherSex(founderSex),
       age:25,
       health:100,
       alive:true,
-      traits:["Travailleuse"]
+      traits:["Travailleuse"],
+      role:"none"
     },
     children:[],
     year:1885,
@@ -1856,6 +2031,7 @@ function baseState() {
     heirId:null,
     nextCid:1,
     favourCooldown:{law:0, trade:0, media:0, community:0},
+    champion:null,
     lineage:[{name:$("founderName").value.trim() || "William", role:"Fondateur", startYear:1885, endYear:null}]
   };
   if(origin === "breeder"){
@@ -1874,6 +2050,7 @@ function startGame(){
   state = baseState();
   ensureProgress();
   ensureCowboys();
+  ensureChampion();
   $("setupScreen").classList.add("hidden");
   $("gameScreen").classList.remove("hidden");
   addLog(`La famille ${state.familyName} prend possession du ${state.ranchName}.`, "good");
@@ -1928,6 +2105,10 @@ function render(){
   $("sellValue").textContent = `Gain estimé : ${state.cattlePrice*5} $`;
   $("buyCattleCost").textContent = `Coût : ${(state.cattlePrice+6)*5} $`;
   $("buyFeedCost").textContent = `Coût : ${sc(60)} $`;
+  $("trainCost").textContent = `Coût : ${sc(40)} $`;
+  $("trainDesc").textContent = state.champion
+    ? `${state.champion.name} — dressage ${state.champion.training}/100, ${state.champion.wins} victoire${state.champion.wins>1?"s":""}.`
+    : "Aucun cheval à l'écurie pour le moment.";
 
   const heir = heirChild();
   const childrenText = state.children.length
@@ -2119,6 +2300,7 @@ function doAction(type){
     if(cost === false) return;
     useAction(); state.horses++;
     addLog(`Un nouveau cheval rejoint les écuries pour ${cost} $.`, "good");
+    ensureChampion();
   }
 
   if(type === "competition"){
@@ -2126,21 +2308,27 @@ function doAction(type){
     const cost = spend(45);
     if(cost === false) return;
     useAction();
+    const champ = ensureChampion();
     const avgRide = (state.cowboys&&state.cowboys.length) ? state.cowboys.reduce((s,c)=>s+c.ride,0)/state.cowboys.length : 0;
-    const score = rand(1,100) + state.horses*2 + Math.floor(state.reputation/8) + Math.floor(avgRide/10);
+    const score = rand(1,70) + Math.round(championForm()*.7) + state.horses
+                + Math.floor(state.reputation/10) + Math.floor(avgRide/12);
     if(score >= 85){
       const prize = sc(rand(300,480));
       state.money += prize; state.reputation = clamp(state.reputation+8);
       state.stats.competitionWins++;
-      addLog(`Victoire éclatante au concours équestre : +${prize} $ et +8 réputation.`, "good");
+      if(champ){ champ.wins++; champ.training = clamp(champ.training + 2); }
+      addLog(`${champ ? champ.name + " l'emporte" : "Victoire éclatante"} au concours : +${prize} $ et +8 réputation.`, "good");
     } else if(score >= 55){
       const prize = sc(rand(110,200));
       state.money += prize; state.reputation = clamp(state.reputation+3);
       addLog(`Belle place au concours : +${prize} $ et +3 réputation.`, "good");
     } else {
-      addLog("Le cheval n’a pas réussi à se classer au concours.", "bad");
-      if(chance(.12)){
-        state.horses--; addLog("Le cheval s’est gravement blessé et a dû être abattu.", "bad");
+      addLog(`${champ ? champ.name + " ne se classe pas" : "Le cheval n’a pas réussi à se classer"} au concours.`, "bad");
+      if(chance(.10)){
+        state.horses--;
+        if(champ){ addLog(`${champ.name} s’est gravement blessé et a dû être abattu.`, "bad"); state.champion = null; }
+        else addLog("Le cheval s’est gravement blessé et a dû être abattu.", "bad");
+        ensureChampion();
       }
     }
   }
@@ -2150,6 +2338,11 @@ function doAction(type){
     if(cost === false) return;
     useAction(); state.weapons++;
     addLog(`Une arme supplémentaire est achetée pour ${cost} $.`, "info");
+  }
+
+  if(type === "trainHorse"){
+    trainHorses();
+    return;
   }
 
   if(type === "buyFeed"){
@@ -2245,14 +2438,23 @@ function endTurn(){
   // Revenus du troupeau
   const capacity = Math.max(20, Math.floor(state.land / 3));
   const healthyCattle = Math.min(state.cattle, capacity);
-  const cowboyBonus = Math.round((state.cowboys||[]).length * 6 * state.costModifier);
-  const workers = state.children.filter(c=>c.alive!==false && c.age>=16 && c.role==="ranch").length;
-  const accountants = state.children.filter(c=>c.alive!==false && c.age>=16 && c.role==="business").length;
-  let ranchIncome = Math.round(healthyCattle * rand(2,4) * state.costModifier * (1 + workers*0.08)) + cowboyBonus;
+  // Les bras servent à proportion du troupeau : un homme pour vingt-cinq bêtes.
+  // Au-delà, ils coûtent leur salaire sans rien rapporter. C'est ce qui rend
+  // l'embauche décisive sur un grand ranch et ruineuse sur un petit.
+  const hands = (state.cowboys||[]).length;
+  const handsNeeded = Math.max(1, Math.ceil(healthyCattle / 25));
+  const usefulHands = Math.min(hands, handsNeeded);
+  const idleHands = hands - usefulHands;
+  const handFactor = 1 + Math.min(.55, usefulHands * .09);
+
+  const workers = roleCount("ranch");
+  const accountants = roleCount("business");
+  let ranchIncome = Math.round(healthyCattle * rand(2,4) * state.costModifier
+    * (1 + workers*0.08) * handFactor);
   const cowboySalaries = (state.cowboys||[]).reduce((sum,c)=>sum+c.salary,0);
   // Les salaires sont déjà stockés à l'échelle de l'époque (réévalués à chaque
   // transition) : les remultiplier par costModifier les ferait croître au carré.
-  const upkeepRaw = (state.cattle*2.35 + state.horses*5 + state.land*.17) * state.costModifier
+  const upkeepRaw = (state.cattle*2.75 + state.horses*5 + state.land*.17) * state.costModifier
                   + cowboySalaries;
   let upkeep = Math.round(upkeepRaw * Math.max(0.7, 1 - accountants*0.07));
 
@@ -2287,8 +2489,11 @@ function endTurn(){
   }
 
   state.money += ranchIncome - upkeep;
-  if(cowboyBonus>0){
-    addLog(`Le savoir-faire des cow-boys améliore le rendement du ranch : +${cowboyBonus} $.`, "good");
+  if(usefulHands > 0 && hands > 0){
+    addLog(`${usefulHands} homme${usefulHands>1?"s":""} à l'ouvrage pour ${healthyCattle} bêtes : `
+      + `+${Math.round((handFactor-1)*100)} % de rendement.`
+      + (idleHands > 0 ? ` ${idleHands} de trop touche${idleHands>1?"nt":""} un salaire sans travail à la mesure.` : ""),
+      idleHands > 0 ? "info" : "good");
   }
   if(cowboySalaries>0){
     addLog(`Salaires versés aux cow-boys : ${cowboySalaries} $.`, "info");
@@ -2393,7 +2598,7 @@ function endTurn(){
   }
 
   // Les enfants affectés aux relations locales améliorent la diplomatie
-  const diplomats = state.children.filter(c=>c.alive!==false && c.age>=16 && c.role==="diplomacy").length;
+  const diplomats = roleCount("diplomacy");
   if(diplomats && state.factions && chance(.4)){
     state.factions.forEach(f => f.relation = clamp(f.relation + diplomats, -100, 100));
   }
@@ -2406,7 +2611,7 @@ function endTurn(){
   state.rival.relation = clamp(state.rival.relation + rand(-3,2), -100, 100);
   state.rival.strength = clamp(state.rival.strength + rand(-2,3), 10, 100);
   const avgShootDef = (state.cowboys&&state.cowboys.length) ? state.cowboys.reduce((s,c)=>s+c.shoot,0)/state.cowboys.length : 0;
-  const guards = state.children.filter(c=>c.alive!==false && c.age>=16 && c.role==="security").length;
+  const guards = roleCount("security");
   // Un voisinage acquis surveille les pistes ; un voisinage hostile ferme les yeux
   const defense = state.weapons*4 + avgShootDef*0.4 + guards*10 + communityStance*18;
   const raidChance = clamp((state.rival.strength - defense) / 300, .03, .35);
@@ -2540,6 +2745,7 @@ function ageCowboys(){
 
 function ageFamily(){
   ageCowboys();
+  ageHorses();
   [state.founder,state.spouse].forEach(p => {
     if(!p.alive) return;
     p.age++;
@@ -2567,7 +2773,7 @@ function ageFamily(){
     // et la lignée s'éteignait mécaniquement.
     if(c.age >= 18 && c.age <= 38 && !c.married && c.alive !== false && chance(.24)){
       c.married = true;
-      c.spouseName = PARTNER_NAMES[rand(0,PARTNER_NAMES.length-1)];
+      c.spouseName = pickPartnerName(otherSex(c.sex));
       state.unity = clamp(state.unity+6);
       addLog(`${c.name} épouse ${c.spouseName}. Toute la famille célèbre ce mariage.`, "good");
     }
@@ -2581,35 +2787,38 @@ function ageFamily(){
   // s'éteignait d'un bloc au bout de trois ou quatre générations.
   const dependents = state.children.filter(c => c.alive !== false && c.age < 18).length;
   const familyCapFactor = Math.max(0, 1 - dependents * 0.18);
-  let spouseAgeFactor = 1;
-  if(state.spouse.age >= 40){
-    spouseAgeFactor = Math.max(0.04, 1 - (state.spouse.age - 40) * 0.14);
+  // La fertilité décline dès la trentaine et s'arrête à 40 ans révolus.
+  const mother = motherOfHousehold();
+  let motherAgeFactor = 1;
+  if(mother && mother.age >= 30){
+    motherAgeFactor = Math.max(0.05, 1 - (mother.age - 30) * 0.09);
   }
-  const birthChance = .28 * familyCapFactor * spouseAgeFactor;
-  if(state.spouse.alive && state.spouse.age < 48 && livingChildrenCount < 14 && chance(birthChance)){
-    const boys = ["Thomas","Samuel","Arthur","Joseph","Henry","Louis","Elias"];
-    const girls = ["Eleanor","Clara","Rose","Alice","Margaret","Louise","Jeanne"];
-    const name = chance(.5) ? boys[rand(0,boys.length-1)] : girls[rand(0,girls.length-1)];
-    addChild(name);
+  const birthChance = .32 * familyCapFactor * motherAgeFactor;
+  if(coupleCanConceive() && livingChildrenCount < 14 && chance(birthChance)){
+    const sex = chance(.5) ? "m" : "f";
+    const name = pickName(sex);
+    const baby = addChild(name, {sex});
     state.unity = clamp(state.unity+5);
-    addLog(`Un enfant vient de naître : ${name} ${state.familyName}.`, "good");
+    addLog(`Un enfant vient de naître : ${name} ${state.familyName}, ${bornWord(baby)} au ranch.`, "good");
   }
 
   // Petits-enfants : les enfants mariés en âge peuvent fonder leur propre famille,
   // avec la même logique de probabilité dégressive
-  const eligibleParents = state.children.filter(c => c.alive !== false && c.married && c.age >= 18 && c.age <= 45);
+  // Une fille cesse d'enfanter à 40 ans ; un fils dépend de sa femme, présumée
+  // un peu plus jeune, d'où la limite un peu plus haute.
+  const eligibleParents = state.children.filter(c =>
+    c.alive !== false && c.married && c.age >= 18 && (c.sex === "f" ? c.age < 40 : c.age < 48));
   if(eligibleParents.length && livingChildrenCount < 16){
     const parent = eligibleParents[rand(0,eligibleParents.length-1)];
     let parentAgeFactor = 1;
-    if(parent.age >= 40){
-      parentAgeFactor = Math.max(0.04, 1 - (parent.age - 40) * 0.14);
+    if(parent.age >= 30){
+      parentAgeFactor = Math.max(0.05, 1 - (parent.age - 30) * 0.09);
     }
     const grandchildChance = .3 * familyCapFactor * parentAgeFactor;
     if(chance(grandchildChance)){
-      const boys = ["Elias","Noah","Isaac","Caleb","Owen","Silas"];
-      const girls = ["Ruth","Nora","Ivy","Faith","June","Ada"];
-      const name = chance(.5) ? boys[rand(0,boys.length-1)] : girls[rand(0,girls.length-1)];
-      addChild(name, {parentName:parent.name});
+      const sex = chance(.5) ? "m" : "f";
+      const name = pickName(sex);
+      addChild(name, {sex, parentName:parent.name});
       state.unity = clamp(state.unity+4);
       addLog(`${parent.name} et ${parent.spouseName} accueillent un enfant : ${name} ${state.familyName}.`, "good");
     }
@@ -2643,8 +2852,10 @@ function ageFamily(){
   // Un chef de famille veuf et encore jeune peut refonder un foyer : sans cela
   // la maison n'avait plus aucun moyen d'avoir des enfants après un veuvage.
   if(state.founder.alive && !state.spouse.alive && state.founder.age < 50 && chance(.28)){
+    const newSex = otherSex(state.founder.sex);
     state.spouse = {
-      name: PARTNER_NAMES[rand(0,PARTNER_NAMES.length-1)],
+      name: pickPartnerName(newSex),
+      sex: newSex,
       age: Math.max(20, state.founder.age + rand(-8,3)),
       health: 100,
       alive: true,
@@ -2985,6 +3196,99 @@ const events = [
         f.relation=clamp(f.relation-rand(12,22),-100,100);
         addLog(`${f.name} n'insiste pas, mais la relation refroidit.`,"info");
       }}
+    ]
+  },
+  {
+    condition:()=>!!state.champion && state.horses>0,
+    art:"rider",
+    title:()=>`On a vu rôder autour de l'écurie`,
+    text:()=>`Des traces fraîches contournent le corral. ${state.champion.name} vaut désormais assez cher pour tenter quelqu'un.`,
+    image:"Des empreintes sous la clôture de l'écurie",
+    choices:[
+      {label:"Poster un homme de garde toutes les nuits",condition:()=>(state.cowboys||[]).length>0,apply:()=>{
+        const c=state.cowboys[0]; c.loyalty=clamp(c.loyalty-3);
+        addLog(`${c.name} dort près de l'écurie. Les rôdeurs ne reviennent pas.`,"good");}},
+      {label:"Faire dormir le cheval à la maison",apply:()=>{
+        state.unity=clamp(state.unity-3);
+        addLog(`${state.champion.name} passe ses nuits sous le porche. La maison sent l'écurie.`,"info");}},
+      {label:"Ne rien changer",apply:()=>{
+        if(chance(.45)){
+          const lost=state.champion;
+          state.horses=Math.max(0,state.horses-1);
+          state.champion=null;
+          addLog(`${lost.name} a disparu dans la nuit. L'écurie est vide à sa place.`,"bad");
+          ensureChampion();
+        } else addLog("Les rôdeurs ne sont pas revenus.","info");}}
+    ]
+  },
+  {
+    condition:()=>!!state.champion && state.champion.training>=45,
+    art:"rider",
+    title:"Un acheteur pour votre cheval",
+    text:()=>`Un homme du comté voisin a vu courir ${state.champion.name}. Il en offre un prix que peu de gens refuseraient.`,
+    image:"Une liasse posée sur la barrière du corral",
+    choices:[
+      {label:"Vendre au prix fort",apply:()=>{
+        const c=state.champion;
+        const g=sc(300+Math.round(championForm()*6));
+        state.money+=g; state.horses=Math.max(0,state.horses-1); state.champion=null;
+        addLog(`${c.name} part pour ${g} $. L'écurie paraît grande.`,"good");
+        ensureChampion();}},
+      {label:"Refuser : ce cheval n'est pas à vendre",apply:()=>{
+        state.unity=clamp(state.unity+4); state.reputation=clamp(state.reputation+3);
+        addLog(`Le ranch garde ${state.champion.name}. On en parle en ville.`,"good");}}
+    ]
+  },
+  {
+    condition:()=>state.horses>=1 && (!state.champion || state.champion.training<30),
+    art:"rider",
+    title:"Un dresseur de passage",
+    text:"Un homme taciturne propose de travailler vos chevaux pendant une saison, contre le gîte et un salaire.",
+    image:"Un inconnu au bord du rond de longe",
+    choices:[
+      {label:"L'engager pour la saison",condition:()=>state.money>=sc(90),apply:()=>{
+        state.money-=sc(90); const c=ensureChampion();
+        if(c){ c.training=clamp(c.training+rand(15,28)); c.speed=clamp(c.speed+rand(0,4));
+          addLog(`${c.name} revient du travail transformé : dressage ${c.training}/100.`,"good"); }}},
+      {label:"Le laisser passer son chemin",apply:()=>{addLog("Le dresseur poursuit sa route vers le nord.","info");}}
+    ]
+  },
+  {
+    condition:()=>(state.cowboys||[]).length > Math.max(1, Math.ceil(Math.min(state.cattle,Math.floor(state.land/3))/25)),
+    title:"Trop de bras pour le travail",
+    text:"Le contremaître le dit sans détour : il y a plus d'hommes au bunkhouse que d'ouvrage aux enclos, et ils touchent tous leur paie.",
+    image:"Des hommes assis à ne rien faire",
+    choices:[
+      {label:"Remercier les derniers arrivés",apply:()=>{
+        if((state.cowboys||[]).length>1){ const c=state.cowboys.pop();
+          addLog(`${c.name} est remercié. Les salaires s'allègent.`,"info"); }}},
+      {label:"Agrandir le troupeau pour leur donner de l'ouvrage",condition:()=>state.money>=sc(320),apply:()=>{
+        state.money-=sc(320); state.land+=25;
+        addLog("Vingt-cinq hectares de plus : les bras auront de quoi faire.","good");}},
+      {label:"Les garder par fidélité",apply:()=>{
+        (state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty+7));
+        addLog("Personne n'est renvoyé. Le bunkhouse s'en souviendra.","good");}}
+    ]
+  },
+  {
+    condition:()=>!!state.spouse && state.spouse.alive && (state.spouse.role||"none")==="none",
+    art:"family",
+    title:()=>`${state.spouse.name} veut prendre sa part`,
+    text:()=>`${state.spouse.name} connaît le ranch aussi bien que vous et supporte mal de rester à l'écart des décisions.`,
+    image:"Une conversation sous le porche, au soir",
+    choices:[
+      {label:"Lui confier les comptes",apply:()=>{
+        state.spouse.role="business"; state.unity=clamp(state.unity+8);
+        addLog(`${state.spouse.name} prend les comptes du ranch en main.`,"good");}},
+      {label:"Lui confier les relations avec le comté",apply:()=>{
+        state.spouse.role="diplomacy"; state.unity=clamp(state.unity+8);
+        addLog(`${state.spouse.name} se charge désormais des relations du ranch.`,"good");}},
+      {label:"Lui confier les travaux",apply:()=>{
+        state.spouse.role="ranch"; state.unity=clamp(state.unity+8);
+        addLog(`${state.spouse.name} prend sa part des travaux du domaine.`,"good");}},
+      {label:"Refuser : chacun sa place",apply:()=>{
+        state.unity=clamp(state.unity-rand(6,12));
+        addLog("La conversation se termine mal, et se rouvrira.","bad");}}
     ]
   },
   {
@@ -3607,8 +3911,18 @@ document.querySelectorAll(".action").forEach(btn =>
 function renderFamily(){
  if(!state)return;
  let h="<h3>"+state.familyName+"</h3>";
- h+="<p><b>Chef :</b> "+state.founder.name+" ("+state.founder.age+" ans)</p>";
- h+="<p><b>Épouse :</b> "+state.spouse.name+" ("+state.spouse.age+" ans)</p>";
+ h+="<p><b>"+(state.founder.sex==="f"?"Cheffe":"Chef")+" de famille :</b> "+state.founder.name+" ("+state.founder.age+" ans)</p>";
+ if(state.spouse.alive){
+   h+="<p><b>"+(state.spouse.sex==="f"?"Épouse":"Époux")+" :</b> "+state.spouse.name+" ("+state.spouse.age+" ans)<br>";
+   h+="Affectation : <select id=\"spouseRole\" onchange=\"setSpouseRole()\">";
+   Object.keys(CHILD_ROLES).forEach(k=>{
+     const sel = (state.spouse.role||"none")===k ? " selected" : "";
+     h+="<option value=\""+k+"\""+sel+">"+CHILD_ROLES[k].label+"</option>";
+   });
+   h+="</select><br><small>"+CHILD_ROLES[state.spouse.role||"none"].desc+"</small></p>";
+ } else {
+   h+="<p><b>Conjoint :</b> <i>décédé</i></p>";
+ }
  const heir = heirChild();
  const adults = adultHeirs();
  h+="<h4>Succession</h4>";
@@ -3631,14 +3945,14 @@ function renderFamily(){
      if(!c.trait)c.trait=["Travailleur","Ambitieux","Calme","Impulsif","Charismatique"][Math.floor(Math.random()*5)];
      if(!c.goal)c.goal=["Reprendre le ranch","Devenir riche","Partir en ville","Élever des chevaux"][Math.floor(Math.random()*4)];
    const isHeir = heir && heir.cid===c.cid;
-   h+="<li><b>"+c.name+"</b>"+(isHeir?" 👑":"")+" - "+c.age+" ans"+(c.married?" (marié·e à "+c.spouseName+")":"")+(c.parentName?" — enfant de "+c.parentName:"")+"<br><input type=\"text\" id=\"childNameInput"+i+"\" value=\""+c.name.replace(/"/g,"&quot;")+"\" style=\"width:130px;\"> <button class=\"choice\" onclick=\"renameChild("+i+")\">Renommer</button><br>Trait : "+c.trait+"<br>Ambition personnelle : "+c.goal;
+   h+="<li><b>"+c.name+"</b> "+(c.sex==="f"?"♀":"♂")+(isHeir?" 👑":"")+" - "+c.age+" ans"+(c.married?" ("+married(c)+" à "+c.spouseName+")":"")+(c.parentName?" — enfant de "+c.parentName:"")+"<br><input type=\"text\" id=\"childNameInput"+i+"\" value=\""+c.name.replace(/"/g,"&quot;")+"\" style=\"width:130px;\"> <button class=\"choice\" onclick=\"renameChild("+i+")\">Renommer</button><br>Trait : "+c.trait+"<br>Ambition personnelle : "+c.goal;
      if(c.age>=18 && c.alive!==false){
        const res = c.resentment||0;
        const mood = res>=70?"prêt·e à tout":(res>=45?"amer·ère":(res>=20?"contrarié·e":"en paix"));
        h+="<br>Ambition : "+(c.ambition||0)+"/100 · Attachement : "+(c.bond||50)+"/100 · Rancune : "+res+"/100 <i>("+mood+")</i>";
        h+="<br>"+(isHeir
          ? "<button class=\"choice\" onclick=\"clearHeir()\">Retirer la désignation</button>"
-         : "<button class=\"choice\" onclick=\"pickHeir("+c.cid+")\">Désigner comme héritier</button>");
+         : "<button class=\"choice\" onclick=\"pickHeir("+c.cid+")\">Désigner comme "+heirWord(c)+"</button>");
      }
      if(c.age>=16){
        h+="<br>Affectation : <select id=\"childRole"+i+"\" onchange=\"setChildRole("+i+")\">";
@@ -3666,6 +3980,14 @@ function setChildRole(i){
  renderFamily();
  render();
 }
+function setSpouseRole(){
+ const sel = document.getElementById("spouseRole");
+ if(!sel || !state.spouse) return;
+ state.spouse.role = sel.value;
+ addLog(`${state.spouse.name} prend en charge : ${CHILD_ROLES[state.spouse.role].label}.`, "info");
+ renderFamily();
+ render();
+}
 function pickHeir(cid){
  designateHeir(cid);
  renderFamily();
@@ -3677,7 +3999,7 @@ function clearHeir(){
  state.heirId = null;
  heir.resentment = clamp((heir.resentment||0) + rand(15,25));
  state.unity = clamp(state.unity - rand(3,7));
- addLog(`${heir.name} n'est plus l'héritier·ère désigné·e. La question de la succession se rouvre.`, "bad");
+ addLog(`${heir.name} n'est plus ${heir.sex==="f"?"l'héritière désignée":"l'héritier désigné"}. La question de la succession se rouvre.`, "bad");
  renderFamily();
  render();
 }

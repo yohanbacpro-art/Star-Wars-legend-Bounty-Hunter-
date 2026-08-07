@@ -84,15 +84,30 @@ function permissiveGame(){
   s.money = 40000; s.cattle = 300; s.land = 300; s.horses = 5; s.weapons = 3;
   s.feed = 10; s.suspicion = 60; s.reputation = 75; s.unity = 40;
   s.rival.relation = -60;
-  s.cowboys = [
-    {name:"Las",loyalty:30,shoot:60,ride:60,salary:10,years:2,trait:"Ambitieux"},
-    {name:"Fidèle",loyalty:80,shoot:60,ride:60,salary:10,years:2,trait:"Fidèle"}
-  ];
+  // Assez d'hommes pour que « trop de bras » se déclenche : le seuil est d'un
+  // homme pour vingt-cinq bêtes utiles.
+  s.cowboys = [];
+  for(let i = 0; i < 14; i++){
+    s.cowboys.push({name:"H"+i, loyalty: i===0?30:80, shoot:60, ride:60, salary:10, years:2,
+                    trait: i===0?"Ambitieux":"Fidèle"});
+  }
+  s.horses = 4;
+  s.champion = {name:"Comanche", age:6, speed:60, training:60, wins:2, alive:true};
+  s.spouse.role = "none";
   s.factions.forEach((f,i) => f.relation = i === 0 ? -50 : 70);
   addAdult(s, "Aîné", {age:35, resentment:80, ambition:70});
   addAdult(s, "Cadet", {age:25, resentment:60, ambition:90});
   G.addChild("Petit", {age:10, health:100});
   return s;
+}
+
+// Variantes de l'état permissif, pour couvrir les conditions incompatibles.
+function permissiveVariants(){
+  return [
+    () => permissiveGame(),
+    () => { const s = permissiveGame(); s.champion.training = 5; return s; },
+    () => { const s = permissiveGame(); s.cowboys = s.cowboys.slice(0,1); s.cattle = 300; return s; }
+  ];
 }
 
 function addAdult(s, name, props){
@@ -436,6 +451,246 @@ section("Événements conditionnels");
   check("des branches ont bien été exécutées", branches > 100, branches);
 }
 
+// ------------------------------------------------- Sexes, fertilité, famille
+section("Sexes et fertilité");
+{
+  const s = freshGame();
+  check("le fondateur a un sexe", !!ST().founder.sex);
+  check("le conjoint est du sexe opposé", ST().spouse.sex === (ST().founder.sex === "m" ? "f" : "m"));
+
+  // Tout enfant naît avec un sexe, et son prénom lui correspond
+  const mismatched = [];
+  for(let i = 0; i < 200; i++){
+    const c = G.addChild(ev('pickName("f")'), {sex:"f"});
+    if(c.sex !== "f") mismatched.push(c.name);
+  }
+  check("les enfants naissent avec un sexe", mismatched.length === 0, mismatched.slice(0,3).join(","));
+
+  // Le conjoint d'un enfant est toujours du sexe opposé : c'était le bug du
+  // fils marié à un Daniel.
+  const wrong = [];
+  for(let i = 0; i < 300; i++){
+    const s2 = freshGame();
+    const sex = i % 2 ? "m" : "f";
+    const c = G.addChild(ev(`pickName(${JSON.stringify(sex)})`), {sex, age:20, health:100});
+    for(let y = 0; y < 15 && !c.married; y++){ c.age = 20 + y; G.ageFamily(); }
+    if(c.married && ev(`guessSex(${JSON.stringify(c.spouseName)})`) === c.sex){
+      wrong.push(c.name + " (" + c.sex + ") + " + c.spouseName);
+    }
+  }
+  check("un enfant épouse toujours quelqu'un du sexe opposé",
+    wrong.length === 0, wrong.slice(0,3).join(" | "));
+}
+{
+  // Plus aucune naissance passé 40 ans pour la mère.
+  function birthsWithMotherAged(age){
+    let births = 0;
+    for(let i = 0; i < 250; i++){
+      const s = freshGame();
+      s.children = [];
+      const mother = s.founder.sex === "f" ? s.founder : s.spouse;
+      mother.age = age; mother.alive = true;
+      const father = mother === s.founder ? s.spouse : s.founder;
+      father.age = 35; father.alive = true;
+      const before = ST().children.length;
+      G.ageFamily();
+      if(ST().children.length > before) births++;
+    }
+    return births;
+  }
+  check("une mère de 28 ans peut avoir des enfants", birthsWithMotherAged(28) > 10, birthsWithMotherAged(28));
+  check("une mère de 40 ans n'en a plus", birthsWithMotherAged(40) === 0, birthsWithMotherAged(40));
+  check("une mère de 45 ans n'en a plus", birthsWithMotherAged(45) === 0, birthsWithMotherAged(45));
+  check("la fertilité décline avant 40 ans",
+    birthsWithMotherAged(37) < birthsWithMotherAged(28),
+    birthsWithMotherAged(37) + " contre " + birthsWithMotherAged(28));
+
+  // Une fille de plus de 40 ans ne donne plus de petits-enfants non plus.
+  function grandchildren(childSex, age){
+    let born = 0;
+    for(let i = 0; i < 250; i++){
+      const s = freshGame();
+      s.children = [];
+      const mother = s.founder.sex === "f" ? s.founder : s.spouse;
+      mother.age = 60; // le foyer n'enfante plus : seules comptent les naissances de la génération suivante
+      G.addChild("X", {sex:childSex, age, health:100, married:true, spouseName:"Y"});
+      const before = ST().children.length;
+      G.ageFamily();
+      if(ST().children.length > before) born++;
+    }
+    return born;
+  }
+  check("une fille de 42 ans ne donne plus d'enfants", grandchildren("f", 42) === 0, grandchildren("f", 42));
+  check("une fille de 28 ans en donne", grandchildren("f", 28) > 5, grandchildren("f", 28));
+}
+{
+  // Le conjoint peut tenir un rôle au ranch.
+  const s = freshGame();
+  s.spouse.role = "none";
+  check("aucun rôle au départ", ev('roleCount("ranch")') === 0);
+  ST().spouse.role = "ranch";
+  check("le conjoint compte comme bras au ranch", ev('roleCount("ranch")') === 1);
+  ST().spouse.alive = false;
+  check("un conjoint décédé ne travaille plus", ev('roleCount("ranch")') === 0);
+
+  // Et son travail se voit sur les revenus.
+  function quarterWith(role){
+    const s2 = freshGame();
+    s2.spouse.role = role; s2.spouse.alive = true;
+    s2.cattle = 90; s2.land = 300; s2.money = 100000; s2.feed = 5000;
+    s2.rival.relation = 0; s2.children = []; s2.cowboys = [];
+    s2.factions.forEach(f => f.relation = 0);
+    const realRandom = Math.random; Math.random = () => 0.5;
+    const before = ST().money;
+    G.endTurn();
+    const d = ST().money - before;
+    Math.random = realRandom;
+    return d;
+  }
+  check("le conjoint aux travaux améliore le résultat", quarterWith("ranch") > quarterWith("none"),
+    quarterWith("ranch") + " contre " + quarterWith("none"));
+  check("le conjoint aux comptes réduit les charges", quarterWith("business") > quarterWith("none"));
+}
+
+// ------------------------------------------------------------- Les chevaux
+section("Chevaux");
+{
+  const s = freshGame();
+  s.horses = 0; s.champion = null;
+  G.ensureChampion();
+  check("sans cheval, pas de cheval de tête", ST().champion === null);
+
+  s.horses = 3;
+  G.ensureChampion();
+  check("dès qu'il y a un cheval, il y a un cheval de tête", !!ST().champion);
+  check("le cheval de tête a un nom", !!ST().champion.name);
+
+  // L'entraînement améliore la forme, et se paie
+  const champ = ST().champion;
+  champ.training = 0;
+  ST().money = 10000; ST().actions = 3;
+  const formBefore = ev("championForm()");
+  G.doAction("trainHorse");
+  check("l'entraînement améliore le dressage", ST().champion.training > 0, ST().champion.training);
+  check("l'entraînement améliore la forme", ev("championForm()") > formBefore);
+  check("l'entraînement consomme une action", ST().actions === 2, ST().actions);
+  check("l'entraînement coûte de l'argent", ST().money < 10000);
+
+  const s2 = freshGame();
+  s2.horses = 0; s2.champion = null; s2.actions = 3;
+  G.doAction("trainHorse");
+  check("sans cheval, pas d'entraînement", ST().actions === 3, ST().actions);
+}
+{
+  // Un cheval dressé gagne plus souvent qu'un cheval brut.
+  function wins(training){
+    let n = 0;
+    for(let i = 0; i < 300; i++){
+      const s = freshGame();
+      s.horses = 3; s.money = 100000; s.actions = 3; s.reputation = 50;
+      s.champion = {name:"T", age:6, speed:50, training, wins:0, alive:true};
+      const before = ST().stats.competitionWins;
+      G.doAction("competition");
+      if(ST().stats.competitionWins > before) n++;
+    }
+    return n;
+  }
+  const brut = wins(0), dresse = wins(95);
+  check("le dressage améliore nettement les résultats en concours",
+    dresse > brut * 1.5, brut + " victoires sans dressage contre " + dresse + " avec");
+}
+{
+  // Le cheval vieillit, puis se retire.
+  const s = freshGame();
+  s.horses = 2;
+  s.champion = {name:"Vieux", age:14, speed:60, training:50, wins:9, alive:true};
+  let retired = false;
+  for(let y = 0; y < 25 && !retired; y++){
+    G.ageHorses();
+    if(!ST().champion || ST().champion.name !== "Vieux") retired = true;
+  }
+  check("un cheval trop vieux finit par se retirer", retired);
+  check("un successeur prend sa place tant qu'il reste des chevaux", !!ST().champion);
+
+  // L'âge pèse sur la forme
+  const jeune = ev('(function(){state.champion={name:"A",age:5,speed:60,training:50,wins:0,alive:true};return championForm();})()');
+  const vieux = ev('(function(){state.champion={name:"A",age:18,speed:60,training:50,wins:0,alive:true};return championForm();})()');
+  check("un vieux cheval court moins bien", vieux < jeune, vieux.toFixed(1) + " contre " + jeune.toFixed(1));
+}
+{
+  // On peut voler un cheval au rival.
+  const era = "foundation";
+  const op = ev(`ILLEGAL_OPS.foundation.find(o=>o.id==="horseTheft")`);
+  check("le vol de cheval existe à l'époque de la fondation", !!op);
+  let gained = 0;
+  for(let i = 0; i < 120; i++){
+    const s = freshGame();
+    s.eraId = era; s.horses = 2; s.actions = 3; s.suspicion = 0; s.weapons = 5;
+    s.cowboys = [{name:"A",loyalty:80,shoot:90,ride:80,salary:10,years:1,trait:"Tête brûlée"}];
+    s.champion = {name:"Mien", age:6, speed:30, training:0, wins:0, alive:true};
+    const before = ST().horses;
+    G.runIllegalOp("horseTheft");
+    if(ST().horses > before) gained++;
+  }
+  check("le vol de cheval réussit parfois", gained > 20, gained + "/120");
+
+  // Et on peut se faire voler le sien.
+  const s3 = freshGame();
+  s3.horses = 1;
+  s3.champion = {name:"Mien", age:6, speed:50, training:20, wins:0, alive:true};
+  const rodeur = ev(`events.find(e=>{const t=typeof e.title==="function"?e.title():e.title;return t.indexOf("rôder")>=0;})`);
+  check("un événement menace l'écurie", !!rodeur);
+  let stolen = 0;
+  for(let i = 0; i < 150; i++){
+    const s4 = freshGame();
+    s4.horses = 1;
+    s4.champion = {name:"Mien", age:6, speed:50, training:20, wins:0, alive:true};
+    ev(`(function(){const e=events.find(e=>{const t=typeof e.title==="function"?e.title():e.title;return t.indexOf("rôder")>=0;});e.choices[2].apply();})()`);
+    if(!ST().champion || ST().champion.name !== "Mien") stolen++;
+  }
+  check("négliger la garde fait perdre le cheval", stolen > 30, stolen + "/150");
+}
+
+// ---------------------------------------------------- Apport des cow-boys
+section("Apport des cow-boys");
+{
+  // Un cow-boy utile doit rapporter plus que son salaire.
+  function quarter(nCowboys, cattle){
+    const s = freshGame();
+    s.cattle = cattle; s.land = cattle*3; s.money = 200000; s.feed = 50000;
+    s.rival.relation = 0; s.children = []; s.horses = 0;
+    s.spouse.role = "none";
+    s.factions.forEach(f => f.relation = 0);
+    s.cowboys = [];
+    for(let i = 0; i < nCowboys; i++){
+      s.cowboys.push({name:"H"+i, loyalty:70, shoot:60, ride:60, salary:12, years:1, trait:"Fidèle"});
+    }
+    const realRandom = Math.random; Math.random = () => 0.5;
+    const before = ST().money;
+    G.endTurn();
+    const d = ST().money - before;
+    Math.random = realRandom;
+    return d;
+  }
+  const sans = quarter(0, 200);
+  const avec3 = quarter(3, 200);
+  const avec8 = quarter(8, 200);
+  check("trois hommes rapportent plus qu'ils ne coûtent sur un grand troupeau",
+    avec3 > sans, avec3 + " contre " + sans);
+  check("huit hommes valent mieux que trois quand le troupeau suit",
+    avec8 > avec3, avec8 + " contre " + avec3);
+
+  // Mais sur un petit troupeau, l'excès de bras est une charge sèche.
+  const petitSans = quarter(0, 30);
+  const petitAvec8 = quarter(8, 30);
+  check("sur un petit troupeau, huit hommes coûtent plus qu'ils ne rapportent",
+    petitAvec8 < petitSans, petitAvec8 + " contre " + petitSans);
+
+  // Le rendement plafonne : un homme pour vingt-cinq bêtes.
+  const utile = ev('(function(){state.cattle=100;state.land=300;return Math.max(1,Math.ceil(Math.min(state.cattle,Math.floor(state.land/3))/25));})()');
+  check("le nombre d'hommes utiles suit la taille du troupeau", utile === 4, utile);
+}
+
 // ------------------------------------------- Rythme : brèves et illustrations
 section("Rythme du trimestre");
 {
@@ -510,7 +765,7 @@ section("Rythme du trimestre");
   // Le titre et le texte peuvent être des fonctions citant la partie en cours.
   permissiveGame();
   let threw = false;
-  try{ G.presentEvent(ev("events.find(e=>typeof e.text === 'function')")); }
+  try{ G.presentEvent(ev("events.find(e=>e.title === 'La coupe est pleine')")); }
   catch(e){ threw = e.message; }
   check("un événement à texte dynamique s'affiche", threw === false, threw);
   check("le texte dynamique cite bien la partie",
@@ -971,8 +1226,9 @@ section("Atteignabilité des objectifs");
     const nb = ev("events["+i+"].choices.length");
     for(let j = 0; j < nb; j++){
       let cleanOnce = false;
-      for(let k = 0; k < 8 && !cleanOnce; k++){
-        const s = permissiveGame();
+      const variants = permissiveVariants();
+      for(let k = 0; k < 12 && !cleanOnce; k++){
+        const s = variants[k % variants.length]();
         s.legacy.greed = 0;
         const applied = ev(`(function(){
           const e = events[${i}], c = e.choices[${j}];
@@ -986,9 +1242,13 @@ section("Atteignabilité des objectifs");
       if(cleanOnce) hasCleanBranch = true;
     }
     if(!hasCleanBranch){
-      // Distinguer « toujours compromettant » de « jamais déclenchable ici »
-      permissiveGame();
-      const reachable = ev("(function(){const e=events["+i+"];return !e.condition||!!e.condition();})()");
+      // Distinguer « toujours compromettant » de « jamais déclenchable ».
+      // Certains événements s'excluent mutuellement — cheval peu dressé contre
+      // cheval de concours — d'où plusieurs états de référence.
+      const reachable = permissiveVariants().some(setup => {
+        setup();
+        return ev("(function(){const e=events["+i+"];return !e.condition||!!e.condition();})()");
+      });
       (reachable ? forced : untestable).push(ev("(function(){const t=events["+i+"].title;return typeof t==='function'?t():t;})()"));
     }
   }

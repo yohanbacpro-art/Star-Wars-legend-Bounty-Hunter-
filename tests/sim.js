@@ -217,6 +217,7 @@ for(let run = 0; run < RUNS; run++){
         else if(s2.suspicion > 60 && s2.money > sc(150)) G.doAction("bribe");
         else if(s2.money > sc(1200) && s2.cattle >= cap-6) G.doAction("buyLand");
         else if(s2.cattle < cap && s2.money > buyCost*3) G.doAction("buyCattle");
+        else if(s2.champion && s2.champion.training < 60 && s2.money > sc(400)) G.doAction("trainHorse");
         else if(s2.horses >= 1 && s2.money > sc(250)) G.doAction("competition");
         else G.doAction("family");
       }
@@ -240,6 +241,7 @@ for(let run = 0; run < RUNS; run++){
         else if(s2.cattle < cap && s2.money > buyCost*3) G.doAction("buyCattle");
         else if(s2.unity < 55) G.doAction("family");
         else if(s2.suspicion > 60 && s2.money > sc(150)) G.doAction("bribe");
+        else if(s2.champion && s2.champion.training < 60 && s2.money > sc(400)) G.doAction("trainHorse");
         else if(s2.horses >= 1 && s2.money > sc(250)) G.doAction("competition");
         else G.doAction("family");
       }
@@ -263,7 +265,12 @@ for(let run = 0; run < RUNS; run++){
       const i = Math.floor(rng()*ST().factions.length);
       (POLICY === "random" && rng() < 0.3) ? G.harmFaction(i) : G.allyFaction(i);
     }
-    if(rng() < (POLICY === "random" ? 0.04 : 0.01)) G.hireCowboy();
+    // Un homme pour vingt-cinq bêtes : on embauche à mesure que le troupeau grandit.
+    { const t = ST();
+      const utiles = Math.max(1, Math.ceil(Math.min(t.cattle, Math.floor(t.land/3))/25));
+      if(POLICY !== "random" && (t.cowboys||[]).length < Math.min(utiles, 12)
+         && t.money > G.getHireCost()*6) G.hireCowboy();
+      else if(rng() < (POLICY === "random" ? 0.04 : 0)) G.hireCowboy(); }
 
     // Toutes les vues, régulièrement : elles doivent survivre à n'importe quel état
     if(rng() < 0.2){
