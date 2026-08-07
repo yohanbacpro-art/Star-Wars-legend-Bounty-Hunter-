@@ -575,6 +575,12 @@
                 <small id="weaponDesc">Renforce la défense et les actions risquées.</small>
                 <div class="action-cost">Coût : 95 $</div>
               </button>
+              <button class="action" data-action="buyFeed">
+                <span class="icon">🌿</span>
+                <strong>Acheter du fourrage</strong>
+                <small>40 balles de réserve pour passer l’hiver.</small>
+                <div class="action-cost" id="buyFeedCost">Coût : 60 $</div>
+              </button>
               <button class="action" data-action="buyLand">
                 <span class="icon">🌾</span>
                 <strong>Acheter 20 hectares</strong>
@@ -917,8 +923,12 @@ function resolveSuccession(){
   const heirs = adultHeirs();
   if(!heirs.length) return;
 
+  // À défaut d'héritier désigné, l'aînesse joue — mais parmi ceux qui ont encore
+  // l'âge de mener le ranch et d'assurer une génération de plus.
   const designated = heirChild();
-  const heir = designated || heirs.reduce((a,b) => b.age > a.age ? b : a, heirs[0]);
+  const viable = heirs.filter(c => c.age <= 55);
+  const pool = viable.length ? viable : heirs;
+  const heir = designated || pool.reduce((a,b) => b.age > a.age ? b : a, pool[0]);
   const contenders = heirs.filter(c => c.cid !== heir.cid);
 
   // Un rival plus ambitieux et rongé par la rancune peut contester la reprise.
@@ -994,6 +1004,9 @@ function resolveSuccession(){
   }
 }
 
+const PARTNER_NAMES = ["Sarah","John","Mary","Robert","Anna","George","Emma",
+  "William","Grace","Daniel","Martha","Edward","Lucy","Frank","Nellie","Walter"];
+
 const COWBOY_TRAITS = [
   {name:"Vétéran", desc:"Gagne en loyauté avec les années"},
   {name:"Fidèle", desc:"Loyauté très stable"},
@@ -1016,16 +1029,19 @@ const ACHIEVEMENTS = [
    check:()=>state.land>=800},
   {id:"fortune", icon:"💰", title:"Fortune faite", desc:"Avoir 10 000 $ en caisse, à l'échelle de l'époque.",
    check:()=>state.money>=sc(10000)},
-  {id:"renown", icon:"⭐", title:"Un nom respecté", desc:"Atteindre 90 de réputation.",
-   check:()=>state.reputation>=90},
-  {id:"united", icon:"❤️", title:"Famille soudée", desc:"Atteindre 95 d'unité familiale.",
-   check:()=>state.unity>=95},
+  {id:"renown", icon:"⭐", title:"Un nom irréprochable", desc:"Atteindre 90 de réputation avec moins de 10 de soupçons.",
+   check:()=>state.reputation>=90 && state.suspicion<=10},
+  {id:"united", icon:"❤️", title:"Grande maisonnée unie", desc:"95 d'unité, quatre descendants vivants, et pas un prétendant rancunier.",
+   check:()=>state.unity>=95
+     && (state.children||[]).filter(c=>c.alive!==false).length>=4
+     && adultHeirs().length>=2
+     && adultHeirs().every(c=>(c.resentment||0)<=20)},
   {id:"champion", icon:"🏆", title:"Champion régional", desc:"Remporter 10 compétitions.",
    check:()=>(state.stats&&state.stats.competitionWins||0)>=10},
   {id:"crew", icon:"🎩", title:"Équipe dévouée", desc:"Employer 6 cow-boys sans qu'aucun ne descende sous 70 de loyauté.",
    check:()=>(state.cowboys||[]).length>=6 && state.cowboys.every(c=>c.loyalty>=70)},
-  {id:"oldHand", icon:"🐴", title:"L'homme de confiance", desc:"Garder un cow-boy 25 ans au service du ranch.",
-   check:()=>(state.cowboys||[]).some(c=>(c.years||0)>=25)},
+  {id:"oldHand", icon:"🐴", title:"L'homme de confiance", desc:"Garder 25 ans un cow-boy dont la loyauté ne descend pas sous 90.",
+   check:()=>(state.cowboys||[]).some(c=>(c.years||0)>=25 && c.loyalty>=90)},
   {id:"allies", icon:"🤝", title:"Toute la vallée", desc:"Avoir les quatre pouvoirs locaux alliés en même temps.",
    check:()=>(state.factions||[]).length>0 && state.factions.every(f=>f.relation>40)},
   {id:"peace", icon:"🕊️", title:"La hache de guerre", desc:"Porter la relation avec la lignée rivale au-delà de 80.",
@@ -1405,6 +1421,7 @@ function render(){
   $("apLabel").textContent = state.actions;
   $("sellValue").textContent = `Gain estimé : ${state.cattlePrice*5} $`;
   $("buyCattleCost").textContent = `Coût : ${(state.cattlePrice+6)*5} $`;
+  $("buyFeedCost").textContent = `Coût : ${sc(60)} $`;
 
   const heir = heirChild();
   const childrenText = state.children.length
@@ -1576,6 +1593,13 @@ function doAction(type){
     addLog(`Une arme supplémentaire est achetée pour ${cost} $.`, "info");
   }
 
+  if(type === "buyFeed"){
+    const cost = spend(60);
+    if(cost === false) return;
+    useAction(); state.feed += 40;
+    addLog(`40 balles de fourrage sont rentrées à la grange pour ${cost} $.`, "good");
+  }
+
   if(type === "buyLand"){
     const cost = spend(260);
     if(cost === false) return;
@@ -1690,7 +1714,10 @@ function endTurn(){
   const accountants = state.children.filter(c=>c.alive!==false && c.age>=16 && c.role==="business").length;
   let ranchIncome = Math.round(healthyCattle * rand(2,4) * state.costModifier * (1 + workers*0.08)) + cowboyBonus;
   const cowboySalaries = (state.cowboys||[]).reduce((sum,c)=>sum+c.salary,0);
-  const upkeepRaw = (state.cattle*1.7 + state.horses*8 + state.land*.17 + cowboySalaries) * state.costModifier;
+  // Les salaires sont déjà stockés à l'échelle de l'époque (réévalués à chaque
+  // transition) : les remultiplier par costModifier les ferait croître au carré.
+  const upkeepRaw = (state.cattle*2.35 + state.horses*5 + state.land*.17) * state.costModifier
+                  + cowboySalaries;
   let upkeep = Math.round(upkeepRaw * Math.max(0.7, 1 - accountants*0.07));
 
   // Le négoce local pèse directement sur le compte d'exploitation
@@ -1708,7 +1735,7 @@ function endTurn(){
     addLog(`Le savoir-faire des cow-boys améliore le rendement du ranch : +${cowboyBonus} $.`, "good");
   }
   if(cowboySalaries>0){
-    addLog(`Salaires versés aux cow-boys : ${Math.round(cowboySalaries*state.costModifier)} $.`, "info");
+    addLog(`Salaires versés aux cow-boys : ${cowboySalaries} $.`, "info");
   }
 
   if(ranchIncome >= upkeep){
@@ -1717,8 +1744,9 @@ function endTurn(){
     addLog(`Résultat du ranch : -${upkeep-ranchIncome} $ après entretien.`, "bad");
   }
 
-  // Fourrage
-  const feedUse = Math.ceil(state.cattle/8) + state.horses;
+  // Fourrage : la consommation suit le troupeau, la production suit les terres.
+  // Un cheptel trop grand pour ses pâturages finit par manquer.
+  const feedUse = Math.ceil(state.cattle/10) + Math.ceil(state.horses/2);
   state.feed -= feedUse;
   if(state.feed < 0){
     const losses = Math.min(state.cattle,rand(1,Math.max(1,Math.ceil(Math.abs(state.feed)/2))));
@@ -1728,14 +1756,24 @@ function endTurn(){
   }
 
   // Production et reproduction
+  // La reproduction est bornée par les pâturages : sans cela le troupeau
+  // s'emballait au-delà de la capacité, les revenus restant plafonnés à
+  // `healthyCattle` tandis que l'entretien portait sur toutes les bêtes.
   if(state.season === 0 && state.cattle >= 10){
-    const calves = Math.max(1,Math.floor(state.cattle * (rand(5,12)/100)));
-    state.cattle += calves;
-    addLog(`${calves} veau${calves>1?"x sont nés":" est né"} ce printemps.`, "good");
+    const room = Math.floor(capacity * 1.05) - state.cattle;
+    const potential = Math.floor(healthyCattle * (rand(7,14)/100));
+    const calves = Math.max(0, Math.min(potential, room));
+    if(calves > 0){
+      state.cattle += calves;
+      addLog(`${calves} veau${calves>1?"x sont nés":" est né"} ce printemps.`, "good");
+    } else {
+      addLog("Les pâturages sont saturés : le troupeau ne peut plus s’agrandir sans nouvelles terres.", "info");
+    }
   }
   if(state.season === 2){
-    state.feed += Math.max(8,Math.floor(state.land/8));
-    addLog("Les récoltes d’automne remplissent les réserves de fourrage.", "good");
+    const harvest = Math.max(12,Math.floor(state.land/4));
+    state.feed += harvest;
+    addLog(`Les récoltes d’automne remplissent les réserves de fourrage : +${harvest}.`, "good");
   }
 
   // Prix du bétail
@@ -1937,6 +1975,10 @@ function ageFamily(){
 
   state.children.forEach(c => {
     c.age++;
+    // Les enfants vieillissent comme leurs parents. Sans cela ils atteignaient
+    // 120 ans dans `state.children` et héritaient du ranch centenaires.
+    if(c.age > 45) c.health = clamp(c.health - rand(0,2));
+    if(c.age > 65) c.health = clamp(c.health - rand(1,4));
     if(c.age >= 16 && !c.traitAdded){
       c.traitAdded = true;
       c.trait = ["Courageux","Ambitieux","Prudent","Charismatique","Rebelle"][rand(0,4)];
@@ -1946,28 +1988,31 @@ function ageFamily(){
       if(c.trait === "Prudent") c.ambition = clamp(c.ambition - 15);
       addLog(`${c.name} atteint l’adolescence et révèle un tempérament ${c.trait.toLowerCase()}.`, "info");
     }
-    if(c.age >= 18 && !c.marriageChecked && c.alive !== false){
-      c.marriageChecked = true;
-      if(chance(.5)){
-        const partners = ["Sarah","John","Mary","Robert","Anna","George","Emma","William","Grace","Daniel"];
-        c.married = true;
-        c.spouseName = partners[rand(0,partners.length-1)];
-        state.unity = clamp(state.unity+6);
-        addLog(`${c.name} épouse ${c.spouseName}. Toute la famille célèbre ce mariage.`, "good");
-      }
+    // Le mariage se retente chaque année tant que l'âge le permet : un unique
+    // tirage à 18 ans laissait la moitié des enfants sans descendance,
+    // et la lignée s'éteignait mécaniquement.
+    if(c.age >= 18 && c.age <= 38 && !c.married && c.alive !== false && chance(.24)){
+      c.married = true;
+      c.spouseName = PARTNER_NAMES[rand(0,PARTNER_NAMES.length-1)];
+      state.unity = clamp(state.unity+6);
+      addLog(`${c.name} épouse ${c.spouseName}. Toute la famille célèbre ce mariage.`, "good");
     }
   });
 
   // Naissance potentielle : la probabilité diminue avec le nombre d'enfants déjà présents,
   // et chute nettement après 40 ans
   const livingChildrenCount = state.children.filter(c => c.alive !== false).length;
-  const familyCapFactor = Math.max(0, 1 - livingChildrenCount * 0.16);
+  // Seuls les enfants encore à charge freinent les naissances. Compter aussi les
+  // adultes figeait la maisonnée en une seule cohorte, qui vieillissait et
+  // s'éteignait d'un bloc au bout de trois ou quatre générations.
+  const dependents = state.children.filter(c => c.alive !== false && c.age < 18).length;
+  const familyCapFactor = Math.max(0, 1 - dependents * 0.18);
   let spouseAgeFactor = 1;
   if(state.spouse.age >= 40){
     spouseAgeFactor = Math.max(0.04, 1 - (state.spouse.age - 40) * 0.14);
   }
   const birthChance = .28 * familyCapFactor * spouseAgeFactor;
-  if(state.spouse.alive && state.spouse.age < 48 && livingChildrenCount < 8 && chance(birthChance)){
+  if(state.spouse.alive && state.spouse.age < 48 && livingChildrenCount < 14 && chance(birthChance)){
     const boys = ["Thomas","Samuel","Arthur","Joseph","Henry","Louis","Elias"];
     const girls = ["Eleanor","Clara","Rose","Alice","Margaret","Louise","Jeanne"];
     const name = chance(.5) ? boys[rand(0,boys.length-1)] : girls[rand(0,girls.length-1)];
@@ -1979,13 +2024,13 @@ function ageFamily(){
   // Petits-enfants : les enfants mariés en âge peuvent fonder leur propre famille,
   // avec la même logique de probabilité dégressive
   const eligibleParents = state.children.filter(c => c.alive !== false && c.married && c.age >= 18 && c.age <= 45);
-  if(eligibleParents.length && livingChildrenCount < 12){
+  if(eligibleParents.length && livingChildrenCount < 16){
     const parent = eligibleParents[rand(0,eligibleParents.length-1)];
     let parentAgeFactor = 1;
     if(parent.age >= 40){
       parentAgeFactor = Math.max(0.04, 1 - (parent.age - 40) * 0.14);
     }
-    const grandchildChance = .2 * familyCapFactor * parentAgeFactor;
+    const grandchildChance = .3 * familyCapFactor * parentAgeFactor;
     if(chance(grandchildChance)){
       const boys = ["Elias","Noah","Isaac","Caleb","Owen","Silas"];
       const girls = ["Ruth","Nora","Ivy","Faith","June","Ada"];
@@ -2010,11 +2055,30 @@ function ageFamily(){
 
   state.children.forEach(c => {
     if(c.alive === false) return;
-    if(c.health < 25 && chance(.08)){
+    let mortality = 0;
+    if(c.health < 25) mortality += .08;
+    if(c.health < 35) mortality += .12;
+    if(c.age > 65) mortality += (c.age-64)*.018;
+    if(chance(mortality)){
       c.alive = false;
-      addLog(`${c.name} ${state.familyName} est décédé.`, "bad");
+      if(state.heirId === c.cid) state.heirId = null;
+      addLog(`${c.name} ${state.familyName} est décédé${c.age>60?` à l’âge de ${c.age} ans`:""}.`, "bad");
     }
   });
+
+  // Un chef de famille veuf et encore jeune peut refonder un foyer : sans cela
+  // la maison n'avait plus aucun moyen d'avoir des enfants après un veuvage.
+  if(state.founder.alive && !state.spouse.alive && state.founder.age < 50 && chance(.28)){
+    state.spouse = {
+      name: PARTNER_NAMES[rand(0,PARTNER_NAMES.length-1)],
+      age: Math.max(20, state.founder.age + rand(-8,3)),
+      health: 100,
+      alive: true,
+      traits: ["Pièce rapportée"]
+    };
+    state.unity = clamp(state.unity+5);
+    addLog(`${state.founder.name} se remarie avec ${state.spouse.name}. La maison du ranch revit.`, "good");
+  }
 
   // L'héritier désigné disparu ne l'est plus
   if(state.heirId !== null && state.heirId !== undefined && !heirChild()){

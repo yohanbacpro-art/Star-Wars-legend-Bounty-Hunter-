@@ -153,7 +153,9 @@ for(let run = 0; run < RUNS; run++){
 
   let turns = 0;
   while(!ST().gameOver && turns++ < 700){
-    if(POLICY === "cheat"){
+    if(POLICY === "passive"){
+      // Ne fait rien : vérifie que l'inaction reste sanctionnée.
+    } else if(POLICY === "cheat"){
       // Renfloue le ranch pour neutraliser le déficit passif et observer les 141 années.
       const s2 = ST();
       s2.money = Math.max(s2.money, 30000 * s2.costModifier);
@@ -163,26 +165,49 @@ for(let run = 0; run < RUNS; run++){
       if(s2.land < 900) G.doAction("buyLand");
       G.doAction("competition");
       G.doAction("family");
+    } else if(POLICY === "outlaw"){
+      // Vérifie l'atteignabilité des objectifs de spécialiste : contrebande,
+      // grande équipe fidèle, paix avec le rival.
+      const s2 = ST();
+      const sc = n => Math.round(n * s2.costModifier);
+      const cap = Math.max(20, Math.floor(s2.land/3));
+      if(s2.feed < 25 && s2.money > sc(60)*2) G.doAction("buyFeed");
+      else if(s2.cattle > cap) G.doAction("sellCattle");
+      else if(s2.money > sc(1500) && s2.cattle >= cap-6) G.doAction("buyLand");
+      else if(s2.cattle < cap && s2.money > (s2.cattlePrice+6)*5*s2.costModifier*3) G.doAction("buyCattle");
+      else G.doAction("family");
+      if(s2.suspicion > 60 && s2.money > sc(150)) G.doAction("bribe");
+      else G.doAction("illegal");
+      G.doAction("rivalNegotiate");
+      if((s2.cowboys||[]).length < 8 && s2.money > G.getHireCost()*4) G.hireCowboy();
     } else if(POLICY === "random"){
       const n = Math.floor(rng()*4);
       for(let a = 0; a < n; a++){
         G.doAction(actionTypes[Math.floor(rng()*actionTypes.length)]);
       }
     } else {
-      // Joueur raisonnable : vend quand la caisse est basse, investit quand elle est pleine.
+      // Joueur compétent : protège son troupeau, agrandit ses pâturages avant
+      // son cheptel, et ne vend jamais sa capacité de production.
       for(let a = 0; a < 3; a++){
         const s2 = ST();
-        const capacity = Math.max(20, Math.floor(s2.land/3));
+        const sc = n => Math.round(n * s2.costModifier);
+        const cap = Math.max(20, Math.floor(s2.land/3));
         const buyCost = (s2.cattlePrice+6)*5*s2.costModifier;
-        if(s2.money < buyCost*2 && s2.cattle >= 10) G.doAction("sellCattle");
+        if(s2.feed < 25 && s2.money > sc(60)*2) G.doAction("buyFeed");
+        else if(s2.cattle > cap) G.doAction("sellCattle");
+        else if(s2.money < sc(200) && s2.cattle > 32) G.doAction("sellCattle");
+        else if(s2.money > sc(1200) && s2.cattle >= cap-6) G.doAction("buyLand");
+        else if(s2.cattle < cap && s2.money > buyCost*3) G.doAction("buyCattle");
         else if(s2.unity < 55) G.doAction("family");
-        else if(s2.suspicion > 55 && s2.money > 200*s2.costModifier) G.doAction("bribe");
-        else if(s2.cattle < capacity && s2.money > buyCost*4) G.doAction("buyCattle");
-        else if(s2.money > 900*s2.costModifier) G.doAction("buyLand");
-        else if(s2.cattle >= 10) G.doAction("sellCattle");
+        else if(s2.suspicion > 60 && s2.money > sc(150)) G.doAction("bribe");
+        else if(s2.horses >= 1 && s2.money > sc(250)) G.doAction("competition");
         else G.doAction("family");
       }
     }
+
+    // Le joueur passif ne fait strictement rien : ni actions, ni diplomatie,
+    // ni succession préparée. C'est le témoin de l'inaction.
+    if(POLICY === "passive"){ G.endTurn(); resolveModal(rng); continue; }
 
     // Désignation d'héritier
     const adults = G.adultHeirs ? G.adultHeirs() : [];
@@ -209,6 +234,18 @@ for(let run = 0; run < RUNS; run++){
 
     G.endTurn();
     resolveModal(rng);
+
+    if(process.env.TRACE && turns % 16 === 1){
+      const t = ST();
+      const sal = (t.cowboys||[]).reduce((x,c)=>x+c.salary,0);
+      const upk = Math.round((t.cattle*1.7 + t.horses*5 + t.land*.15) * t.costModifier + sal);
+      const cap = Math.max(20, Math.floor(t.land/3));
+      console.log(`${t.year} | argent ${String(Math.round(t.money)).padStart(9)}`
+        + ` | bétail ${String(t.cattle).padStart(4)}/${String(cap).padStart(4)}`
+        + ` | terres ${String(t.land).padStart(4)} | fourrage ${String(t.feed).padStart(5)}`
+        + ` | entretien ${String(upk).padStart(8)} (salaires ${String(sal).padStart(7)}, ${(t.cowboys||[]).length} h.)`
+        + ` | cm ${t.costModifier.toFixed(1)}`);
+    }
   }
 
   // Sauvegarde / rechargement en fin de partie
@@ -220,6 +257,13 @@ for(let run = 0; run < RUNS; run++){
 
   const title = $el("eventTitle").textContent;
   summary.ends[title] = (summary.ends[title]||0)+1;
+  if(process.env.DIAG && title === "Fin de la lignée"){
+    const t = ST();
+    console.log(`  éteinte en ${t.year} | chef ${t.founder.name} ${t.founder.age} ans (vivant:${t.founder.alive})`
+      + ` | conjoint ${t.spouse.alive?t.spouse.age+" ans":"décédé"}`
+      + ` | enfants vivants ${t.children.filter(c=>c.alive!==false).length}/${t.children.length}`
+      + ` | générations ${(t.lineage||[]).length}`);
+  }
   if(ST().year >= 2026) summary.ends["__2026__"] = (summary.ends["__2026__"]||0)+1;
   summary.maxYear = Math.max(summary.maxYear, ST().year);
   summary.years.push(ST().year);

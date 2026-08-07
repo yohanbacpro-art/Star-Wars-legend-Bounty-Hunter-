@@ -1,4 +1,4 @@
-# Ranch Dynasty — V1.4
+# Ranch Dynasty — V1.5
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -77,19 +77,40 @@ chargement et à l'import. **Toute nouvelle propriété de `state` doit y être 
 - Ne jamais identifier un enfant par son prénom : le joueur peut le renommer et deux
   enfants peuvent être homonymes. Utiliser `cid`.
 
-## Équilibrage connu
+## Équilibrage
 
-Mesuré sur 100 parties simulées, avec et sans les nouveautés :
+La V1.5 rend la saga jouable jusqu'en 2026. Courbe visée, mesurée sur 80 parties
+par profil (`node tests/sim.js index.html 80 <profil>`) :
 
-- Sans intervention du joueur, le déficit passif tue la partie vers **1892** (médiane).
-- Même en neutralisant l'argent, **~72 % des parties finissent en « Fin de la lignée »**
-  avant 2026, chiffre identique à la V1.3. La cause est démographique : la moitié des
-  enfants ne se marient jamais (`marriageChecked`, 50 %), et l'héritier qui reprend le
-  ranch a le plus souvent passé l'âge d'avoir des enfants. La reprise transmet désormais
-  le conjoint de l'héritier au foyer, ce qui était le maillon manquant, mais ne suffit pas
-  à inverser la tendance.
+| Profil | Description | 2026 atteint | Année médiane |
+|---|---|---|---|
+| `random` | clique au hasard | 0 % | 1895 |
+| `passive` | ne fait rien | 9 % | 1905 |
+| `policy` | joueur compétent | 73 % | 2026+ |
+| `outlaw` | compétent + contrebande | 95 % | 2026+ |
 
-Ces deux points sont antérieurs aux ajouts de la V1.4 et n'ont pas été retouchés.
+L'inaction reste sanctionnée, comme le veut le principe du déficit passif ; c'est
+la conduite du ranch qui fait la différence.
+
+### Règles structurantes à ne pas casser
+
+- **La reproduction est bornée par la capacité** (`land / 3`). Les revenus sont
+  plafonnés à `min(bétail, capacité)` alors que l'entretien porte sur *toutes* les
+  bêtes : un troupeau qui s'emballe ruine mécaniquement le ranch. Pour agrandir le
+  cheptel, il faut d'abord acheter des terres.
+- **Le fourrage** est produit par les terres (`land / 4` à l'automne) et consommé
+  par le troupeau. Il est excédentaire à cheptel adapté, déficitaire en surcharge.
+  L'action « Acheter du fourrage » est le levier d'appoint.
+- **Les salaires des cow-boys sont stockés à l'échelle de l'époque** (réévalués à
+  chaque transition). Ne jamais les remultiplier par `costModifier` : ils
+  croîtraient au carré (3 184 $/trimestre au lieu de 192 à l'ère moderne).
+- **Les enfants vieillissent et meurent comme leurs parents.** Sans mortalité liée
+  à l'âge, ils atteignaient 120 ans et héritaient centenaires.
+- **`familyCapFactor` ne compte que les enfants à charge** (moins de 18 ans).
+  Compter aussi les adultes figeait la maisonnée en une cohorte unique qui
+  s'éteignait d'un bloc au bout de trois ou quatre générations.
+- **Le mariage se retente chaque année** entre 18 et 38 ans. Le tirage unique à
+  18 ans laissait la moitié des enfants sans descendance.
 
 ## Vérifier une modification
 
@@ -107,20 +128,28 @@ Deux harnais simulent le jeu hors navigateur (`node:vm` + stub minimal du DOM),
 sans aucune dépendance :
 
 ```bash
-# Tests ciblés : objectifs, succession, factions, migration des sauvegardes.
-# 87 vérifications, sortie non nulle en cas d'échec.
+# Tests ciblés : objectifs, succession, factions, équilibrage, migration
+# des sauvegardes. 104 vérifications, sortie non nulle en cas d'échec.
 node tests/scenarios.js index.html
 
-# Simulation de masse. Politiques : random | policy | cheat
-# `cheat` renfloue le ranch pour exercer les 141 années et les 7 époques.
-node tests/sim.js index.html 100 cheat
+# Simulation de masse.
+# Profils : random | passive | policy | outlaw | cheat
+node tests/sim.js index.html 80 policy
+
+# Bilan trimestriel détaillé d'une partie, pour diagnostiquer l'économie
+TRACE=1 node tests/sim.js index.html 1 policy
+
+# État de la famille à chaque extinction de lignée
+DIAG=1 node tests/sim.js index.html 80 policy
 ```
 
-Utiliser `tests/sim.js` avant/après un changement d'équilibrage : il compare
-facilement deux versions du fichier (`git show HEAD:index.html > baseline.html`).
+Toujours mesurer un changement d'équilibrage avec `tests/sim.js` sur les quatre
+profils : il compare facilement deux versions du fichier
+(`git show HEAD:index.html > baseline.html`).
 
 ## Pistes ouvertes
 
-- Équilibrage : déficit passif et extinction de la lignée (voir ci-dessus)
 - Rendre le rival principal plus présent hors des raids
 - Donner un poids narratif aux traits des cow-boys vétérans
+- Quelques objectifs restent des jalons plus que des défis (`united`, `oldHand`
+  sont atteints par ~98 % des parties bien menées)

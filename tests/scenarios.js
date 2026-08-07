@@ -421,6 +421,204 @@ section("Événements conditionnels");
   check("des branches ont bien été exécutées", branches > 100, branches);
 }
 
+// ------------------------------------------------------------- Équilibrage
+section("Équilibrage");
+{
+  // La reproduction ne doit jamais dépasser la capacité des pâturages :
+  // les revenus sont plafonnés à `min(bétail, capacité)` mais l'entretien
+  // porte sur toutes les bêtes — un troupeau qui s'emballe ruine le ranch.
+  const s = freshGame();
+  s.land = 300; s.money = 50000; s.feed = 100000; s.rival.relation = 0;
+  s.cattle = 100;
+  const capacity = Math.floor(s.land/3);
+  for(let y = 0; y < 60; y++) G.endTurn();
+  check("le troupeau se stabilise sous la capacité",
+    ST().cattle <= Math.floor(capacity*1.05)+2, ST().cattle + " pour " + capacity + " places");
+  check("le troupeau croît quand même jusqu'à la capacité",
+    ST().cattle >= capacity*0.7, ST().cattle);
+}
+{
+  // Un cheptel raisonnable pour ses terres ne doit plus mourir de faim.
+  const s = freshGame();
+  s.land = 300; s.cattle = 90; s.horses = 4; s.feed = 60;
+  s.money = 100000; s.rival.relation = 0;
+  const feedStart = s.feed;
+  for(let y = 0; y < 40; y++) G.endTurn();
+  check("le fourrage tient sur dix ans à cheptel adapté",
+    ST().feed >= feedStart, ST().feed + " (départ " + feedStart + ")");
+
+  // ... mais un cheptel démesuré pour ses terres doit manquer.
+  const s2 = freshGame();
+  s2.land = 120; s2.cattle = 200; s2.horses = 8; s2.feed = 80;
+  s2.money = 100000; s2.rival.relation = 0;
+  for(let y = 0; y < 40; y++) G.endTurn();
+  check("un troupeau surdimensionné épuise les réserves", ST().feed < 80, ST().feed);
+}
+{
+  // Les salaires sont stockés à l'échelle de l'époque : les remultiplier par
+  // costModifier les ferait croître au carré et ruinerait toute fin de partie.
+  const s = freshGame();
+  s.cowboys = [{name:"Test",loyalty:80,shoot:60,ride:60,salary:12,years:0,trait:"Fidèle"}];
+  s.cattle = 0; s.horses = 0; s.land = 0; s.money = 100000;
+  s.feed = 10000; s.rival.relation = 0; s.children = [];
+  s.factions.forEach(f => f.relation = 0);
+  const realRandom = Math.random;
+  Math.random = () => 0.5;
+  let before = ST().money;
+  G.endTurn();
+  const costEra1 = before - ST().money;
+  Math.random = realRandom;
+
+  // Même situation, mais à une époque cinq fois plus chère
+  const s2 = freshGame();
+  s2.cowboys = [{name:"Test",loyalty:80,shoot:60,ride:60,salary:60,years:0,trait:"Fidèle"}];
+  s2.cattle = 0; s2.horses = 0; s2.land = 0; s2.money = 100000;
+  s2.feed = 10000; s2.rival.relation = 0; s2.children = [];
+  s2.costModifier = 5;
+  s2.factions.forEach(f => f.relation = 0);
+  Math.random = () => 0.5;
+  before = ST().money;
+  G.endTurn();
+  const costEra5 = before - ST().money;
+  Math.random = realRandom;
+  check("le salaire coûte son montant nominal, pas son carré",
+    Math.abs(costEra5 - costEra1*5) <= 2, costEra1 + " puis " + costEra5 + " (attendu ~" + costEra1*5 + ")");
+}
+{
+  // Les enfants doivent vieillir et mourir comme leurs parents, sinon ils
+  // héritaient du ranch à plus de cent ans.
+  const s = freshGame();
+  const vieux = G.addChild("Doyen", {age:88, health:20, bond:50, ambition:50, resentment:0});
+  let died = 0;
+  for(let i = 0; i < 200; i++){
+    const s2 = freshGame();
+    const c = G.addChild("Doyen", {age:88, health:20});
+    G.ageFamily();
+    if(c.alive === false) died++;
+  }
+  check("un enfant très âgé et malade finit par mourir", died > 100, died + "/200");
+
+  const jeune = freshGame();
+  let diedYoung = 0;
+  for(let i = 0; i < 200; i++){
+    freshGame();
+    const c = G.addChild("Jeune", {age:8, health:100});
+    G.ageFamily();
+    if(c.alive === false) diedYoung++;
+  }
+  check("un enfant jeune et sain ne meurt pas", diedYoung === 0, diedYoung + "/200");
+
+  // La santé décline avec l'âge
+  const s3 = freshGame();
+  const c3 = G.addChild("Adulte", {age:70, health:100});
+  for(let y = 0; y < 10; y++){ c3.alive = true; G.ageFamily(); }
+  check("la santé d'un enfant âgé décline", c3.health < 100, c3.health);
+}
+{
+  // La reprise ne doit pas échoir à un aîné trop vieux quand un cadet valide existe.
+  const s = freshGame();
+  G.addChild("Doyen", {age:82, health:90, ambition:50, resentment:0});
+  G.addChild("Cadette", {age:34, health:100, ambition:50, resentment:0});
+  s.founder.alive = false;
+  G.resolveSuccession();
+  check("l'aîné hors d'âge est écarté au profit d'un cadet",
+    ST().founder.name === "Cadette", ST().founder.name + " (" + ST().founder.age + " ans)");
+
+  // Mais s'il n'y a que des vieillards, la reprise a tout de même lieu.
+  const s2 = freshGame();
+  G.addChild("Doyen", {age:82, health:90, ambition:50, resentment:0});
+  s2.founder.alive = false;
+  G.resolveSuccession();
+  check("faute de mieux, le doyen reprend quand même", ST().founder.name === "Doyen");
+}
+{
+  // L'action d'achat de fourrage : le seul levier du joueur sur la ressource
+  // qui tuait toutes les parties.
+  const s = freshGame();
+  s.money = 10000; s.feed = 10; s.actions = 3;
+  G.doAction("buyFeed");
+  check("acheter du fourrage remplit la grange", ST().feed === 50, ST().feed);
+  check("acheter du fourrage consomme une action", ST().actions === 2, ST().actions);
+  check("acheter du fourrage coûte de l'argent", ST().money < 10000);
+
+  const s2 = freshGame();
+  s2.money = 0; s2.feed = 10; s2.actions = 3;
+  G.doAction("buyFeed");
+  check("sans argent, aucun fourrage et aucune action perdue",
+    ST().feed === 10 && ST().actions === 3, ST().feed + "/" + ST().actions);
+}
+{
+  // Le mariage ne doit plus être un tirage unique : la lignée s'éteignait.
+  let married = 0;
+  for(let i = 0; i < 200; i++){
+    freshGame();
+    const c = G.addChild("Prétendant", {age:18, health:100});
+    for(let y = 0; y < 20 && c.alive !== false; y++){ c.age = 18 + y; G.ageFamily(); }
+    if(c.married) married++;
+  }
+  check("presque tous les enfants finissent par se marier", married > 180, married + "/200");
+}
+
+// ------------------------------------------------- Atteignabilité des objectifs
+section("Atteignabilité des objectifs");
+{
+  // « Les mains propres » exige greed === 0 : chaque événement doit donc offrir
+  // au moins une branche qui n'entache pas l'honneur de la famille.
+  const total = ev("events.length");
+  const forced = [];
+  for(let i = 0; i < total; i++){
+    let hasCleanBranch = false;
+    const nb = ev("events["+i+"].choices.length");
+    for(let j = 0; j < nb; j++){
+      let cleanOnce = false;
+      for(let k = 0; k < 8 && !cleanOnce; k++){
+        const s = freshGame();
+        s.money = 4000; s.cattle = 80; s.land = 400; s.horses = 5; s.weapons = 3;
+        addAdult(s, "A", {resentment:80}); addAdult(s, "B", {resentment:70});
+        s.factions.forEach(f => f.relation = 60);
+        s.legacy.greed = 0;
+        const applied = ev(`(function(){
+          const e = events[${i}], c = e.choices[${j}];
+          if(e.condition && !e.condition()) return null;
+          if(c.condition && !c.condition()) return null;
+          c.apply();
+          return state.legacy.greed;
+        })()`);
+        if(applied === 0) cleanOnce = true;
+      }
+      if(cleanOnce) hasCleanBranch = true;
+    }
+    if(!hasCleanBranch) forced.push(ev("events["+i+"].title"));
+  }
+  check("chaque événement offre une issue sans compromission",
+    forced.length === 0, forced.join(" | "));
+
+  // Les chapitres du secret aussi
+  const secretForced = [];
+  ev("SECRET_TYPES").forEach(type => {
+    [1,2,3].forEach(stage => {
+      const nb = ev(`SECRETS["${type}"].stage${stage}.choices.length`);
+      let clean = false;
+      for(let j = 0; j < nb; j++){
+        for(let k = 0; k < 6 && !clean; k++){
+          const s = freshGame();
+          s.money = 4000; s.land = 400; s.legacy.greed = 0;
+          const g = ev(`(function(){
+            const c = SECRETS["${type}"].stage${stage}.choices[${j}];
+            if(c.condition && !c.condition()) return null;
+            c.apply();
+            return state.legacy.greed;
+          })()`);
+          if(g === 0) clean = true;
+        }
+      }
+      if(!clean) secretForced.push(type + " ch." + stage);
+    });
+  });
+  check("chaque chapitre du secret offre une issue sans compromission",
+    secretForced.length === 0, secretForced.join(", "));
+}
+
 // ------------------------------------------------------- Partie longue durée
 section("Partie menée jusqu'en 2026");
 {
