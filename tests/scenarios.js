@@ -691,6 +691,249 @@ section("Apport des cow-boys");
   check("le nombre d'hommes utiles suit la taille du troupeau", utile === 4, utile);
 }
 
+// --------------------------------------------------------- Arcs narratifs
+section("Arcs narratifs");
+{
+  const ids = ev("ARCS.map(a=>a.id)");
+  check("plusieurs arcs sont définis", ids.length >= 4, ids.join(", "));
+  check("les identifiants d'arcs sont uniques", new Set(ids).size === ids.length);
+  const shallow = ev("ARCS.filter(a=>a.steps.length<2).map(a=>a.id)");
+  check("chaque arc tient sur plusieurs chapitres", shallow.length === 0, shallow.join(","));
+  const noChoice = ev("ARCS.filter(a=>a.steps.some(s=>!s.choices||!s.choices.length)).map(a=>a.id)");
+  check("chaque chapitre offre des choix", noChoice.length === 0, noChoice.join(","));
+
+  // Un arc se déroule chapitre après chapitre, sur plusieurs trimestres.
+  const s = permissiveGame();
+  s.arc = {id:"drought", step:0, due:0, data:{}};
+  s.money = 100000; s.feed = 5000; s.turn = 10;
+  let chapters = 0, guard = 0;
+  while(ST().arc && guard++ < 200){
+    ST().turn++;
+    if(G.maybeShowArcStep()){
+      chapters++;
+      const ch = $el("eventChoices").children;
+      check("le chapitre " + chapters + " de la sécheresse propose des choix", ch.length > 0);
+      ch[0].onclick();
+    }
+  }
+  check("l'arc se déroule sur plusieurs chapitres", chapters >= 3, chapters);
+  check("l'arc se termine", ST().arc === null);
+  check("l'arc terminé est mémorisé", (ST().arcsDone||[]).includes("drought"));
+
+  // Un arc terminé ne recommence pas.
+  ST().arcCooldown = 0;
+  let restarted = false;
+  for(let i = 0; i < 200; i++){ ST().turn++; G.maybeStartArc(); if(ST().arc && ST().arc.id === "drought") restarted = true; }
+  check("un arc terminé ne recommence jamais", !restarted);
+
+  // Un chapitre n'arrive pas avant son échéance.
+  const s2 = permissiveGame();
+  s2.arc = {id:"lawsuit", step:0, due:50, data:{}};
+  s2.turn = 10;
+  check("un chapitre attend son échéance", G.maybeShowArcStep() === false);
+  ST().turn = 50;
+  check("le chapitre s'ouvre à l'échéance", G.maybeShowArcStep() === true);
+  $el("eventChoices").children[0].onclick();
+  check("le chapitre suivant est planifié plus tard",
+    !ST().arc || ST().arc.due > 50, ST().arc && ST().arc.due);
+
+  // Un seul arc à la fois.
+  const s3 = permissiveGame();
+  s3.arc = {id:"lawsuit", step:0, due:0, data:{}};
+  const before = JSON.stringify(ST().arc);
+  for(let i = 0; i < 50; i++) G.maybeStartArc();
+  check("un seul arc court à la fois", JSON.stringify(ST().arc) === before);
+
+  // Un arc dont le code a disparu ne bloque pas la partie.
+  const s4 = permissiveGame();
+  s4.arc = {id:"arcQuiNExistePlus", step:0, due:0, data:{}};
+  G.ensureProgress();
+  check("un arc inconnu est écarté au chargement", ST().arc === null);
+}
+{
+  // Toutes les branches de tous les chapitres doivent s'exécuter sans erreur.
+  const errors = [];
+  let branches = 0;
+  const arcs = ev("ARCS.map(a=>({id:a.id, steps:a.steps.map(s=>s.choices.length)}))");
+  arcs.forEach(a => {
+    a.steps.forEach((nChoices, si) => {
+      for(let ci = 0; ci < nChoices; ci++){
+        for(let k = 0; k < 4; k++){
+          const s = permissiveGame();
+          s.arc = {id:a.id, step:si, data:{name:"Test", cid:(ST().children[0]||{}).cid, fight:true, warm:true, ready:true}};
+          s.money = 100000;
+          try{
+            const ran = ev(`(function(){
+              const arc = ARCS.find(x=>x.id===${JSON.stringify(a.id)});
+              const c = arc.steps[${si}].choices[${ci}];
+              if(c.condition && !c.condition()) return false;
+              c.apply();
+              return true;
+            })()`);
+            if(ran) branches++;
+          }catch(e){ errors.push(a.id + " ch." + si + " choix " + ci + " : " + e.message); }
+        }
+      }
+    });
+  });
+  check("toutes les branches d'arcs s'exécutent sans erreur", errors.length === 0, errors.slice(0,3).join(" | "));
+  check("des branches d'arcs ont bien été exercées", branches > 40, branches);
+
+  // Les textes dynamiques des chapitres doivent s'évaluer.
+  const textErrors = [];
+  arcs.forEach(a => {
+    a.steps.forEach((_, si) => {
+      const s = permissiveGame();
+      s.arc = {id:a.id, step:si, data:{name:"Test", cid:(ST().children[0]||{}).cid}};
+      try{
+        ev(`(function(){
+          const st = ARCS.find(x=>x.id===${JSON.stringify(a.id)}).steps[${si}];
+          return [st.title, st.text, st.image].map(f=>typeof f==="function"?f():f).join("");
+        })()`);
+      }catch(e){ textErrors.push(a.id + " ch." + si + " : " + e.message); }
+    });
+  });
+  check("tous les textes de chapitres s'évaluent", textErrors.length === 0, textErrors.slice(0,3).join(" | "));
+}
+
+// ------------------------------------------------------------ Le rival
+section("La lignée rivale");
+{
+  const s = freshGame();
+  const leader = G.ensureRivalLeader();
+  check("le rival a un chef nommé", !!leader && !!leader.name);
+  check("le chef a un tempérament", !!ev("RIVAL_TRAITS[state.rival.leader.trait]"));
+  check("la lignée rivale est enregistrée", (ST().rival.lineage||[]).length === 1);
+
+  // Le tempérament oriente la dérive de la relation.
+  function drift(trait){
+    let total = 0;
+    for(let i = 0; i < 120; i++){
+      const s2 = freshGame();
+      s2.money = 100000; s2.feed = 5000;
+      s2.rival.relation = 0;
+      s2.rival.leader = {name:"X", sex:"m", age:40, trait, alive:true, since:1885};
+      G.endTurn();
+      total += ST().rival.relation;
+    }
+    return total/120;
+  }
+  const conciliant = drift("conciliant"), brutal = drift("brutal");
+  check("un chef conciliant fait remonter la relation", conciliant > brutal,
+    conciliant.toFixed(1) + " contre " + brutal.toFixed(1));
+
+  // Le chef vieillit et finit par être remplacé.
+  const s3 = freshGame();
+  s3.rival.leader = {name:"Ancien", sex:"m", age:70, trait:"brutal", alive:true, since:1885};
+  let replaced = false;
+  for(let y = 0; y < 40 && !replaced; y++){
+    G.ageRivalLeader();
+    if(ST().rival.leader.name !== "Ancien") replaced = true;
+  }
+  check("un chef rival finit par mourir et être remplacé", replaced);
+  check("la lignée rivale garde la trace des deux", (ST().rival.lineage||[]).length >= 2,
+    (ST().rival.lineage||[]).length);
+  check("le prédécesseur a une année de fin",
+    (ST().rival.lineage||[]).filter(l=>l.to!==null).length >= 1);
+
+  // La généalogie affiche la lignée d'en face.
+  G.renderLineage();
+  check("la généalogie montre la lignée rivale",
+    $el("lineageContent").innerHTML.includes(ST().rival.name));
+}
+
+// ------------------------------------------------------- Doctrines d'époque
+section("Tournants d'époque");
+{
+  const covered = ev("Object.keys(DOCTRINES)");
+  check("la plupart des époques ont un tournant", covered.length >= 5, covered.join(", "));
+  const thin = ev("Object.keys(DOCTRINES).filter(k=>DOCTRINES[k].length<2)");
+  check("chaque tournant offre au moins deux voies", thin.length === 0, thin.join(","));
+
+  // Chaque doctrine s'applique sans erreur et laisse une trace.
+  const errors = [];
+  covered.forEach(eraId => {
+    const n = ev(`DOCTRINES[${JSON.stringify(eraId)}].length`);
+    for(let i = 0; i < n; i++){
+      const s = permissiveGame();
+      s.eraId = eraId; s.money = 100000;
+      const id = ev(`DOCTRINES[${JSON.stringify(eraId)}][${i}].id`);
+      try{
+        G.chooseDoctrine(eraId, id);
+        if(ST().doctrines[eraId] !== id) errors.push(eraId + "/" + id + " non enregistrée");
+      }catch(e){ errors.push(eraId + "/" + id + " : " + e.message); }
+    }
+  });
+  check("toutes les doctrines s'appliquent et sont mémorisées", errors.length === 0, errors.slice(0,3).join(" | "));
+
+  // La transition d'époque propose bien le choix.
+  const s = permissiveGame();
+  s.eraId = "foundation";
+  G.showEraTransition(ev("ERAS.find(e=>e.id==='prohibition')"));
+  const choices = $el("eventChoices").children;
+  check("la bascule d'époque propose les voies", choices.length === 2, choices.length);
+  check("chaque voie annonce son effet",
+    $el("eventChoices").children[0].innerHTML.includes("doctrine-effect"));
+
+  // Une époque sans tournant garde son simple « Continuer ».
+  G.showEraTransition(ev("ERAS.find(e=>e.id==='foundation')"));
+  check("une époque sans tournant reste simple", $el("eventChoices").children.length === 1);
+}
+
+// ------------------------------------------------------- Carte du domaine
+section("Carte du domaine");
+{
+  const s = freshGame();
+  G.ensureParcels();
+  check("le domaine est découpé en parcelles", ST().parcels.length > 0, ST().parcels.length);
+  const sum = ST().parcels.reduce((a,p)=>a+p.ha,0);
+  check("les parcelles totalisent exactement les hectares", sum === ST().land,
+    sum + " contre " + ST().land);
+  check("chaque parcelle a un nom et un type",
+    ST().parcels.every(p=>p.name && ev(`PARCEL_KINDS[${JSON.stringify(p.kind)}]`)));
+  check("les noms de parcelles sont distincts",
+    new Set(ST().parcels.map(p=>p.name)).size === ST().parcels.length);
+
+  // Acheter des terres ajoute une parcelle nommée.
+  ST().money = 100000; ST().actions = 3;
+  const before = ST().parcels.length;
+  G.doAction("buyLand");
+  check("acheter des terres ajoute une parcelle", ST().parcels.length === before+1);
+  check("le total reste cohérent après achat",
+    ST().parcels.reduce((a,p)=>a+p.ha,0) === ST().land);
+
+  // Après une perte de terres, la somme se recale.
+  ST().land -= 30;
+  G.ensureParcels();
+  check("le total se recale après une perte de terres",
+    ST().parcels.reduce((a,p)=>a+p.ha,0) === ST().land,
+    ST().parcels.reduce((a,p)=>a+p.ha,0) + " contre " + ST().land);
+
+  // Les terrains difficiles sont plus exposés aux raids.
+  const s2 = freshGame();
+  s2.parcels = [
+    {id:1, name:"A", kind:"canyon", ha:100, exposure:1.6},
+    {id:2, name:"B", kind:"ridge",  ha:100, exposure:.5}
+  ];
+  s2.land = 200;
+  let canyon = 0;
+  for(let i = 0; i < 400; i++){ if(G.pickExposedParcel().kind === "canyon") canyon++; }
+  check("un canyon se fait razzier plus qu'une crête", canyon > 250, canyon + "/400");
+
+  // La carte s'affiche sans erreur, y compris sur un domaine minuscule.
+  let threw = false;
+  try{ G.renderMap(); }catch(e){ threw = e.message; }
+  check("la carte s'affiche", threw === false, threw);
+  check("la carte est dessinée dans la page", $el("mapContent").innerHTML.includes("<svg"));
+  check("la carte n'appelle aucune ressource externe",
+    !/https?:\/\//.test($el("mapContent").innerHTML));
+  const s3 = freshGame();
+  s3.land = 0; s3.parcels = [];
+  threw = false;
+  try{ G.ensureParcels(); G.renderMap(); }catch(e){ threw = e.message; }
+  check("un domaine vide ne casse pas la carte", threw === false, threw);
+}
+
 // ------------------------------------------- Rythme : brèves et illustrations
 section("Rythme du trimestre");
 {

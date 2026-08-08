@@ -469,6 +469,8 @@
     color:var(--ink);
   }
   .choice:hover{background:var(--surface-hi)}
+  .choice.doctrine{display:grid;gap:5px;padding:14px}
+  .doctrine-effect{font-size:.85rem;color:var(--gold);font-weight:700;line-height:1.35}
   .modal-intro{color:var(--muted);line-height:1.5;margin-bottom:4px}
 
   /* ---- Coups en douce : tout est chiffré avant de choisir ---- */
@@ -505,6 +507,20 @@
   .fact.info{border-color:var(--gold);color:var(--gold)}
   .op-fail{grid-column:2;font-size:.84rem;color:var(--bad);line-height:1.35}
   .op-blocked{grid-column:2;font-size:.84rem;color:var(--muted);font-style:italic}
+
+  /* ---- Carte du domaine ---- */
+  .map{
+    width:100%;height:auto;display:block;
+    border:2px solid var(--line);
+    margin-bottom:14px;
+  }
+  .parcels{list-style:none;padding:0;margin:0;display:grid;gap:8px}
+  .parcels li{
+    padding:9px 11px;
+    border:1px solid var(--line);
+    background:var(--card-bg);
+  }
+  .parcels small{color:var(--muted)}
 
   /* ---- Diplomatie : chaque pouvoir se lit d'un coup d'œil ---- */
   .faction{
@@ -644,6 +660,7 @@
       <nav class="nav" aria-label="Panneaux du ranch">
         <button class="nav-btn" id="familyBtn">👨‍👩‍👧 Famille<span class="badge hidden" id="familyBadge">!</span></button>
         <button class="nav-btn" id="cowboyBtn">🤠 Équipe</button>
+        <button class="nav-btn" id="mapBtn">🗺️ Domaine</button>
         <button class="nav-btn" id="diplomacyBtn">🤝 Diplomatie<span class="badge hidden" id="diploBadge">★</span></button>
         <button class="nav-btn" id="goalsBtn">🎯 Objectifs<span class="count" id="goalsCount"></span></button>
         <button class="nav-btn" id="chronicleBtn">📖 Chroniques</button>
@@ -1217,6 +1234,778 @@ function resolveSuccession(){
   }
 }
 
+// ---- La carte du domaine ----
+// Les hectares cessent d'être un nombre : ils deviennent des parcelles nommées,
+// avec un caractère. `state.land` reste la somme de référence, les parcelles en
+// sont la lecture. Un raid frappe une parcelle, pas une abstraction.
+const PARCEL_KINDS = {
+  pasture:{label:"Pâturage", icon:"🌿", note:"Bonne herbe, facile à surveiller."},
+  bottom: {label:"Pré du bas", icon:"💧", note:"Humide et gras, mais inondable."},
+  ridge:  {label:"Crête",     icon:"⛰️", note:"Herbe rare, vue sur tout le domaine."},
+  canyon: {label:"Canyon",    icon:"🪨", note:"Difficile d'accès : le bétail s'y perd, les voleurs s'y cachent."},
+  creek:  {label:"Rive",      icon:"🏞️", note:"Le point d'eau du domaine."},
+  wood:   {label:"Bois",      icon:"🌲", note:"Abri l'hiver, refuge des rôdeurs."}
+};
+const PARCEL_KIND_IDS = Object.keys(PARCEL_KINDS);
+
+const PARCEL_NAMES = ["de l'Aigle","du Vieux Chêne","des Trois Sources","de la Butte","du Serpent",
+  "des Peupliers","du Nord","de la Veuve","du Gué","des Corbeaux","du Fondateur","de la Ligne",
+  "du Puits Sec","des Colverts","de la Chapelle","du Loup"];
+
+function makeParcel(ha, kindId){
+  const kind = kindId || PARCEL_KIND_IDS[rand(0,PARCEL_KIND_IDS.length-1)];
+  const used = (state.parcels||[]).map(p=>p.name);
+  const free = PARCEL_NAMES.filter(n => !used.includes(n));
+  const name = free.length ? free[rand(0,free.length-1)] : PARCEL_NAMES[rand(0,PARCEL_NAMES.length-1)];
+  return {
+    id: (state.nextParcelId = (state.nextParcelId||1) + 1) - 1,
+    name, kind, ha,
+    // Un terrain exposé se fait razzier plus souvent ; une crête se surveille.
+    exposure: kind === "canyon" || kind === "wood" ? 1.6 : (kind === "ridge" ? .5 : 1)
+  };
+}
+
+// Reconstruit les parcelles à partir de `state.land` : au chargement d'une
+// vieille sauvegarde, ou si les deux ont divergé.
+function ensureParcels(){
+  if(!state) return;
+  if(!Array.isArray(state.parcels)) state.parcels = [];
+  let total = state.parcels.reduce((s,p)=>s+p.ha, 0);
+  if(!state.parcels.length && state.land > 0){
+    let left = state.land;
+    const first = ["creek","pasture","bottom"];
+    let i = 0;
+    while(left > 0){
+      const ha = Math.min(left, i < 3 ? Math.ceil(state.land/3) : 20);
+      state.parcels.push(makeParcel(ha, first[i] || undefined));
+      left -= ha; i++;
+      if(i > 40) break;
+    }
+    total = state.parcels.reduce((s,p)=>s+p.ha, 0);
+  }
+  // `state.land` fait foi : on ajuste la dernière parcelle sur l'écart.
+  const diff = state.land - total;
+  if(diff !== 0 && state.parcels.length){
+    const last = state.parcels[state.parcels.length-1];
+    last.ha += diff;
+    if(last.ha <= 0){
+      state.parcels.pop();
+      if(state.parcels.length) state.parcels[state.parcels.length-1].ha += last.ha;
+    }
+  }
+}
+
+// Pousse une parcelle sans réconcilier : l'appelant met `state.land` à jour de
+// son côté. Réconcilier ici compterait les hectares deux fois.
+function addParcel(ha){
+  if(!Array.isArray(state.parcels)) state.parcels = [];
+  const p = makeParcel(ha);
+  state.parcels.push(p);
+  return p;
+}
+
+// Choisit la parcelle visée par un raid, au prorata de son exposition.
+function pickExposedParcel(){
+  ensureParcels();
+  if(!state.parcels.length) return null;
+  const weights = state.parcels.map(p => p.ha * (p.exposure||1));
+  const total = weights.reduce((a,b)=>a+b,0);
+  let roll = Math.random() * total;
+  for(let i = 0; i < state.parcels.length; i++){
+    roll -= weights[i];
+    if(roll <= 0) return state.parcels[i];
+  }
+  return state.parcels[state.parcels.length-1];
+}
+
+// Vue cartographique : des rectangles proportionnés, dessinés dans la page.
+function renderMap(){
+  ensureParcels();
+  const box = $("mapContent");
+  if(!box) return;
+  const parcels = state.parcels;
+  if(!parcels.length){ box.innerHTML = "<p><i>Le domaine ne compte aucune parcelle.</i></p>"; return; }
+
+  // Découpage en bandes, chaque parcelle occupant une part de sa bande.
+  const perRow = Math.ceil(Math.sqrt(parcels.length));
+  const rows = [];
+  for(let i = 0; i < parcels.length; i += perRow) rows.push(parcels.slice(i, i + perRow));
+  const rowH = 100 / rows.length;
+
+  let svg = `<svg class="map" viewBox="0 0 200 120" role="img" aria-label="Carte du domaine">`
+    + `<rect width="200" height="120" fill="var(--panel)"/>`;
+  rows.forEach((row, r) => {
+    const rowTotal = row.reduce((s,p)=>s+p.ha,0) || 1;
+    let x = 4;
+    const y = 4 + r * (112 / rows.length);
+    const h = (112 / rows.length) - 4;
+    row.forEach(p => {
+      const w = (p.ha / rowTotal) * 192;
+      const shade = p.kind === "wood" || p.kind === "canyon" ? ".65" : (p.kind === "ridge" ? ".3" : ".45");
+      svg += `<g><rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(4,w-2).toFixed(1)}" height="${h.toFixed(1)}"`
+        + ` fill="var(--line)" fill-opacity="${shade}" stroke="var(--dark)" stroke-width=".8"/>`
+        + `<title>${p.name} — ${PARCEL_KINDS[p.kind].label}, ${p.ha} ha</title></g>`;
+      x += w;
+    });
+  });
+  svg += `</svg>`;
+
+  let h = `<p class="modal-intro">${state.land} hectares en ${parcels.length} parcelle${parcels.length>1?"s":""}. `
+    + `Les terrains difficiles — canyons et bois — se font razzier plus souvent ; les crêtes se surveillent seules.</p>`;
+  h += svg + "<ul class=\"parcels\">";
+  parcels.slice().sort((a,b)=>b.ha-a.ha).forEach(p => {
+    const k = PARCEL_KINDS[p.kind];
+    h += `<li><b>${k.icon} Le ${k.label.toLowerCase()} ${p.name}</b> — ${p.ha} ha`
+      + `<br><small>${k.note}</small></li>`;
+  });
+  h += "</ul>";
+  box.innerHTML = h;
+}
+
+// ---- Arcs narratifs ----
+// Une histoire qui se déroule sur plusieurs trimestres. Un seul arc court à la
+// fois : `state.arc = {id, step, due, data}`. Chaque chapitre attend son échéance,
+// puis s'ouvre comme un événement. Les choix peuvent brancher (`goto`) et
+// écrire dans `data`, que les chapitres suivants relisent.
+const ARCS = [
+  {
+    id:"lawsuit",
+    title:"Le procès",
+    canStart:()=>state.land >= 200 && state.year < 1990,
+    steps:[
+      {
+        art:"law",
+        title:"Une assignation",
+        text:()=>`Un voisin conteste la limite nord du domaine. Il produit un plan ancien, et un avocat de la ville.`,
+        image:"Un huissier remonte l'allée",
+        choices:[
+          {label:"Prendre un avocat et se battre",apply:()=>{ state.money-=Math.min(state.money,sc(160)); state.arc.data.fight=true;
+            addLog("Le ranch prend un avocat. L'affaire ira jusqu'au bout.","info"); }},
+          {label:"Proposer un arrangement à l'amiable",apply:()=>{ state.arc.data.fight=false;
+            addLog("Une proposition d'arrangement part chez le voisin.","info"); }, goto:2},
+          {label:"Ignorer l'assignation",apply:()=>{ state.arc.data.fight=false; state.arc.data.ignored=true;
+            addLog("L'assignation finit dans un tiroir.","bad"); }}
+        ]
+      },
+      {
+        art:"law",
+        title:"L'audience",
+        text:()=>`Le tribunal du comté examine les titres. ${state.arc.data.ignored ? "Votre absence à la première audience a été notée." : "Les deux camps produisent leurs pièces."}`,
+        image:"Un prétoire de bois sombre",
+        choices:[
+          {label:"Produire tous les titres du ranch",apply:()=>{
+            const law=factionOfType("law");
+            const odds=.5+(state.arc.data.fight?.2:0)+(state.arc.data.ignored?-.25:0)+(law&&law.relation>40?.15:0);
+            state.arc.data.won=chance(odds);
+            addLog(state.arc.data.won?"Le tribunal penche de votre côté.":"Le tribunal doute de vos titres.",
+              state.arc.data.won?"good":"bad"); }},
+          {label:"Faire témoigner le comté en votre faveur",condition:()=>{const c=factionOfType("community");return c&&c.relation>20;},apply:()=>{
+            const c=factionOfType("community");
+            state.arc.data.won=chance(.55+c.relation/200);
+            c.relation=clamp(c.relation-10,-100,100);
+            addLog("Le voisinage vient témoigner à la barre.","info"); }},
+          {label:"Glisser une enveloppe au greffier",apply:()=>{
+            state.money-=Math.min(state.money,sc(180)); state.legacy.greed++;
+            state.arc.data.won=chance(.72); state.suspicion=clamp(state.suspicion+16);
+            addLog("Le dossier a été manipulé. Reste à savoir si cela se verra.","info"); }}
+        ]
+      },
+      {
+        art:"law",
+        title:"Le jugement",
+        text:()=>state.arc.data.won
+          ? `Le tribunal confirme les limites du domaine. L'affaire est close, et le voisin devra payer les frais.`
+          : `Le tribunal tranche contre le ranch. Une partie de la limite nord change de propriétaire.`,
+        image:"Un marteau retombe sur le bois",
+        choices:[
+          {label:"Accepter le jugement",apply:()=>{
+            if(state.arc.data.won){ state.money+=sc(rand(120,260)); state.reputation=clamp(state.reputation+8);
+              addLog("Le procès gagné assoit l'autorité de la famille sur ses terres.","good"); }
+            else { state.land=Math.max(40,state.land-30); state.reputation=clamp(state.reputation-5);
+              addLog("Trente hectares passent de l'autre côté de la clôture.","bad"); } }},
+          {label:"Faire appel",condition:()=>state.money>=sc(200),apply:()=>{
+            state.money-=sc(200);
+            if(chance(state.arc.data.won?.8:.35)){ state.reputation=clamp(state.reputation+10);
+              addLog("L'appel confirme, et le nom du ranch en sort grandi.","good"); }
+            else { state.land=Math.max(40,state.land-40); state.reputation=clamp(state.reputation-9);
+              addLog("L'appel échoue, et coûte plus cher que le procès.","bad"); } }}
+        ]
+      }
+    ]
+  },
+  {
+    id:"cityChild",
+    title:"L'enfant parti en ville",
+    canStart:()=>state.children.some(c=>c.alive!==false && c.age>=17 && c.age<=30),
+    steps:[
+      {
+        art:"family",
+        title:"Le départ",
+        text:()=>{
+          const k=state.children.filter(c=>c.alive!==false && c.age>=17 && c.age<=30)[0];
+          return `${k.name} annonce à table qu'il n'a pas l'intention de passer sa vie ici. La ville, le chemin de fer, autre chose.`;
+        },
+        image:"Une valise au pied de l'escalier",
+        choices:[
+          {label:"Lui donner de quoi partir dignement",condition:()=>state.money>=sc(150),apply:()=>{
+            const k=state.children.filter(c=>c.alive!==false && c.age>=17 && c.age<=30)[0];
+            state.money-=sc(150); state.arc.data.cid=k.cid; state.arc.data.name=k.name; state.arc.data.warm=true;
+            k.bond=clamp((k.bond||50)+10);
+            addLog(`${k.name} part pour la ville avec la bénédiction de la maison.`,"info"); }},
+          {label:"Le laisser partir sans un mot",apply:()=>{
+            const k=state.children.filter(c=>c.alive!==false && c.age>=17 && c.age<=30)[0];
+            state.arc.data.cid=k.cid; state.arc.data.name=k.name; state.arc.data.warm=false;
+            k.bond=clamp((k.bond||50)-15); state.unity=clamp(state.unity-8);
+            addLog(`${k.name} part sans que personne ne l'accompagne au train.`,"bad"); }},
+          {label:"Le retenir au ranch",apply:()=>{
+            const k=state.children.filter(c=>c.alive!==false && c.age>=17 && c.age<=30)[0];
+            state.arc.data.cid=k.cid; state.arc.data.name=k.name; state.arc.data.stayed=true;
+            k.resentment=clamp((k.resentment||0)+30); k.role="ranch";
+            addLog(`${k.name} reste, mais l'a en travers de la gorge.`,"info"); }, goto:2}
+        ]
+      },
+      {
+        art:"city",
+        title:"Des nouvelles de la ville",
+        text:()=>`Une lettre de ${state.arc.data.name} arrive au ranch. L'écriture est pressée.`,
+        image:"Une enveloppe timbrée de la ville",
+        choices:[
+          {label:"Lui envoyer de l'argent",condition:()=>state.money>=sc(120),apply:()=>{
+            state.money-=sc(120); state.arc.data.helped=true; state.unity=clamp(state.unity+4);
+            addLog(`Un mandat part pour la ville.`,"info"); }},
+          {label:"Répondre seulement par une lettre",apply:()=>{
+            state.arc.data.helped=false;
+            addLog("La réponse tient en une page.","info"); }}
+        ]
+      },
+      {
+        art:"family",
+        title:"Le retour",
+        text:()=>{
+          const stayed = state.arc.data.stayed;
+          if(stayed) return `${state.arc.data.name} n'est jamais parti, mais n'a jamais cessé d'y penser. Aujourd'hui, il pose la question autrement.`;
+          return `${state.arc.data.name} redescend du train. On ne sait pas encore s'il rentre ou s'il passe.`;
+        },
+        image:"Une silhouette sur le quai de la halte",
+        choices:[
+          {label:"Lui rouvrir la maison",apply:()=>{
+            const k=(state.children||[]).find(c=>c.cid===state.arc.data.cid);
+            const good = state.arc.data.warm || state.arc.data.helped || state.arc.data.stayed;
+            if(k){ k.bond=clamp((k.bond||50)+(good?25:8)); k.resentment=clamp((k.resentment||0)-(good?25:5)); }
+            state.unity=clamp(state.unity+(good?12:5));
+            if(good && k){ k.ambition=clamp((k.ambition||50)+10);
+              addLog(`${state.arc.data.name} revient au ranch, et cette fois il sait pourquoi.`,"good"); }
+            else addLog(`${state.arc.data.name} reste quelque temps, sans promettre.`,"info"); }},
+          {label:"Lui dire que sa place est ailleurs",apply:()=>{
+            const k=(state.children||[]).find(c=>c.cid===state.arc.data.cid);
+            if(k){ state.children=state.children.filter(c=>c.cid!==k.cid);
+              if(state.heirId===k.cid) state.heirId=null; }
+            state.money+=sc(rand(150,320)); state.unity=clamp(state.unity-10);
+            state.legacy.greed++;
+            addLog(`${state.arc.data.name} repart pour de bon, avec sa part.`,"bad"); }}
+        ]
+      }
+    ]
+  },
+  {
+    id:"drought",
+    title:"La grande sécheresse",
+    canStart:()=>state.cattle >= 40,
+    steps:[
+      {
+        art:"storm",
+        title:"Une saison sans pluie",
+        text:()=>`Le printemps est passé sans une averse. Les anciens disent qu'ils ont déjà vu ça, et que la suite n'est pas bonne.`,
+        image:"Un ciel blanc, sans un nuage",
+        choices:[
+          {label:"Constituer des réserves dès maintenant",condition:()=>state.money>=sc(200),apply:()=>{
+            state.money-=sc(200); state.feed+=90; state.arc.data.ready=true;
+            addLog("Le fenil est rempli pendant que le foin est encore bon marché.","good"); }},
+          {label:"Creuser un nouveau puits",condition:()=>state.money>=sc(280),apply:()=>{
+            state.money-=sc(280); state.arc.data.well=true;
+            addLog("Un puits est foré au fond du pré du bas.","good"); }},
+          {label:"Attendre de voir",apply:()=>{ addLog("On attend la pluie.","info"); }}
+        ]
+      },
+      {
+        art:"storm",
+        title:"L'été brûle",
+        text:()=>`La rivière n'est plus qu'un fil. ${state.arc.data.well ? "Votre puits tient, pour l'instant." : "Les points d'eau du domaine sont à sec."}`,
+        image:"Un lit de rivière craquelé",
+        choices:[
+          {label:"Conduire le troupeau vers les hauteurs",apply:()=>{
+            if(chance(.6+(state.cowboys||[]).length*.04)){ addLog("La transhumance sauve l'essentiel du troupeau.","good"); }
+            else { const l=Math.min(state.cattle,rand(4,10)); state.cattle-=l;
+              addLog(`La marche coûte ${l} bêtes.`,"bad"); } }},
+          {label:"Vendre une partie du troupeau",condition:()=>state.cattle>=20,apply:()=>{
+            const n=Math.floor(state.cattle*.25); state.cattle-=n; state.money+=n*state.cattlePrice;
+            state.arc.data.sold=true;
+            addLog(`${n} bêtes vendues avant que les cours ne s'effondrent.`,"info"); }},
+          {label:"Tenir avec les réserves",apply:()=>{
+            const need=state.arc.data.ready?30:70;
+            if(state.feed>=need){ state.feed-=need; addLog("Les réserves y passent, mais le troupeau tient.","good"); }
+            else { const l=Math.min(state.cattle,rand(6,16)); state.cattle-=l; state.feed=0;
+              addLog(`Les réserves manquent : ${l} bêtes perdues.`,"bad"); } }}
+        ]
+      },
+      {
+        art:"storm",
+        title:"La pluie revient",
+        text:()=>`Au matin, l'odeur de la terre mouillée réveille toute la maison. La sécheresse est finie.`,
+        image:"Les premières gouttes sur la poussière",
+        choices:[
+          {label:"Reconstituer le troupeau",condition:()=>state.money>=sc(300),apply:()=>{
+            state.money-=sc(300); state.cattle+=rand(12,22);
+            addLog("Le ranch rachète des bêtes pendant que les prix sont bas.","good"); }},
+          {label:"Partager l'eau retrouvée avec le comté",apply:()=>{
+            const c=factionOfType("community"); if(c) c.relation=clamp(c.relation+30,-100,100);
+            state.reputation=clamp(state.reputation+12); state.legacy.honor++;
+            addLog("Le ranch ouvre ses points d'eau aux voisins. On s'en souviendra longtemps.","good"); }},
+          {label:"Souffler, simplement",apply:()=>{
+            state.unity=clamp(state.unity+10);
+            addLog("La famille souffle. On a tenu.","good"); }}
+        ]
+      }
+    ]
+  },
+  {
+    id:"bloodFeud",
+    title:"La rancune de sang",
+    canStart:()=>!!state.rival && state.rival.relation < -25,
+    steps:[
+      {
+        art:"night",
+        title:"Une clôture coupée",
+        text:()=>`Trente mètres de fil sectionnés au cisaille, la nuit, du côté des ${state.rival.name}. Personne n'a rien vu.`,
+        image:"Du fil de fer sectionné dans l'herbe",
+        choices:[
+          {label:"Réparer et se taire",apply:()=>{ state.arc.data.restraint=true;
+            addLog("La clôture est refaite avant midi. Rien n'est dit.","info"); }},
+          {label:"Aller demander des comptes",apply:()=>{ state.arc.data.restraint=false;
+            state.rival.relation=clamp(state.rival.relation-10,-100,100);
+            addLog("La visite au ranch d'en face se termine mal.","bad"); }},
+          {label:"Rendre la pareille la nuit suivante",condition:()=>(state.cowboys||[]).length>0,apply:()=>{
+            state.arc.data.restraint=false; state.arc.data.escalated=true;
+            state.rival.relation=clamp(state.rival.relation-20,-100,100);
+            state.suspicion=clamp(state.suspicion+10); state.legacy.greed++;
+            addLog("Leurs clôtures tombent à leur tour.","bad"); }}
+        ]
+      },
+      {
+        art:"night",
+        title:"Le troupeau dispersé",
+        text:()=>`Au petit matin, une partie du troupeau est éparpillée sur trois kilomètres. Cette fois, il y a des traces de chevaux.`,
+        image:"Des bêtes dispersées dans la brume",
+        choices:[
+          {label:"Porter plainte auprès des autorités",apply:()=>{
+            const law=factionOfType("law");
+            if(law && law.relation>20){ state.rival.strength=clamp(state.rival.strength-12,10,100);
+              addLog("Les autorités mettent le nez dans les affaires d'en face.","good"); }
+            else { state.suspicion=clamp(state.suspicion+8);
+              addLog("La plainte est enregistrée, et rangée.","bad"); }
+            state.arc.data.legal=true; }},
+          {label:"Monter la garde toutes les nuits",condition:()=>(state.cowboys||[]).length>=2,apply:()=>{
+            (state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty-4));
+            state.arc.data.guarded=true;
+            addLog("Les hommes dorment le jour et veillent la nuit. Le ranch tient.","info"); }},
+          {label:"Frapper leur troupeau à leur tour",condition:()=>state.weapons>=2,apply:()=>{
+            state.arc.data.escalated=true; state.legacy.greed++;
+            state.rival.relation=clamp(state.rival.relation-25,-100,100);
+            state.rival.strength=clamp(state.rival.strength-8,10,100);
+            state.suspicion=clamp(state.suspicion+18);
+            addLog("La nuit suivante, c'est leur troupeau qui court dans la vallée.","bad"); }}
+        ]
+      },
+      {
+        art:"rider",
+        title:"Face à face",
+        text:()=>{
+          const leader = ensureRivalLeader();
+          return `${leader.name} ${state.rival.name} vous attend au bout du chemin, seul, à cheval. Il veut parler. Ou en finir.`;
+        },
+        image:"Deux cavaliers immobiles, à cinquante mètres",
+        choices:[
+          {label:"Descendre de cheval et lui tendre la main",apply:()=>{
+            const calm = state.arc.data.restraint || state.arc.data.legal || state.arc.data.guarded;
+            if(chance(calm?.85:.45)){
+              state.rival.relation=clamp(state.rival.relation+rand(35,55),-100,100);
+              state.reputation=clamp(state.reputation+10); state.legacy.honor++;
+              addLog("Les deux familles enterrent la hache. Le comté n'en revient pas.","good");
+            } else {
+              state.founder.health=clamp(state.founder.health-rand(10,22));
+              addLog("La main tendue est refusée, et la rencontre tourne mal.","bad"); } }},
+          {label:"Poser vos conditions, armes visibles",condition:()=>state.weapons>=1,apply:()=>{
+            if(chance(.5+state.weapons*.04)){
+              state.rival.strength=clamp(state.rival.strength-rand(15,28),10,100);
+              addLog("Le rival recule. La pression retombe, pour un temps.","good");
+            } else {
+              const l=Math.min(state.cattle,rand(5,14)); state.cattle-=l;
+              state.rival.relation=clamp(state.rival.relation-15,-100,100);
+              addLog(`L'épreuve de force échoue : ${l} bêtes perdues.`,"bad"); } }},
+          {label:"Faire demi-tour sans un mot",apply:()=>{
+            state.reputation=clamp(state.reputation-6);
+            state.rival.relation=clamp(state.rival.relation+8,-100,100);
+            addLog("Vous rentrez au ranch. Le comté jasera, mais personne n'est mort.","info"); }}
+        ]
+      }
+    ]
+  },
+  {
+    id:"oldHand",
+    title:"Le vieux compagnon",
+    canStart:()=>(state.cowboys||[]).some(c=>(c.years||0)>=12),
+    steps:[
+      {
+        art:"ranch",
+        title:"Une confidence tardive",
+        text:()=>{
+          const c=oldestHand();
+          if(!c) return "Un ancien du ranch vous prend à part un soir. Il dit qu'il a quelque chose à régler avant qu'il ne soit trop tard.";
+          return `${c.name}, ${c.from}, vous prend à part un soir. Il dit qu'il a quelque chose à régler avant qu'il ne soit trop tard.`;
+        },
+        image:"Deux hommes sous le porche, à la nuit tombée",
+        choices:[
+          {label:"L'écouter jusqu'au bout",apply:()=>{
+            const c=oldestHand();
+            state.arc.data.name = c ? c.name : "Le vieux";
+            if(c) c.loyalty=clamp(c.loyalty+20);
+            state.arc.data.listened=true;
+            addLog(`${state.arc.data.name} parle longtemps. Vous ne le regarderez plus pareil.`,"good"); }},
+          {label:"Lui dire que ça attendra demain",apply:()=>{
+            const c=oldestHand();
+            state.arc.data.name = c ? c.name : "Le vieux";
+            if(c) c.loyalty=clamp(c.loyalty-10);
+            state.arc.data.listened=false;
+            addLog("La conversation est remise à plus tard.","info"); }}
+        ]
+      },
+      {
+        art:"ranch",
+        title:"Le service rendu",
+        text:()=>`${state.arc.data.name} demande une chose, une seule, après toutes ces années.`,
+        image:"Une main calleuse posée sur une barrière",
+        choices:[
+          {label:"Lui avancer de quoi régler son affaire",condition:()=>state.money>=sc(200),apply:()=>{
+            state.money-=sc(200); state.arc.data.helped=true;
+            addLog(`${state.arc.data.name} part trois semaines, et revient plus léger.`,"good"); }},
+          {label:"L'accompagner vous-même",apply:()=>{
+            state.arc.data.helped=true; state.arc.data.went=true;
+            state.founder.health=clamp(state.founder.health-rand(2,8));
+            addLog(`Vous partez avec lui. Ce que vous avez fait là-bas ne regarde personne.`,"good"); }},
+          {label:"Refuser : ce n'est pas l'affaire du ranch",apply:()=>{
+            state.arc.data.helped=false;
+            addLog(`${state.arc.data.name} hoche la tête et n'insiste pas.`,"info"); }}
+        ]
+      },
+      {
+        art:"ranch",
+        title:"La dernière tournée",
+        text:()=>`${state.arc.data.name} ne se relève pas, ce matin-là. Le bunkhouse est silencieux.`,
+        image:"Un chapeau posé sur une couverture pliée",
+        choices:[
+          {label:"L'enterrer sur la colline du ranch",apply:()=>{
+            const idx=(state.cowboys||[]).findIndex(c=>c.name===state.arc.data.name);
+            if(idx>=0) state.cowboys.splice(idx,1);
+            (state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty+(state.arc.data.helped?15:6)));
+            state.unity=clamp(state.unity+8); state.reputation=clamp(state.reputation+5);
+            state.legacy.honor++;
+            addLog(`${state.arc.data.name} repose sur la colline, face aux pâturages. Les hommes s'en souviendront.`,"good"); }},
+          {label:"Le renvoyer à sa famille, s'il en reste",apply:()=>{
+            const idx=(state.cowboys||[]).findIndex(c=>c.name===state.arc.data.name);
+            if(idx>=0) state.cowboys.splice(idx,1);
+            state.money-=Math.min(state.money,sc(80));
+            addLog(`Le corps de ${state.arc.data.name} part vers l'est, aux frais du ranch.`,"info"); }}
+        ]
+      }
+    ]
+  }
+];
+
+function arcById(id){ return ARCS.find(a => a.id === id); }
+
+// Le plus ancien de l'équipe, ou n'importe qui s'il n'en reste pas.
+function oldestHand(){
+  const hands = state.cowboys || [];
+  if(!hands.length) return null;
+  return hands.reduce((a,b) => (b.years||0) > (a.years||0) ? b : a, hands[0]);
+}
+
+// Peut-on démarrer un arc ? Un seul à la fois, et jamais deux fois le même.
+function maybeStartArc(){
+  if(state.arc) return;
+  if(state.turn < (state.arcCooldown || 0)) return;
+  const done = state.arcsDone || [];
+  const pool = ARCS.filter(a => {
+    if(done.includes(a.id)) return false;
+    try{ return a.canStart(); }catch(e){ return false; }
+  });
+  if(!pool.length) return;
+  if(!chance(.28)) return;
+  const arc = pool[rand(0,pool.length-1)];
+  state.arc = {id:arc.id, step:0, due:state.turn + rand(0,1), data:{}};
+}
+
+// Un chapitre est-il mûr ? Si oui, on l'ouvre et on renvoie true.
+function maybeShowArcStep(){
+  if(!state.arc) return false;
+  const arc = arcById(state.arc.id);
+  if(!arc){ state.arc = null; return false; }
+  if(state.turn < state.arc.due) return false;
+  const step = arc.steps[state.arc.step];
+  if(!step){ finishArc(); return false; }
+
+  try{
+    return presentArcStep(step);
+  }catch(e){
+    // Le sujet de l'arc a disparu en cours de route : on referme l'histoire
+    // proprement plutôt que d'interrompre la partie.
+    addLog(`— ${arc.title} : l'affaire s'éteint d'elle-même. —`, "info");
+    finishArc();
+    return false;
+  }
+}
+
+function presentArcStep(step){
+  presentEvent({
+    title: step.title,
+    text: step.text,
+    image: step.image,
+    art: step.art,
+    choices: step.choices.map(c => ({
+      label: c.label,
+      condition: c.condition,
+      apply: () => {
+        c.apply();
+        advanceArc(c.goto !== undefined ? c.goto : state.arc.step + 1);
+      }
+    }))
+  });
+  return true;
+}
+
+function advanceArc(nextStep){
+  const arc = arcById(state.arc.id);
+  if(!arc || nextStep >= arc.steps.length){ finishArc(); return; }
+  state.arc.step = nextStep;
+  const delay = arc.steps[nextStep].delay || [2,5];
+  state.arc.due = state.turn + rand(delay[0], delay[1]);
+}
+
+function finishArc(){
+  if(!state.arc) return;
+  const arc = arcById(state.arc.id);
+  if(!state.arcsDone) state.arcsDone = [];
+  state.arcsDone.push(state.arc.id);
+  if(arc) addLog(`— ${arc.title} : l'affaire est close. —`, "info");
+  state.arc = null;
+  state.arcCooldown = state.turn + rand(6,12);
+}
+
+// ---- Doctrines : le choix qui ouvre chaque époque ----
+// À chaque bascule, une décision structurante dont l'effet court sur toute
+// l'époque. C'est ce qui donne à une partie sa trajectoire reconnaissable.
+const DOCTRINES = {
+  prohibition:[
+    {id:"dry", icon:"🚱", name:"Tenir le ranch à l'écart de l'alcool",
+     what:"Aucune caisse ne traversera vos terres. La loi vous saura gré.",
+     effect:"Soupçons contenus, autorité gagnée — mais rien de ce que rapporte la contrebande.",
+     apply:()=>{ state.suspicion = clamp(state.suspicion - 25);
+       const f=factionOfType("law"); if(f) f.relation=clamp(f.relation+30,-100,100); }},
+    {id:"wet", icon:"🥃", name:"Ouvrir la grange aux convois",
+     what:"Le ranch devient un point de passage discret entre la frontière et la ville.",
+     effect:"Une rente régulière, et des soupçons qui ne redescendent jamais tout à fait.",
+     apply:()=>{ state.money += sc(420); state.suspicion = clamp(state.suspicion + 18);
+       const f=factionOfType("law"); if(f) f.relation=clamp(f.relation-20,-100,100); }}
+  ],
+  depression:[
+    {id:"charity", icon:"🍲", name:"Nourrir le comté",
+     what:"Tant qu'il restera du grain au ranch, personne ne repartira le ventre vide.",
+     effect:"Réputation et voisinage acquis pour toute l'époque, au prix du troupeau.",
+     apply:()=>{ state.reputation = clamp(state.reputation + 18); state.legacy.honor += 2;
+       state.cattle = Math.max(0, state.cattle - Math.floor(state.cattle*.12));
+       const f=factionOfType("community"); if(f) f.relation=clamp(f.relation+35,-100,100); }},
+    {id:"buyout", icon:"📉", name:"Racheter les voisins ruinés",
+     what:"La crise met des terres sur le marché à prix cassés. Vous avez de quoi.",
+     effect:"Le domaine s'agrandit fortement, mais le comté ne l'oubliera pas.",
+     apply:()=>{ state.land += 90; state.money -= Math.min(state.money, sc(340));
+       state.legacy.greed += 2; state.reputation = clamp(state.reputation - 10);
+       const f=factionOfType("community"); if(f) f.relation=clamp(f.relation-25,-100,100); }}
+  ],
+  industrial:[
+    {id:"machines", icon:"🚜", name:"Mécaniser le domaine",
+     what:"Tracteurs, camions, clôtures électriques. Le siècle passe par là.",
+     effect:"Rendement durablement supérieur, mais les hommes deviennent moins nécessaires.",
+     apply:()=>{ state.money -= Math.min(state.money, sc(500)); state.land += 40;
+       state.cattlePriceMin = Math.min(state.cattlePriceMax-4, state.cattlePriceMin + 4);
+       if((state.cowboys||[]).length > 2){ const c = state.cowboys.pop();
+         addLog(`${c.name} comprend que la machine le remplace, et s'en va.`, "bad"); } }},
+    {id:"hands", icon:"🤠", name:"Rester une affaire d'hommes et de chevaux",
+     what:"Ce ranch s'est bâti à cheval, il continuera à cheval.",
+     effect:"Équipe soudée et réputation d'authenticité, au prix du rendement.",
+     apply:()=>{ (state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty+18));
+       state.reputation = clamp(state.reputation + 12); state.horses += 2;
+       state.unity = clamp(state.unity + 8); }}
+  ],
+  corporate:[
+    {id:"company", icon:"🏢", name:"Constituer une société",
+     what:"Le ranch devient une raison sociale, avec un conseil et des comptes consolidés.",
+     effect:"Le négoce s'ouvre en grand, la famille perd un peu de son âme.",
+     apply:()=>{ state.money += sc(600);
+       const f=factionOfType("trade"); if(f) f.relation=clamp(f.relation+35,-100,100);
+       state.unity = clamp(state.unity - 10); state.legacy.greed++; }},
+    {id:"family", icon:"👨‍👩‍👧", name:"Rester une exploitation familiale",
+     what:"Pas de conseil, pas d'actionnaires. Le nom sur la boîte aux lettres suffit.",
+     effect:"Une maison unie et respectée, face à des concurrents mieux armés.",
+     apply:()=>{ state.unity = clamp(state.unity + 15); state.reputation = clamp(state.reputation + 10);
+       state.legacy.honor++;
+       if(state.rival) state.rival.strength = clamp(state.rival.strength + 8, 10, 100); }}
+  ],
+  globalization:[
+    {id:"export", icon:"🌍", name:"Vendre au marché mondial",
+     what:"Vos bêtes partiront en conteneur vers des pays que le fondateur ne savait pas placer.",
+     effect:"Cours du bétail nettement relevé, exposition aux humeurs du monde.",
+     apply:()=>{ state.cattlePriceMax = Math.round(state.cattlePriceMax*1.3);
+       state.cattlePriceMin = Math.round(state.cattlePriceMin*1.15);
+       state.money += sc(400);
+       const f=factionOfType("trade"); if(f) f.relation=clamp(f.relation+25,-100,100); }},
+    {id:"terroir", icon:"🌾", name:"Miser sur le circuit court",
+     what:"Vente directe, label local, clientèle qui connaît le nom du ranch.",
+     effect:"Réputation et opinion durablement acquises, croissance plus lente.",
+     apply:()=>{ state.reputation = clamp(state.reputation + 20);
+       const m=factionOfType("media"); if(m) m.relation=clamp(m.relation+30,-100,100);
+       const c=factionOfType("community"); if(c) c.relation=clamp(c.relation+20,-100,100); }}
+  ],
+  modern:[
+    {id:"tourism", icon:"🏨", name:"Ouvrir le ranch au public",
+     what:"Gîtes, séjours à cheval, mariages dans la grange restaurée.",
+     effect:"Rentrées importantes et régulières, intimité familiale sacrifiée.",
+     apply:()=>{ state.money += sc(900); state.unity = clamp(state.unity - 12);
+       const m=factionOfType("media"); if(m) m.relation=clamp(m.relation+25,-100,100); }},
+    {id:"conservancy", icon:"🌲", name:"Classer les terres en réserve",
+     what:"Le domaine devient inaliénable. Aucun promoteur n'y touchera jamais.",
+     effect:"Le rival perd tout moyen de pression, mais l'argent facile disparaît.",
+     apply:()=>{ if(state.rival){ state.rival.strength = clamp(state.rival.strength - 30, 10, 100);
+         state.rival.relation = clamp(state.rival.relation + 15, -100, 100); }
+       state.reputation = clamp(state.reputation + 15); state.legacy.honor += 2;
+       const c=factionOfType("community"); if(c) c.relation=clamp(c.relation+30,-100,100); }}
+  ]
+};
+
+function doctrinesFor(eraId){ return DOCTRINES[eraId] || null; }
+
+function chooseDoctrine(eraId, id){
+  const list = doctrinesFor(eraId);
+  if(!list) return;
+  const d = list.find(x => x.id === id);
+  if(!d) return;
+  if(!state.doctrines) state.doctrines = {};
+  if(typeof state.nextParcelId !== "number") state.nextParcelId = 1;
+  ensureParcels();
+  if(state.arc === undefined) state.arc = null;
+  if(!Array.isArray(state.arcsDone)) state.arcsDone = [];
+  if(typeof state.arcCooldown !== "number") state.arcCooldown = 0;
+  // Un arc dont l'identifiant a disparu du code ne doit pas bloquer la partie.
+  if(state.arc && !arcById(state.arc.id)) state.arc = null;
+  state.doctrines[eraId] = id;
+  d.apply();
+  addLog(`Tournant de l'époque — ${d.name}. ${d.effect}`, "good");
+  $("eventModal").classList.add("hidden");
+  finishTurn();
+}
+
+// ---- La lignée rivale ----
+// En face aussi, quelqu'un vieillit et meurt. Le tempérament du chef d'en face
+// oriente la relation et la force du clan pendant toute sa vie.
+const RIVAL_TRAITS = {
+  conciliant:{
+    label:"Conciliant", icon:"🕊️",
+    desc:"Cherche l'arrangement plutôt que l'affrontement.",
+    relationDrift:2, strengthDrift:-1
+  },
+  brutal:{
+    label:"Brutal", icon:"🔥",
+    desc:"Règle ses affaires par la force, et vite.",
+    relationDrift:-3, strengthDrift:2
+  },
+  calculateur:{
+    label:"Calculateur", icon:"📈",
+    desc:"Préfère vous étrangler par les comptes que par les armes.",
+    relationDrift:-1, strengthDrift:1
+  },
+  orgueilleux:{
+    label:"Orgueilleux", icon:"🎩",
+    desc:"Ne pardonne pas un affront, mais tient parole.",
+    relationDrift:-2, strengthDrift:1
+  },
+  use:{
+    label:"Usé", icon:"🥀",
+    desc:"N'a plus le cœur à la lutte, et cela se voit.",
+    relationDrift:1, strengthDrift:-2
+  }
+};
+const RIVAL_TRAIT_IDS = Object.keys(RIVAL_TRAITS);
+
+function newRivalLeader(surname, age){
+  const sex = chance(.3) ? "f" : "m";
+  return {
+    name: pickPartnerName(sex),
+    sex,
+    age: age !== undefined ? age : rand(30,48),
+    trait: RIVAL_TRAIT_IDS[rand(0,RIVAL_TRAIT_IDS.length-1)],
+    alive: true,
+    since: state ? state.year : 1885
+  };
+}
+
+function ensureRivalLeader(){
+  if(!state.rival) return null;
+  if(!state.rival.leader || state.rival.leader.alive === false){
+    state.rival.leader = newRivalLeader(state.rival.name);
+    if(!state.rival.lineage) state.rival.lineage = [];
+    state.rival.lineage.push({
+      name: state.rival.leader.name,
+      trait: state.rival.leader.trait,
+      from: state.year,
+      to: null
+    });
+  }
+  return state.rival.leader;
+}
+
+// Vieillissement annuel du chef d'en face, et passage de témoin.
+function ageRivalLeader(){
+  const r = state.rival;
+  if(!r) return;
+  const leader = ensureRivalLeader();
+  leader.age++;
+  let mortality = 0;
+  if(leader.age > 62) mortality += (leader.age - 61) * .02;
+  if(!chance(mortality)) return;
+
+  leader.alive = false;
+  const line = (r.lineage||[]).find(l => l.to === null);
+  if(line) line.to = state.year;
+  const era = ERAS.find(e=>e.id===state.eraId) || getEra(state.year);
+  addLog(`${leader.name} ${r.name}, à la tête de ${era.rivalType}, est mort à ${leader.age} ans.`, "info");
+
+  const heir = newRivalLeader(r.name, rand(26,42));
+  r.leader = heir;
+  if(!r.lineage) r.lineage = [];
+  r.lineage.push({name:heir.name, trait:heir.trait, from:state.year, to:null});
+
+  // Une succession en face rebat les cartes : le nouveau venu n'a pas les
+  // rancunes de son père, ni ses accords.
+  const t = RIVAL_TRAITS[heir.trait];
+  r.relation = clamp(Math.round(r.relation * .55) + rand(-8,14), -100, 100);
+  r.strength = clamp(r.strength + (heir.trait === "brutal" ? rand(4,12) : rand(-8,4)), 10, 100);
+  addLog(`${heir.name} ${r.name} prend la suite. ${t.desc}`, heir.trait === "brutal" ? "bad" : "info");
+}
+
+function rivalTraitOf(){
+  const leader = state.rival && state.rival.leader;
+  return (leader && RIVAL_TRAITS[leader.trait]) || RIVAL_TRAITS.calculateur;
+}
+
 // ---- Les chevaux ----
 // Le ranch a un cheval de tête, nommé et suivi. On l'entraîne, il gagne les
 // concours, il vieillit — et il peut être volé, ou volé à d'autres.
@@ -1328,6 +2117,40 @@ function coupleCanConceive(){
   const father = mother === state.founder ? state.spouse : state.founder;
   return mother.age < 40 && !!father && father.alive;
 }
+
+// D'où ils viennent, ce qui les tient. Sans cela, perdre un vétéran de vingt
+// ans n'était qu'une ligne de journal.
+const COWBOY_ORIGINS = [
+  {from:"a grandi dans un orphelinat du Missouri", quirk:"ne parle jamais de sa famille"},
+  {from:"a déserté l'armée après une campagne de trop", quirk:"dort toujours face à la porte"},
+  {from:"a perdu son propre ranch dans un hiver", quirk:"compte le bétail deux fois par jour"},
+  {from:"est arrivé du Texas avec un convoi et n'est jamais reparti", quirk:"chante en travaillant"},
+  {from:"a fait deux ans de prison pour une bagarre", quirk:"évite la ville les jours de marché"},
+  {from:"a suivi une femme jusqu'ici, qui est partie sans lui", quirk:"garde une photo dans sa botte"},
+  {from:"vient d'une famille de forgerons qu'il a fuie", quirk:"répare tout ce qui traîne"},
+  {from:"a traversé la moitié du pays à pied", quirk:"refuse de monter les chevaux nerveux"},
+  {from:"a été convoyeur sur la piste de Chisholm", quirk:"raconte toujours la même histoire"},
+  {from:"n'a jamais dit d'où il venait", quirk:"se tait quand on lui pose la question"}
+];
+
+const COWBOY_FAREWELLS = [
+  "serre trois mains, monte en selle, et ne se retourne pas",
+  "laisse son chapeau accroché dans le bunkhouse",
+  "part avant l'aube pour éviter les adieux",
+  "promet d'écrire, et n'écrira pas",
+  "s'en va en disant qu'il reviendra quand les prix remonteront"
+];
+
+function decorateCowboy(c){
+  if(!c.from){
+    const o = COWBOY_ORIGINS[rand(0,COWBOY_ORIGINS.length-1)];
+    c.from = o.from;
+    c.quirk = o.quirk;
+  }
+  return c;
+}
+
+const farewell = () => COWBOY_FAREWELLS[rand(0,COWBOY_FAREWELLS.length-1)];
 
 const COWBOY_TRAITS = [
   {name:"Vétéran", desc:"Gagne en loyauté avec les années"},
@@ -1658,6 +2481,16 @@ function ensureProgress(){
     if(typeof state.stats[k] !== "number") state.stats[k] = 0;
   });
   if(state.heirId === undefined) state.heirId = null;
+  if(!state.doctrines) state.doctrines = {};
+  if(typeof state.nextParcelId !== "number") state.nextParcelId = 1;
+  ensureParcels();
+  if(state.arc === undefined) state.arc = null;
+  if(!Array.isArray(state.arcsDone)) state.arcsDone = [];
+  if(typeof state.arcCooldown !== "number") state.arcCooldown = 0;
+  // Un arc dont l'identifiant a disparu du code ne doit pas bloquer la partie.
+  if(state.arc && !arcById(state.arc.id)) state.arc = null;
+  if(state.rival && !state.rival.lineage) state.rival.lineage = [];
+  if(state.rival) ensureRivalLeader();
   if(state.champion === undefined) state.champion = null;
   if(state.champion){
     if(typeof state.champion.training !== "number") state.champion.training = 0;
@@ -2020,13 +2853,21 @@ function baseState() {
     rival:{
       name:["Dawson","Hargrove","Kessler","McAllister","Voss"][rand(0,4)],
       relation:rand(-20,10),
-      strength:rand(30,55)
+      strength:rand(30,55),
+      leader:null,
+      lineage:[]
     },
     eraId:getEra(1885).id,
     factions:generateFactions(getEra(1885)),
     secret:{type:SECRET_TYPES[rand(0,SECRET_TYPES.length-1)], stage:0},
     legacy:{honor:0, greed:0, grudges:[]},
     achievements:[],
+    doctrines:{},
+    parcels:[],
+    nextParcelId:1,
+    arc:null,
+    arcsDone:[],
+    arcCooldown:0,
     stats:{competitionWins:0, illegalWins:0, plannedSuccessions:0, contestedSuccessions:0},
     heirId:null,
     nextCid:1,
@@ -2051,6 +2892,8 @@ function startGame(){
   ensureProgress();
   ensureCowboys();
   ensureChampion();
+  ensureRivalLeader();
+  ensureParcels();
   $("setupScreen").classList.add("hidden");
   $("gameScreen").classList.remove("hidden");
   addLog(`La famille ${state.familyName} prend possession du ${state.ranchName}.`, "good");
@@ -2356,7 +3199,9 @@ function doAction(type){
     const cost = spend(260);
     if(cost === false) return;
     useAction(); state.land += 20;
-    addLog(`Le domaine s’agrandit de 20 hectares pour ${cost} $.`, "good");
+    const p = addParcel(20);
+    const k = PARCEL_KINDS[p.kind];
+    addLog(`Le domaine s’agrandit : ${k.icon} le ${k.label.toLowerCase()} ${p.name}, 20 hectares pour ${cost} $.`, "good");
   }
 
   if(type === "bribe"){
@@ -2608,17 +3453,20 @@ function endTurn(){
   // La rivalité avec la famille adverse évolue
   if(!state.rival) state.rival = {name:"Dawson",relation:0,strength:40};
   const currentEra = ERAS.find(e=>e.id===state.eraId) || getEra(state.year);
-  state.rival.relation = clamp(state.rival.relation + rand(-3,2), -100, 100);
-  state.rival.strength = clamp(state.rival.strength + rand(-2,3), 10, 100);
+  const rivalTrait = rivalTraitOf();
+  state.rival.relation = clamp(state.rival.relation + rand(-2,2) + rivalTrait.relationDrift, -100, 100);
+  state.rival.strength = clamp(state.rival.strength + rand(-2,2) + rivalTrait.strengthDrift, 10, 100);
   const avgShootDef = (state.cowboys&&state.cowboys.length) ? state.cowboys.reduce((s,c)=>s+c.shoot,0)/state.cowboys.length : 0;
   const guards = roleCount("security");
   // Un voisinage acquis surveille les pistes ; un voisinage hostile ferme les yeux
   const defense = state.weapons*4 + avgShootDef*0.4 + guards*10 + communityStance*18;
   const raidChance = clamp((state.rival.strength - defense) / 300, .03, .35);
   if(state.rival.relation < -40 && chance(raidChance)){
+    const target = pickExposedParcel();
     const loss = Math.min(state.cattle, rand(2, 4 + Math.floor(state.rival.strength/20)));
     state.cattle -= loss;
-    addLog(`${currentEra.rivalVerb.charAt(0).toUpperCase()+currentEra.rivalVerb.slice(1)} ${state.rival.name} font disparaître ${loss} tête${loss>1?"s":""} de bétail durant la nuit.`, "bad");
+    const where = target ? ` depuis ${PARCEL_KINDS[target.kind].label.toLowerCase()} ${target.name}` : "";
+    addLog(`${currentEra.rivalVerb.charAt(0).toUpperCase()+currentEra.rivalVerb.slice(1)} ${state.rival.name} font disparaître ${loss} tête${loss>1?"s":""} de bétail durant la nuit${where}.`, "bad");
   } else if(state.rival.relation > 40 && chance(.15)){
     state.reputation = clamp(state.reputation+3);
     addLog(`Un accord tacite avec ${currentEra.rivalType} des ${state.rival.name} apaise la région.`, "good");
@@ -2669,6 +3517,10 @@ function endTurn(){
   // Une brève à chaque trimestre : le journal n'est jamais vide.
   showBrief();
 
+  // Un arc en cours prime sur le reste : c'est le fil qu'on veut voir avancer.
+  maybeStartArc();
+  if(maybeShowArcStep()) return;
+
   // Événement
   const eventChance = .82 * state.eventModifier;
   if(maybeShowSecretEvent()){
@@ -2685,15 +3537,33 @@ function showEraTransition(era){
   $("eventText").textContent = era.desc;
   setEventArt({art:"city", image:"Une nouvelle époque commence"});
   $("eventChoices").innerHTML = "";
-  const btn = document.createElement("button");
-  btn.className = "choice";
-  btn.textContent = "Continuer";
-  btn.onclick = () => {
-    $("eventModal").classList.add("hidden");
-    addLog(`Une nouvelle époque commence : ${era.name}.`, "info");
-    finishTurn();
-  };
-  $("eventChoices").appendChild(btn);
+  addLog(`Une nouvelle époque commence : ${era.name}.`, "info");
+
+  const doctrines = doctrinesFor(era.id);
+  if(doctrines){
+    // Le tournant d'époque : une décision qui engage les vingt années suivantes.
+    $("eventText").textContent = era.desc
+      + "\n\nLe moment est venu de choisir la ligne que suivra le ranch pendant toute cette époque.";
+    $("eventText").style.whiteSpace = "pre-line";
+    doctrines.forEach(d => {
+      const btn = document.createElement("button");
+      btn.className = "choice doctrine";
+      btn.innerHTML = `<span class="op-name">${d.icon} ${d.name}</span>`
+        + `<span class="op-what">${d.what}</span>`
+        + `<span class="doctrine-effect">${d.effect}</span>`;
+      btn.onclick = () => chooseDoctrine(era.id, d.id);
+      $("eventChoices").appendChild(btn);
+    });
+  } else {
+    const btn = document.createElement("button");
+    btn.className = "choice";
+    btn.textContent = "Continuer";
+    btn.onclick = () => {
+      $("eventModal").classList.add("hidden");
+      finishTurn();
+    };
+    $("eventChoices").appendChild(btn);
+  }
   $("eventModal").classList.remove("hidden");
 }
 
@@ -2718,13 +3588,13 @@ function ageCowboys(){
 
     // Les vétérans très anciens finissent par prendre leur retraite
     if(c.years >= 30 && chance(.35)){
-      addLog(`${c.name} prend sa retraite après ${c.years} ans de service au ranch.`, "info");
+      addLog(`${c.name} prend sa retraite après ${c.years} ans de service. Il ${farewell()}.`, "info");
       state.cowboys.splice(i,1);
       continue;
     }
     // Un cow-boy trop peu loyal peut partir de lui-même
     if(c.loyalty < 20 && chance(.25)){
-      addLog(`${c.name} quitte le ranch, lassé des conditions.`, "bad");
+      addLog(`${c.name} quitte le ranch, lassé des conditions. Il ${farewell()}.`, "bad");
       state.cowboys.splice(i,1);
       continue;
     }
@@ -2746,6 +3616,7 @@ function ageCowboys(){
 function ageFamily(){
   ageCowboys();
   ageHorses();
+  ageRivalLeader();
   [state.founder,state.spouse].forEach(p => {
     if(!p.alive) return;
     p.age++;
@@ -4026,6 +4897,11 @@ document.getElementById("familyBtn").addEventListener("click",()=>{renderFamily(
 <button class="choice" onclick="chronicleModal.classList.add('hidden')">Fermer</button>
 </div></div>
 <div id="diplomacyModal" class="modal hidden"><div class="modal-card"><h2>Diplomatie locale</h2><div id="diplomacyContent"></div><button class="choice" onclick="diplomacyModal.classList.add('hidden')">Fermer</button></div></div>
+<div id="mapModal" class="modal hidden"><div class="modal-card">
+<h2>Le domaine</h2>
+<div id="mapContent"></div>
+<button class="choice" onclick="mapModal.classList.add('hidden')">Fermer</button>
+</div></div>
 <div id="goalsModal" class="modal hidden"><div class="modal-card"><h2>Objectifs de la dynastie</h2><div id="goalsContent"></div><button class="choice" onclick="goalsModal.classList.add('hidden')">Fermer</button></div></div>
 <div id="illegalModal" class="modal hidden"><div class="modal-card">
 <h2>Coups en douce</h2>
@@ -4047,15 +4923,24 @@ function ensureCowboys(){
  state.cowboys.forEach(c=>{
    if(c.years===undefined) c.years=0;
    if(!c.trait) c.trait=COWBOY_TRAITS[rand(0,COWBOY_TRAITS.length-1)].name;
+   decorateCowboy(c);
  });
 }
 function renderCowboys(){
  ensureCowboys();
- let h="<ul>";
+ const capacity = Math.max(20, Math.floor(state.land/3));
+ const utiles = Math.max(1, Math.ceil(Math.min(state.cattle, capacity)/25));
+ const total = state.cowboys.length;
+ let h = "<p class=\"modal-intro\">Il faut environ <b>un homme pour vingt-cinq bêtes</b>. "
+   + "Avec "+Math.min(state.cattle,capacity)+" bêtes à l'ouvrage, <b>"+Math.min(total,utiles)+"</b> homme"
+   + (Math.min(total,utiles)>1?"s":"")+" sur "+total+" pèse"+(Math.min(total,utiles)>1?"nt":"")+" sur le rendement"
+   + (total>utiles ? " — les "+(total-utiles)+" autres touchent leur paie sans contrepartie." : ".")
+   + "</p><ul>";
  state.cowboys.forEach((c,i)=>{
    const anc = c.years>=15?"Vétéran du ranch":(c.years>=5?"Confirmé":"Nouveau");
    const loyLabel = c.loyalty>70?"Dévoué":(c.loyalty>45?"Loyal":(c.loyalty>25?"Distant":"Sur le départ"));
-   h+="<li><b>"+c.name+"</b> — <i>"+c.trait+"</i><br><small>"+anc+" · "+c.years+" an"+(c.years>1?"s":"")+" de service · "+loyLabel+"</small><br><input type=\"text\" id=\"cowboyNameInput"+i+"\" value=\""+c.name.replace(/"/g,"&quot;")+"\" style=\"width:130px;\"> <button class=\"choice\" onclick=\"renameCowboy("+i+")\">Renommer</button> <button class=\"choice\" onclick=\"fireCowboy("+i+")\">Renvoyer</button><br>Tir:"+c.shoot+" Equitation:"+c.ride+" Loyauté:"+c.loyalty+" Salaire:"+c.salary+"$/trimestre</li>";
+   h+="<li><b>"+c.name+"</b> — <i>"+c.trait+"</i><br><small>"+anc+" · "+c.years+" an"+(c.years>1?"s":"")+" de service · "+loyLabel+"</small>"
+     +"<br><small><i>"+(c.from||"")+" ; "+(c.quirk||"")+".</i></small><br><input type=\"text\" id=\"cowboyNameInput"+i+"\" value=\""+c.name.replace(/"/g,"&quot;")+"\" style=\"width:130px;\"> <button class=\"choice\" onclick=\"renameCowboy("+i+")\">Renommer</button> <button class=\"choice\" onclick=\"fireCowboy("+i+")\">Renvoyer</button><br>Tir:"+c.shoot+" Equitation:"+c.ride+" Loyauté:"+c.loyalty+" Salaire:"+c.salary+"$/trimestre</li>";
  });
  h+="</ul>";
  const totalSalary = state.cowboys.reduce((s,c)=>s+c.salary,0);
@@ -4103,6 +4988,7 @@ function hireCowboy(){
    years:0,
    trait:COWBOY_TRAITS[rand(0,COWBOY_TRAITS.length-1)].name
  });
+ decorateCowboy(state.cowboys[state.cowboys.length-1]);
  addLog(name+" rejoint le ranch comme cow-boy pour "+cost+" $.", "good");
  renderCowboys();
  render();
@@ -4117,6 +5003,10 @@ chronicleBtn.addEventListener("click",()=>{ ensureCowboys();
 diplomacyBtn.addEventListener("click",()=>{
  renderDiplomacy();
  diplomacyModal.classList.remove("hidden");
+});
+mapBtn.addEventListener("click",()=>{
+ renderMap();
+ mapModal.classList.remove("hidden");
 });
 goalsBtn.addEventListener("click",()=>{
  renderGoals();
@@ -4192,9 +5082,13 @@ function renderDiplomacy(){
  let h = "";
  if(state.rival){
    const r = state.rival;
+   const leader = ensureRivalLeader();
+   const t = rivalTraitOf();
    const status = r.relation>60?"Alliance":(r.relation>20?"Cordiale":(r.relation<-60?"Guerre ouverte":(r.relation<-20?"Hostile":"Neutre")));
    h += "<div style='margin-bottom:14px;padding:10px;border:2px solid var(--line);'>";
    h += "<b>"+r.name+"</b> — "+currentEra.rivalType+" <i>(rival principal de la saga)</i><br>";
+   h += "À sa tête : <b>"+leader.name+" "+r.name+"</b>, "+leader.age+" ans — "
+      + t.icon+" <i>"+t.label+"</i><br><small>"+t.desc+"</small><br>";
    h += "Statut : <b>"+status+"</b> (relation : "+r.relation+", force : "+r.strength+")<br>";
    h += "<button class=\"choice\" onclick=\"doAction('rivalNegotiate');renderDiplomacy();\">Négocier ("+sc(50)+" $)</button> ";
    h += "<button class=\"choice\" onclick=\"doAction('rivalAction');renderDiplomacy();\">Affronter ("+sc(70)+" $)</button>";
@@ -4293,7 +5187,16 @@ function renderLineage(){
  h += "</ul>";
  if(state.rival){
    const currentEra = ERAS.find(e=>e.id===state.eraId) || getEra(state.year);
-   h += "<hr><p><b>Rivaux traversant les générations :</b><br>La lignée "+state.rival.name+", aujourd'hui incarnée par "+currentEra.rivalType+", relation actuelle : "+state.rival.relation+"</p>";
+   const leader = ensureRivalLeader();
+   h += "<hr><p><b>La lignée "+state.rival.name+"</b> — aujourd'hui "+currentEra.rivalType
+      + ", relation actuelle : "+state.rival.relation+"</p>";
+   h += "<ul>";
+   (state.rival.lineage||[]).forEach(l=>{
+     const t = RIVAL_TRAITS[l.trait] || {label:"?",icon:""};
+     h += "<li>"+t.icon+" <b>"+l.name+" "+state.rival.name+"</b> — <i>"+t.label+"</i><br>"
+        + l.from+" – "+(l.to || "aujourd'hui")+"</li>";
+   });
+   h += "</ul>";
  }
  const l = state.legacy;
  if(l){
@@ -4348,7 +5251,7 @@ document.addEventListener("keydown",function(e){
  if(e.key!=="Escape") return;
  const menu=document.getElementById("gameMenu");
  if(menu&&menu.open){ menu.open=false; return; }
- const open=["eventModal","familyModal","cowboyModal","chronicleModal","diplomacyModal","goalsModal","illegalModal"]
+ const open=["eventModal","familyModal","cowboyModal","chronicleModal","diplomacyModal","goalsModal","illegalModal","mapModal"]
    .map(id=>document.getElementById(id))
    .filter(m=>m&&!m.classList.contains("hidden")&&m.id!=="eventModal");
  if(open.length) open[open.length-1].classList.add("hidden");

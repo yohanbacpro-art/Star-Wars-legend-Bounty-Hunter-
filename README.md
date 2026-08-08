@@ -1,4 +1,4 @@
-# Ranch Dynasty — V2.1
+# Ranch Dynasty — V3.0
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -16,7 +16,7 @@ Tout tient dans `index.html` (~2000 lignes), organisé en quatre blocs `<script>
 |---|---|
 | Bloc 1 | Cœur du jeu : `ERAS`, `events`, `baseState()`, `render()`, `doAction()`, `endTurn()`, `ageFamily()`, `ageCowboys()` |
 | Bloc 2 | Panneau Famille (`renderFamily`, affectation des enfants) |
-| Bloc 3 | Cow-boys, Chroniques (généalogie incluse), Diplomatie, Objectifs, Coups en douce, sauvegardes |
+| Bloc 3 | Équipe, Domaine, Chroniques (généalogie incluse), Diplomatie, Objectifs, Coups en douce, sauvegardes |
 | Bloc 4 | Liaison des boutons d'action |
 
 Le CSS est dans un unique `<style>` en tête de fichier.
@@ -37,6 +37,10 @@ Le CSS est dans un unique `<style>` en tête de fichier.
 - **`state.heirId`** — `cid` de l'héritier désigné, ou `null`. Tout enfant reçoit un `cid`
   stable via `addChild()` : c'est le seul identifiant fiable, les prénoms pouvant être
   dupliqués ou modifiés par le joueur.
+- **`state.arc` / `state.arcsDone`** — l'arc narratif en cours et ceux déjà joués.
+- **`state.doctrines`** — la voie choisie à chaque tournant d'époque.
+- **`state.parcels`** — le découpage du domaine ; leur somme doit toujours valoir `state.land`.
+- **`state.rival.leader`** — le chef d'en face, son âge et son tempérament.
 - **`state.factions`** — quatre pouvoirs locaux typés `law` / `trade` / `media` / `community`
   (voir `FACTION_TYPES`). Le type détermine l'effet concret appliqué chaque trimestre.
 
@@ -49,6 +53,42 @@ désigné prime sur l'aîné, et un frère ou une sœur rongé par la rancune pe
 en emportant terres et argent.
 
 Désigner un successeur se fait depuis le panneau **Famille**.
+
+## Arcs narratifs
+
+Un arc est une histoire en plusieurs chapitres, étalée sur des trimestres
+(`ARCS`). Un seul court à la fois : `state.arc = {id, step, due, data}`. Chaque
+chapitre attend son échéance puis s'ouvre comme un événement ; un choix peut
+brancher (`goto`) et écrire dans `data`, que les chapitres suivants relisent.
+Un arc terminé entre dans `state.arcsDone` et ne revient jamais.
+
+Cinq arcs : un procès de bornage, un enfant parti en ville, une grande
+sécheresse, une rancune de sang avec le rival, et le dernier chapitre d'un vieux
+compagnon. Un arc dont le sujet disparaît en cours de route (le vétéran meurt)
+se referme proprement plutôt que d'interrompre la partie.
+
+## Tournants d'époque
+
+Chaque bascule d'époque, sauf la première, propose deux voies structurantes
+(`DOCTRINES`) dont l'effet court sur toute l'époque : mécaniser ou rester à
+cheval, nourrir le comté ou racheter les ruinés, ouvrir au tourisme ou classer
+les terres en réserve. Le choix est mémorisé dans `state.doctrines`.
+
+## La lignée rivale
+
+En face aussi quelqu'un vieillit. `state.rival.leader` a un nom, un âge et un
+**tempérament** (`RIVAL_TRAITS`) qui oriente la dérive de la relation et de la
+force pendant toute sa vie. À sa mort, un successeur prend la suite : la
+relation est en partie remise à zéro — le nouveau n'a ni les rancunes ni les
+accords de son prédécesseur. `state.rival.lineage` garde la trace de tous.
+
+## La carte du domaine
+
+`state.land` reste la somme de référence ; `state.parcels` en est la lecture :
+des parcelles nommées, avec un type (`PARCEL_KINDS`) et une **exposition**.
+Canyons et bois se font razzier trois fois plus qu'une crête, et un raid nomme
+désormais la parcelle qu'il a frappée. `ensureParcels()` recale les parcelles
+sur `state.land` au chargement.
 
 ## Personnes
 
@@ -147,12 +187,12 @@ Courbe mesurée sur 100 parties par profil (`node tests/sim.js index.html 100 <p
 
 | Profil | Description | 2026 atteint | Patrimoine final médian* |
 |---|---|---|---|
-| `random` | clique au hasard | 1 % | 421 |
-| `passive` | ne fait rien | 15 % | 621 |
-| `outlaw` | contrebande à chaque trimestre | 59 % | 244 711 |
-| `honest` | concours et élevage | 97 % | 1 023 032 |
-| `mixed` | troupeau + crime d'appoint | 93 % | 1 587 309 |
-| `policy` | conduite du troupeau | 97 % | 1 675 328 |
+| `random` | clique au hasard | 2 % | 445 |
+| `passive` | ne fait rien | 12 % | 498 |
+| `outlaw` | contrebande à chaque trimestre | 37 % | 572 |
+| `honest` | concours et élevage | 97 % | 1 054 091 |
+| `mixed` | troupeau + crime d'appoint | 93 % | 1 611 012 |
+| `policy` | conduite du troupeau | 98 % | 1 704 188 |
 
 \* patrimoine converti en dollars de 1885, seule façon de comparer d'une époque
 à l'autre.
@@ -172,7 +212,8 @@ D'où l'arbitrage voulu, que les profils simulés confirment : le crime est un
 la caisse basse et les soupçons retombés, fait jeu égal avec le jeu purement
 honnête (640 k contre 648 k). Le profil `outlaw`, qui trafique chaque trimestre
 pendant 141 ans, s'effondre : réputation à terre, soupçons au plafond, revenus
-rognés en permanence.
+rognés en permanence — et un rival qu'il ne négocie jamais, dont les chefs
+successifs finissent par le saigner à coups de raids.
 
 ### Règles structurantes à ne pas casser
 
@@ -233,7 +274,8 @@ sans aucune dépendance :
 # Tests ciblés : objectifs, succession, factions, équilibrage, migration
 # des sauvegardes, coups en douce, faveurs, rythme, illustrations,
 # montants et inflation, sexes et fertilité, chevaux, apport des cow-boys.
-# 204 vérifications, sortie non nulle en cas d'échec.
+# arcs, rival incarné, tournants d'époque, carte du domaine.
+# 249 vérifications, sortie non nulle en cas d'échec.
 node tests/scenarios.js index.html
 
 # Simulation de masse.
@@ -253,8 +295,11 @@ profils : il compare facilement deux versions du fichier
 
 ## Pistes ouvertes
 
-- Rendre le rival principal plus présent hors des raids
-- Donner un poids narratif aux traits des cow-boys vétérans
 - Quelques objectifs restent des jalons plus que des défis (`united`, `oldHand`
   sont atteints par ~98 % des parties bien menées)
-- Des arcs narratifs sur plusieurs trimestres (enchaînements d'événements)
+- Des objectifs liés aux nouveautés : mener les cinq arcs, tenir une doctrine
+  cohérente sur trois époques, garder la même parcelle un siècle
+- Affecter des cow-boys à des parcelles précises, pour que la carte pèse sur la
+  défense autant que sur le décor
+- Faire dialoguer les arcs entre eux : un procès perdu qui nourrit la rancune
+  de sang, un enfant parti qui revient du côté du rival
