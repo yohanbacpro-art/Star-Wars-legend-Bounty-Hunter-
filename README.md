@@ -1,4 +1,4 @@
-# Ranch Dynasty — V3.0
+# Ranch Dynasty — V3.1
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -60,7 +60,11 @@ Un arc est une histoire en plusieurs chapitres, étalée sur des trimestres
 (`ARCS`). Un seul court à la fois : `state.arc = {id, step, due, data}`. Chaque
 chapitre attend son échéance puis s'ouvre comme un événement ; un choix peut
 brancher (`goto`) et écrire dans `data`, que les chapitres suivants relisent.
-Un arc terminé entre dans `state.arcsDone` et ne revient jamais.
+Un arc terminé entre dans `state.arcsDone`, et **son issue** dans
+`state.arcOutcomes` : les arcs se relisent entre eux. Un procès perdu abaisse le
+seuil de la rancune de sang et sa première scène cite la limite que le tribunal
+vous a retirée ; un enfant chassé reparaît des décennies plus tard aux côtés du
+chef rival. Utiliser `arcOutcome(id)` dans une condition ou un texte.
 
 Cinq arcs : un procès de bornage, un enfant parti en ville, une grande
 sécheresse, une rancune de sang avec le rival, et le dernier chapitre d'un vieux
@@ -87,8 +91,13 @@ accords de son prédécesseur. `state.rival.lineage` garde la trace de tous.
 `state.land` reste la somme de référence ; `state.parcels` en est la lecture :
 des parcelles nommées, avec un type (`PARCEL_KINDS`) et une **exposition**.
 Canyons et bois se font razzier trois fois plus qu'une crête, et un raid nomme
-désormais la parcelle qu'il a frappée. `ensureParcels()` recale les parcelles
-sur `state.land` au chargement.
+la parcelle qu'il a frappée. `ensureParcels()` recale les parcelles sur
+`state.land` au chargement.
+
+Un cow-boy peut être **posté** sur une parcelle (`cowboy.post`) : elle devient
+bien plus difficile à razzier, et il peut repousser l'incursion. En contrepartie
+il ne compte plus dans les bras du ranch. La carte pèse donc sur la défense
+autant que sur le décor.
 
 ## Personnes
 
@@ -160,6 +169,12 @@ conditionnés par l'état du ranch (`condition:`) pour tomber au bon moment.
 `title`, `text` et `image` acceptent une fonction, ce qui permet de citer les
 noms de la partie en cours — une chaîne littérale serait évaluée au chargement,
 avant que `state` n'existe.
+
+Le catalogue compte **144 événements**, dont plus de cent en tronc commun et au
+moins quatre propres à chaque époque. Un test mesure le recouvrement lexical de
+toutes les paires (indice de Jaccard sur les mots signifiants) et **échoue
+au-delà de 0,45** : deux événements ne peuvent pas raconter la même chose. Il
+vérifie aussi qu'aucune illustration n'écrase les autres.
 
 ## Compatibilité des sauvegardes
 
@@ -275,7 +290,7 @@ sans aucune dépendance :
 # des sauvegardes, coups en douce, faveurs, rythme, illustrations,
 # montants et inflation, sexes et fertilité, chevaux, apport des cow-boys.
 # arcs, rival incarné, tournants d'époque, carte du domaine.
-# 249 vérifications, sortie non nulle en cas d'échec.
+# variété du catalogue. 262 vérifications, sortie non nulle en cas d'échec.
 node tests/scenarios.js index.html
 
 # Simulation de masse.
@@ -297,9 +312,6 @@ profils : il compare facilement deux versions du fichier
 
 - Quelques objectifs restent des jalons plus que des défis (`united`, `oldHand`
   sont atteints par ~98 % des parties bien menées)
-- Des objectifs liés aux nouveautés : mener les cinq arcs, tenir une doctrine
-  cohérente sur trois époques, garder la même parcelle un siècle
-- Affecter des cow-boys à des parcelles précises, pour que la carte pèse sur la
-  défense autant que sur le décor
-- Faire dialoguer les arcs entre eux : un procès perdu qui nourrit la rancune
-  de sang, un enfant parti qui revient du côté du rival
+
+- Des arcs propres à chaque époque, en plus des cinq arcs intemporels
+- Une deuxième famille rivale, pour que la diplomatie ait un triangle

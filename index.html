@@ -1260,6 +1260,7 @@ function makeParcel(ha, kindId){
   return {
     id: (state.nextParcelId = (state.nextParcelId||1) + 1) - 1,
     name, kind, ha,
+    since: state.year,
     // Un terrain exposé se fait razzier plus souvent ; une crête se surveille.
     exposure: kind === "canyon" || kind === "wood" ? 1.6 : (kind === "ridge" ? .5 : 1)
   };
@@ -1277,7 +1278,9 @@ function ensureParcels(){
     let i = 0;
     while(left > 0){
       const ha = Math.min(left, i < 3 ? Math.ceil(state.land/3) : 20);
-      state.parcels.push(makeParcel(ha, first[i] || undefined));
+      const p0 = makeParcel(ha, first[i] || undefined);
+      p0.since = Math.min(p0.since, 1885);
+      state.parcels.push(p0);
       left -= ha; i++;
       if(i > 40) break;
     }
@@ -1297,6 +1300,18 @@ function ensureParcels(){
 
 // Pousse une parcelle sans réconcilier : l'appelant met `state.land` à jour de
 // son côté. Réconcilier ici compterait les hectares deux fois.
+function assignPost(cowboyIndex, parcelId){
+  const c = (state.cowboys||[])[cowboyIndex];
+  if(!c) return;
+  c.post = parcelId === "" || parcelId === null ? null : Number(parcelId);
+  const p = (state.parcels||[]).find(x => x.id === c.post);
+  addLog(p
+    ? `${c.name} prend son poste ${PARCEL_KINDS[p.kind].label.toLowerCase()} ${p.name}.`
+    : `${c.name} revient au corps de ferme.`, "info");
+  renderMap();
+  render();
+}
+
 function addParcel(ha){
   if(!Array.isArray(state.parcels)) state.parcels = [];
   const p = makeParcel(ha);
@@ -1304,11 +1319,23 @@ function addParcel(ha){
   return p;
 }
 
+// Combien d'hommes veillent sur une parcelle donnée.
+function guardsOn(parcelId){
+  return (state.cowboys||[]).filter(c => c.post === parcelId).length;
+}
+
+// Exposition effective : un homme posté sur une parcelle la rend nettement
+// moins tentante. C'est ce qui fait peser la carte sur la défense.
+function parcelExposure(p){
+  const g = guardsOn(p.id);
+  return (p.exposure||1) * Math.max(.15, 1 - g * .45);
+}
+
 // Choisit la parcelle visée par un raid, au prorata de son exposition.
 function pickExposedParcel(){
   ensureParcels();
   if(!state.parcels.length) return null;
-  const weights = state.parcels.map(p => p.ha * (p.exposure||1));
+  const weights = state.parcels.map(p => p.ha * parcelExposure(p));
   const total = weights.reduce((a,b)=>a+b,0);
   let roll = Math.random() * total;
   for(let i = 0; i < state.parcels.length; i++){
@@ -1352,13 +1379,38 @@ function renderMap(){
 
   let h = `<p class="modal-intro">${state.land} hectares en ${parcels.length} parcelle${parcels.length>1?"s":""}. `
     + `Les terrains difficiles — canyons et bois — se font razzier plus souvent ; les crêtes se surveillent seules.</p>`;
-  h += svg + "<ul class=\"parcels\">";
+  const hands = state.cowboys || [];
+  h += svg;
+  h += `<p class="modal-intro">Poster un homme sur une parcelle réduit fortement le risque de razzia, `
+    + `et il peut repousser l'incursion. Un homme posté ne compte plus dans les bras du ranch.</p>`;
+  h += "<ul class=\"parcels\">";
   parcels.slice().sort((a,b)=>b.ha-a.ha).forEach(p => {
     const k = PARCEL_KINDS[p.kind];
-    h += `<li><b>${k.icon} Le ${k.label.toLowerCase()} ${p.name}</b> — ${p.ha} ha`
-      + `<br><small>${k.note}</small></li>`;
+    const posted = hands.filter(c => c.post === p.id);
+    const risk = parcelExposure(p);
+    const riskLabel = risk >= 1.3 ? "exposée" : (risk <= .5 ? "bien tenue" : "ordinaire");
+    h += `<li><b>${k.icon} Le ${k.label.toLowerCase()} ${p.name}</b> — ${p.ha} ha `
+      + `<span class="fact ${risk>=1.3?"bad":(risk<=.5?"good":"info")}">${riskLabel}</span>`
+      + `<br><small>${k.note}</small>`
+      + `<br><small>Garde : ${posted.length ? posted.map(c=>c.name).join(", ") : "personne"}</small></li>`;
   });
   h += "</ul>";
+
+  if(hands.length){
+    h += `<h3 class="section-head">Postes de garde</h3><ul class="parcels">`;
+    hands.forEach((c, i) => {
+      h += `<li><b>${c.name}</b> — <i>${c.trait}</i><br>`
+        + `<select onchange="assignPost(${i}, this.value)">`
+        + `<option value=""${c.post==null?" selected":""}>Au corps de ferme</option>`;
+      parcels.forEach(p => {
+        const k = PARCEL_KINDS[p.kind];
+        h += `<option value="${p.id}"${c.post===p.id?" selected":""}>`
+          + `${k.icon} ${k.label} ${p.name}</option>`;
+      });
+      h += `</select></li>`;
+    });
+    h += "</ul>";
+  }
   box.innerHTML = h;
 }
 
@@ -1419,15 +1471,19 @@ const ARCS = [
         image:"Un marteau retombe sur le bois",
         choices:[
           {label:"Accepter le jugement",apply:()=>{
+            state.arc.data.outcome = state.arc.data.won ? "won" : "lost";
             if(state.arc.data.won){ state.money+=sc(rand(120,260)); state.reputation=clamp(state.reputation+8);
               addLog("Le procès gagné assoit l'autorité de la famille sur ses terres.","good"); }
             else { state.land=Math.max(40,state.land-30); state.reputation=clamp(state.reputation-5);
+              ensureParcels();
               addLog("Trente hectares passent de l'autre côté de la clôture.","bad"); } }},
           {label:"Faire appel",condition:()=>state.money>=sc(200),apply:()=>{
             state.money-=sc(200);
             if(chance(state.arc.data.won?.8:.35)){ state.reputation=clamp(state.reputation+10);
+              state.arc.data.outcome = "won";
               addLog("L'appel confirme, et le nom du ranch en sort grandi.","good"); }
             else { state.land=Math.max(40,state.land-40); state.reputation=clamp(state.reputation-9);
+              state.arc.data.outcome = "lost"; ensureParcels();
               addLog("L'appel échoue, et coûte plus cher que le procès.","bad"); } }}
         ]
       }
@@ -1493,6 +1549,7 @@ const ARCS = [
             const good = state.arc.data.warm || state.arc.data.helped || state.arc.data.stayed;
             if(k){ k.bond=clamp((k.bond||50)+(good?25:8)); k.resentment=clamp((k.resentment||0)-(good?25:5)); }
             state.unity=clamp(state.unity+(good?12:5));
+            state.arc.data.outcome = "returned";
             if(good && k){ k.ambition=clamp((k.ambition||50)+10);
               addLog(`${state.arc.data.name} revient au ranch, et cette fois il sait pourquoi.`,"good"); }
             else addLog(`${state.arc.data.name} reste quelque temps, sans promettre.`,"info"); }},
@@ -1501,7 +1558,8 @@ const ARCS = [
             if(k){ state.children=state.children.filter(c=>c.cid!==k.cid);
               if(state.heirId===k.cid) state.heirId=null; }
             state.money+=sc(rand(150,320)); state.unity=clamp(state.unity-10);
-            state.legacy.greed++;
+            state.legacy.greed++; state.arc.data.outcome = "exiled";
+            state.arc.data.exiledName = state.arc.data.name;
             addLog(`${state.arc.data.name} repart pour de bon, avec sa part.`,"bad"); }}
         ]
       }
@@ -1571,12 +1629,14 @@ const ARCS = [
   {
     id:"bloodFeud",
     title:"La rancune de sang",
-    canStart:()=>!!state.rival && state.rival.relation < -25,
+    // Un procès perdu jette de l'huile : la rancune s'allume à moindre frais.
+    canStart:()=>!!state.rival && state.rival.relation < (arcOutcome("lawsuit")==="lost" ? -5 : -25),
     steps:[
       {
         art:"night",
         title:"Une clôture coupée",
-        text:()=>`Trente mètres de fil sectionnés au cisaille, la nuit, du côté des ${state.rival.name}. Personne n'a rien vu.`,
+        text:()=>`Trente mètres de fil sectionnés au cisaille, la nuit, du côté des ${state.rival.name}. Personne n'a rien vu.`
+          + (arcOutcome("lawsuit")==="lost" ? ` C'est exactement la limite que le tribunal vous a retirée.` : ""),
         image:"Du fil de fer sectionné dans l'herbe",
         choices:[
           {label:"Réparer et se taire",apply:()=>{ state.arc.data.restraint=true;
@@ -1621,7 +1681,9 @@ const ARCS = [
         title:"Face à face",
         text:()=>{
           const leader = ensureRivalLeader();
-          return `${leader.name} ${state.rival.name} vous attend au bout du chemin, seul, à cheval. Il veut parler. Ou en finir.`;
+          const exiled = state.arcOutcomes && state.arcOutcomes.cityChild === "exiled";
+          return `${leader.name} ${state.rival.name} vous attend au bout du chemin, seul, à cheval. Il veut parler. Ou en finir.`
+            + (exiled ? ` À ses côtés, une silhouette que vous reconnaîtriez entre mille : l'enfant que vous avez laissé partir.` : "");
         },
         image:"Deux cavaliers immobiles, à cinquante mètres",
         choices:[
@@ -1630,6 +1692,7 @@ const ARCS = [
             if(chance(calm?.85:.45)){
               state.rival.relation=clamp(state.rival.relation+rand(35,55),-100,100);
               state.reputation=clamp(state.reputation+10); state.legacy.honor++;
+              state.arc.data.outcome = "peace";
               addLog("Les deux familles enterrent la hache. Le comté n'en revient pas.","good");
             } else {
               state.founder.health=clamp(state.founder.health-rand(10,22));
@@ -1637,6 +1700,7 @@ const ARCS = [
           {label:"Poser vos conditions, armes visibles",condition:()=>state.weapons>=1,apply:()=>{
             if(chance(.5+state.weapons*.04)){
               state.rival.strength=clamp(state.rival.strength-rand(15,28),10,100);
+              state.arc.data.outcome = "cowed";
               addLog("Le rival recule. La pression retombe, pour un temps.","good");
             } else {
               const l=Math.min(state.cattle,rand(5,14)); state.cattle-=l;
@@ -1708,7 +1772,8 @@ const ARCS = [
             if(idx>=0) state.cowboys.splice(idx,1);
             (state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty+(state.arc.data.helped?15:6)));
             state.unity=clamp(state.unity+8); state.reputation=clamp(state.reputation+5);
-            state.legacy.honor++;
+            state.legacy.honor++; state.arc.data.outcome = "buried";
+            state.arc.data.graveName = state.arc.data.name;
             addLog(`${state.arc.data.name} repose sur la colline, face aux pâturages. Les hommes s'en souviendront.`,"good"); }},
           {label:"Le renvoyer à sa famille, s'il en reste",apply:()=>{
             const idx=(state.cowboys||[]).findIndex(c=>c.name===state.arc.data.name);
@@ -1722,6 +1787,11 @@ const ARCS = [
 ];
 
 function arcById(id){ return ARCS.find(a => a.id === id); }
+
+// Comment s'est terminé un arc passé ? `null` s'il n'a pas encore eu lieu.
+function arcOutcome(id){
+  return (state.arcOutcomes && state.arcOutcomes[id]) || null;
+}
 
 // Le plus ancien de l'équipe, ou n'importe qui s'il n'en reste pas.
 function oldestHand(){
@@ -1795,6 +1865,10 @@ function finishArc(){
   if(!state.arc) return;
   const arc = arcById(state.arc.id);
   if(!state.arcsDone) state.arcsDone = [];
+  if(!state.arcOutcomes) state.arcOutcomes = {};
+  // L'issue est conservée : d'autres arcs et événements la reliront des
+  // décennies plus tard. C'est ce qui fait tenir la saga ensemble.
+  state.arcOutcomes[state.arc.id] = state.arc.data.outcome || "done";
   state.arcsDone.push(state.arc.id);
   if(arc) addLog(`— ${arc.title} : l'affaire est close. —`, "info");
   state.arc = null;
@@ -1901,8 +1975,11 @@ function chooseDoctrine(eraId, id){
   if(!state.doctrines) state.doctrines = {};
   if(typeof state.nextParcelId !== "number") state.nextParcelId = 1;
   ensureParcels();
+  (state.parcels||[]).forEach(p => { if(typeof p.since !== "number") p.since = 1885; });
+  (state.cowboys||[]).forEach(c => { if(c.post === undefined) c.post = null; });
   if(state.arc === undefined) state.arc = null;
   if(!Array.isArray(state.arcsDone)) state.arcsDone = [];
+  if(!state.arcOutcomes) state.arcOutcomes = {};
   if(typeof state.arcCooldown !== "number") state.arcCooldown = 0;
   // Un arc dont l'identifiant a disparu du code ne doit pas bloquer la partie.
   if(state.arc && !arcById(state.arc.id)) state.arc = null;
@@ -2468,7 +2545,20 @@ const ACHIEVEMENTS = [
   {id:"modernEra", icon:"🏙️", title:"Traversée du siècle", desc:"Mener la famille jusqu'à l'ère moderne.",
    check:()=>state.eraId==="modern"},
   {id:"secret", icon:"🗝️", title:"Le secret élucidé", desc:"Résoudre les trois chapitres du secret du fondateur.",
-   check:()=>state.secret && state.secret.stage>=3}
+   check:()=>state.secret && state.secret.stage>=3},
+  {id:"chronicler", icon:"📜", title:"Le chroniqueur", desc:"Mener à leur terme les cinq grandes affaires de la saga.",
+   check:()=>(state.arcsDone||[]).length >= ARCS.length},
+  {id:"doctrine3", icon:"🧭", title:"Une ligne tenue", desc:"Trancher le tournant de trois époques successives.",
+   check:()=>Object.keys(state.doctrines||{}).length >= 3},
+  {id:"oldGround", icon:"🌳", title:"La terre des origines", desc:"Détenir encore, après 1985, une parcelle acquise avant 1900.",
+   check:()=>state.year>=1985 && (state.parcels||[]).some(p=>(p.since||1885) < 1900)},
+  {id:"wellGuarded", icon:"🛡️", title:"Domaine gardé", desc:"Poster un homme sur trois parcelles à la fois.",
+   check:()=>{
+     const posts = new Set((state.cowboys||[]).filter(c=>c.post!=null).map(c=>c.post));
+     return posts.size >= 3;
+   }},
+  {id:"twoLines", icon:"⚔️", title:"Deux lignées", desc:"Voir quatre chefs se succéder à la tête du clan rival.",
+   check:()=>((state.rival&&state.rival.lineage)||[]).length >= 4}
 ];
 
 // Complète un `state` neuf ou une vieille sauvegarde avec les champs
@@ -2484,8 +2574,11 @@ function ensureProgress(){
   if(!state.doctrines) state.doctrines = {};
   if(typeof state.nextParcelId !== "number") state.nextParcelId = 1;
   ensureParcels();
+  (state.parcels||[]).forEach(p => { if(typeof p.since !== "number") p.since = 1885; });
+  (state.cowboys||[]).forEach(c => { if(c.post === undefined) c.post = null; });
   if(state.arc === undefined) state.arc = null;
   if(!Array.isArray(state.arcsDone)) state.arcsDone = [];
+  if(!state.arcOutcomes) state.arcOutcomes = {};
   if(typeof state.arcCooldown !== "number") state.arcCooldown = 0;
   // Un arc dont l'identifiant a disparu du code ne doit pas bloquer la partie.
   if(state.arc && !arcById(state.arc.id)) state.arc = null;
@@ -2867,6 +2960,7 @@ function baseState() {
     nextParcelId:1,
     arc:null,
     arcsDone:[],
+    arcOutcomes:{},
     arcCooldown:0,
     stats:{competitionWins:0, illegalWins:0, plannedSuccessions:0, contestedSuccessions:0},
     heirId:null,
@@ -3286,7 +3380,8 @@ function endTurn(){
   // Les bras servent à proportion du troupeau : un homme pour vingt-cinq bêtes.
   // Au-delà, ils coûtent leur salaire sans rien rapporter. C'est ce qui rend
   // l'embauche décisive sur un grand ranch et ruineuse sur un petit.
-  const hands = (state.cowboys||[]).length;
+  // Un homme posté sur une parcelle ne travaille plus au troupeau.
+  const hands = (state.cowboys||[]).filter(c => c.post == null).length;
   const handsNeeded = Math.max(1, Math.ceil(healthyCattle / 25));
   const usefulHands = Math.min(hands, handsNeeded);
   const idleHands = hands - usefulHands;
@@ -3463,10 +3558,22 @@ function endTurn(){
   const raidChance = clamp((state.rival.strength - defense) / 300, .03, .35);
   if(state.rival.relation < -40 && chance(raidChance)){
     const target = pickExposedParcel();
-    const loss = Math.min(state.cattle, rand(2, 4 + Math.floor(state.rival.strength/20)));
-    state.cattle -= loss;
-    const where = target ? ` depuis ${PARCEL_KINDS[target.kind].label.toLowerCase()} ${target.name}` : "";
-    addLog(`${currentEra.rivalVerb.charAt(0).toUpperCase()+currentEra.rivalVerb.slice(1)} ${state.rival.name} font disparaître ${loss} tête${loss>1?"s":""} de bétail durant la nuit${where}.`, "bad");
+    const posted = target ? guardsOn(target.id) : 0;
+    const where = target ? ` ${PARCEL_KINDS[target.kind].label.toLowerCase()} ${target.name}` : "";
+    if(posted > 0 && chance(Math.min(.75, posted * .4))){
+      // Les hommes postés ont vu venir : l'incursion échoue.
+      state.rival.strength = clamp(state.rival.strength - rand(2,6), 10, 100);
+      addLog(`Les hommes postés${where} repoussent une incursion nocturne.`, "good");
+    } else {
+      const loss = Math.max(0, Math.min(state.cattle,
+        rand(2, 4 + Math.floor(state.rival.strength/20)) - posted));
+      if(loss > 0){
+        state.cattle -= loss;
+        addLog(`${currentEra.rivalVerb.charAt(0).toUpperCase()+currentEra.rivalVerb.slice(1)} ${state.rival.name} font disparaître ${loss} tête${loss>1?"s":""} de bétail durant la nuit, depuis${where}.`, "bad");
+      } else {
+        addLog(`Une incursion rôde${where}, mais repart les mains vides.`, "info");
+      }
+    }
   } else if(state.rival.relation > 40 && chance(.15)){
     state.reputation = clamp(state.reputation+3);
     addLog(`Un accord tacite avec ${currentEra.rivalType} des ${state.rival.name} apaise la région.`, "good");
@@ -3750,6 +3857,583 @@ function ageFamily(){
 }
 
 const events = [
+  {art:"herd", title:"Un hiver sans neige", text:"Pas un flocon de décembre à mars. L'herbe reste sèche et le sol dur comme pierre.",
+   image:"Une prairie jaune sous un ciel bleu",
+   choices:[
+     {label:"Irriguer depuis la rivière",condition:()=>state.money>=sc(170),apply:()=>{state.money-=sc(170);state.feed+=rand(30,60);addLog("Des rigoles amènent l'eau jusqu'aux prés du haut.","good");}},
+     {label:"Alléger la charge dès maintenant",condition:()=>state.cattle>=15,apply:()=>{const n=10;state.cattle-=n;state.money+=n*state.cattlePrice;addLog("Dix bêtes vendues avant que l'herbe ne manque tout à fait.","info");}},
+     {label:"Compter sur les pluies de printemps",apply:()=>{if(chance(.45)){state.feed+=rand(20,40);addLog("Les pluies arrivent juste à temps.","good");}else{state.feed=Math.max(0,state.feed-rand(25,55));addLog("Le printemps est aussi sec que l'hiver.","bad");}}}
+   ]},
+  {art:"rider", title:"Un cheval qui refuse l'obstacle", text:"Le cheval de tête se dérobe systématiquement depuis sa chute. Il faut le reprendre en main, ou l'abandonner.",
+   image:"Un cavalier désarçonné dans la poussière",
+   choices:[
+     {label:"Le retravailler patiemment",condition:()=>!!state.champion,apply:()=>{if(chance(.65)){state.champion.training=clamp(state.champion.training+rand(8,16));addLog(`${state.champion.name} reprend confiance. La peur est passée.`,"good");}else{state.champion.training=clamp(state.champion.training-rand(5,12));addLog(`${state.champion.name} reste bloqué. Il faudra du temps.`,"bad");}}},
+     {label:"Le réserver aux travaux du ranch",condition:()=>!!state.champion,apply:()=>{state.champion.training=clamp(state.champion.training-20);state.money+=sc(rand(30,70));addLog(`${state.champion.name} finira au troupeau, et ce n'est pas déshonorant.`,"info");}}
+   ]},
+  {art:"ranch", title:"Un puits à recreuser", text:"Le puits principal donne une eau trouble depuis l'automne. Les bêtes rechignent à boire.",
+   image:"Un seau remonté à moitié plein de vase",
+   choices:[
+     {label:"Faire creuser plus profond",condition:()=>state.money>=sc(190),apply:()=>{state.money-=sc(190);state.feed+=rand(10,25);addLog("L'eau redevient claire, et plus abondante qu'avant.","good");}},
+     {label:"Filtrer au charbon de bois",apply:()=>{if(chance(.55)){addLog("Le filtre de fortune suffit pour cette année.","good");}else{const l=Math.min(state.cattle,rand(1,4));state.cattle-=l;addLog(`L'eau trouble a rendu ${l} bêtes malades.`,"bad");}}}
+   ]},
+  {art:"money", title:"Un vieux titre au grenier", text:"Dans une malle du grenier, un titre de créance signé par un négociant mort depuis longtemps.",
+   image:"Un papier plié en quatre, jauni aux plis",
+   choices:[
+     {label:"Faire valoir la créance",condition:()=>state.money>=sc(50),apply:()=>{state.money-=sc(50);if(chance(.45)){state.money+=sc(rand(250,520));addLog("Les héritiers du négociant honorent la dette de leur aïeul.","good");}else addLog("La créance est prescrite depuis trente ans.","info");}},
+     {label:"L'encadrer comme souvenir",apply:()=>{state.unity=clamp(state.unity+4);addLog("Le titre rejoint le mur du couloir, avec les photos.","good");}}
+   ]},
+  {art:"family", title:"Un piano dans la maison", text:"Un instrument désaccordé mais entier est à vendre chez un veuf qui quitte la région.",
+   image:"Un piano droit sur une charrette",
+   choices:[
+     {label:"L'acheter et le faire accorder",condition:()=>state.money>=sc(130),apply:()=>{state.money-=sc(130);state.unity=clamp(state.unity+10);state.children.forEach(c=>{if(c.alive!==false&&c.age<18)c.ambition=clamp((c.ambition||40)+6);});addLog("Le piano entre dans le salon. Les soirées changent de nature.","good");}},
+     {label:"Ce n'est pas une maison à piano",apply:()=>{addLog("L'instrument part chez quelqu'un d'autre.","info");}}
+   ]},
+  {art:"crowd", title:"Un prédicateur itinérant", text:"Il plante sa tente au carrefour et prêche trois soirs de suite. La moitié du comté s'y presse.",
+   image:"Une tente de toile éclairée de l'intérieur",
+   choices:[
+     {label:"Y assister en famille",apply:()=>{state.unity=clamp(state.unity+6);const c=factionOfType("community");if(c)c.relation=clamp(c.relation+10,-100,100);addLog("La famille est vue au premier rang. Cela compte, ici.","good");}},
+     {label:"Le loger au ranch",apply:()=>{state.reputation=clamp(state.reputation+7);state.legacy.honor++;addLog("Le prédicateur bénit la maison avant de repartir.","good");}},
+     {label:"Rester à l'écart",apply:()=>{addLog("On a autre chose à faire que d'écouter des sermons.","info");}}
+   ]},
+  {art:"law", title:"Un jury à composer", text:"Le tribunal du comté convoque le chef de famille comme juré pour une affaire de meurtre.",
+   image:"Une convocation officielle sur papier bleu",
+   choices:[
+     {label:"Siéger et juger en conscience",apply:()=>{const l=factionOfType("law");if(l)l.relation=clamp(l.relation+18,-100,100);state.reputation=clamp(state.reputation+6);state.legacy.honor++;addLog("Trois jours au tribunal, et un verdict qui pèsera longtemps.","good");}},
+     {label:"Se faire excuser pour cause de travaux",apply:()=>{const l=factionOfType("law");if(l)l.relation=clamp(l.relation-10,-100,100);addLog("L'excuse est acceptée du bout des lèvres.","info");}}
+   ]},
+  {art:"night", title:"Des lumières dans le canyon", text:"Trois nuits de suite, des feux brillent au fond du canyon. Personne n'y a affaire à cette heure.",
+   image:"Deux points orange au fond d'une gorge",
+   choices:[
+     {label:"Aller voir avec des hommes",condition:()=>(state.cowboys||[]).length>0,apply:()=>{if(chance(.5)){state.money+=sc(rand(90,200));addLog("Des voleurs de bétail y campaient. Ils sont partis vite, en laissant du matériel.","good");}else{state.suspicion=clamp(state.suspicion+8);addLog("Il n'y avait que des vagabonds transis. On les a renvoyés.","info");}}},
+     {label:"Prévenir le shérif",apply:()=>{state.sheriffRelation=clamp(state.sheriffRelation+12,-100,100);addLog("Le shérif y va lui-même. Le canyon est vide au matin.","info");}},
+     {label:"Ne pas s'en mêler",apply:()=>{if(chance(.4)){const l=Math.min(state.cattle,rand(2,6));state.cattle-=l;addLog(`Au matin, ${l} bêtes manquent du côté du canyon.`,"bad");}else addLog("Les feux ont disparu d'eux-mêmes.","info");}}
+   ]},
+  {art:"machine", title:"Le téléphone au ranch", text:"La compagnie propose de tirer une ligne jusqu'à la maison. L'appareil se fixera dans le couloir.",
+   image:"Un combiné noir vissé au mur",
+   choices:[
+     {label:"Faire installer la ligne",condition:()=>state.money>=sc(170),apply:()=>{state.money-=sc(170);const t=factionOfType("trade");if(t)t.relation=clamp(t.relation+15,-100,100);state.reputation=clamp(state.reputation+5);addLog("Le ranch est relié. Les affaires se traitent en cinq minutes.","good");}},
+     {label:"Le courrier suffit",apply:()=>{addLog("On continuera d'écrire.","info");}}
+   ]},
+  {art:"herd", title:"Une bête primée", text:"Une génisse du troupeau attire l'œil d'un juge de concours en visite. Il parle d'un titre régional.",
+   image:"Un ruban bleu épinglé sur un licol",
+   choices:[
+     {label:"La préparer pour le concours",condition:()=>state.money>=sc(90),apply:()=>{state.money-=sc(90);if(chance(.6)){state.reputation=clamp(state.reputation+12);state.money+=sc(rand(150,300));state.cattlePriceMin=Math.min(state.cattlePriceMax-4,state.cattlePriceMin+2);addLog("Le titre est décroché. Le fer du ranch vaut plus cher désormais.","good");}else addLog("La génisse ne passe pas le premier tour.","info");}},
+     {label:"La garder pour la reproduction",apply:()=>{state.cattle+=rand(1,3);addLog("Elle restera au ranch. Sa descendance vaut mieux qu'un ruban.","good");}}
+   ]},
+  {art:"ranch", title:"Le toit de la grange", text:"Les bardeaux du versant nord sont pourris. Une bonne pluie et le foin sera perdu.",
+   image:"Des bardeaux gondolés et noircis",
+   choices:[
+     {label:"Refaire le toit entier",condition:()=>state.money>=sc(150),apply:()=>{state.money-=sc(150);addLog("Un toit neuf pour trente ans.","good");}},
+     {label:"Rapiécer au plus pressé",apply:()=>{if(chance(.55)){addLog("Les rustines tiennent la saison.","info");}else{state.feed=Math.max(0,state.feed-rand(25,60));addLog("La pluie traverse et pourrit une partie du foin.","bad");}}}
+   ]},
+  {art:"crowd", title:"Un journal local se lance", text:"Un imprimeur veut fonder un hebdomadaire du comté. Il cherche des annonceurs et des soutiens.",
+   image:"Une presse à bras dans un local exigu",
+   choices:[
+     {label:"Financer les premiers numéros",condition:()=>state.money>=sc(120),apply:()=>{state.money-=sc(120);const m=factionOfType("media");if(m)m.relation=clamp(m.relation+30,-100,100);addLog("Le journal paraît, et le ranch y a bonne presse.","good");}},
+     {label:"Y prendre une annonce",condition:()=>state.money>=sc(45),apply:()=>{state.money-=sc(45);state.reputation=clamp(state.reputation+5);addLog("Une réclame pour le bétail du ranch paraît chaque semaine.","good");}},
+     {label:"Se tenir loin de l'encre",apply:()=>{addLog("On préfère ne pas voir son nom imprimé.","info");}}
+   ]},
+  {art:"family", title:"Un enfant doué pour les chiffres", text:"L'institutrice fait dire qu'un des enfants a une facilité rare pour le calcul, et qu'il faudrait pousser.",
+   image:"Un cahier couvert d'opérations justes",
+   choices:[
+     {label:"Payer des études en ville",condition:()=>state.money>=sc(220),apply:()=>{state.money-=sc(220);const k=state.children.filter(c=>c.alive!==false&&c.age>=10&&c.age<=17)[0];if(k){k.ambition=clamp((k.ambition||40)+25);k.role="business";}addLog("Les études sont payées. Le ranch aura un jour un vrai comptable.","good");}},
+     {label:"Le former aux comptes du ranch",apply:()=>{const k=state.children.filter(c=>c.alive!==false&&c.age>=10&&c.age<=17)[0];if(k){k.role="business";k.bond=clamp((k.bond||50)+8);}addLog("Les livres du ranch deviennent son école.","good");}}
+   ]},
+  {art:"money", title:"Un pari sur le cours du grain", text:"Un courtier propose de bloquer le prix du fourrage pour l'année à venir, à un tarif fixé aujourd'hui.",
+   image:"Un télégramme avec des cours du jour",
+   choices:[
+     {label:"Bloquer le prix",condition:()=>state.money>=sc(140),apply:()=>{state.money-=sc(140);state.feed+=rand(50,90);addLog("Le fourrage de l'année est acheté d'avance, à prix fixe.","good");}},
+     {label:"Acheter au fil de l'eau",apply:()=>{if(chance(.5)){state.money+=sc(rand(40,90));addLog("Les cours baissent : bien joué de ne pas s'être engagé.","good");}else{state.money-=Math.min(state.money,sc(rand(60,140)));addLog("Les cours montent, et le fourrage coûte cher toute l'année.","bad");}}}
+   ]},
+  {art:"night", title:"Un homme réclame l'hospitalité", text:"Un voyageur trempé frappe à la porte à minuit. Il ne dit ni son nom ni d'où il vient.",
+   image:"Une silhouette ruisselante sous le porche",
+   choices:[
+     {label:"Le faire entrer sans questions",apply:()=>{if(chance(.75)){state.legacy.honor++;state.reputation=clamp(state.reputation+4);addLog("Il repart au matin après avoir coupé du bois sans qu'on lui demande.","good");}else{state.money-=Math.min(state.money,sc(rand(40,100)));addLog("Au matin, l'homme et l'argenterie ont disparu.","bad");}}},
+     {label:"Le loger dans la grange",apply:()=>{addLog("Une couverture et un coin de paille. Il repart avant l'aube.","info");}},
+     {label:"Refuser d'ouvrir",apply:()=>{state.reputation=clamp(state.reputation-3);addLog("On n'ouvre pas la nuit à qui ne dit pas son nom.","info");}}
+   ]},
+  {art:"land", title:"Une clôture à refaire entièrement", text:"Vingt ans de gel et de bétail ont eu raison des piquets. Il faut tout reprendre, ou tout perdre.",
+   image:"Une ligne de piquets penchés",
+   choices:[
+     {label:"Refaire en fil barbelé neuf",condition:()=>state.money>=sc(180),apply:()=>{state.money-=sc(180);(state.parcels||[]).forEach(p=>{p.exposure=Math.max(.4,(p.exposure||1)*.75);});addLog("Des clôtures neuves sur tout le pourtour. Le domaine se tient.","good");}},
+     {label:"Réparer au coup par coup",apply:()=>{state.money-=Math.min(state.money,sc(50));addLog("On rafistole ce qui menace le plus.","info");}},
+     {label:"Laisser courir encore un an",apply:()=>{(state.parcels||[]).forEach(p=>{p.exposure=(p.exposure||1)*1.2;});addLog("Les clôtures tiendront bien encore une saison. Ou pas.","bad");}}
+   ]},
+  {art:"rider", title:"Un cavalier désarçonné sur la route", text:"On retrouve un homme inconscient au bord du chemin, son cheval broutant à côté.",
+   image:"Un cheval sellé sans cavalier",
+   choices:[
+     {label:"Le ramener et le soigner",apply:()=>{state.money-=Math.min(state.money,sc(40));state.reputation=clamp(state.reputation+7);state.legacy.honor++;if(chance(.3)){state.horses++;addLog("Il repart guéri, et laisse son cheval en remerciement.","good");}else addLog("Il repart guéri, et n'oubliera pas.","good");}},
+     {label:"Prévenir le bourg et continuer",apply:()=>{addLog("Le bourg envoie une charrette. On a fait le nécessaire.","info");}}
+   ]},
+  {art:"ranch", title:"Une invasion de rats dans les silos", text:"Le grain diminue plus vite que la consommation ne l'explique. Les sacs sont percés par le bas.",
+   image:"Du grain répandu au pied d'un sac",
+   choices:[
+     {label:"Faire venir des chats et des pièges",apply:()=>{state.money-=Math.min(state.money,sc(30));state.feed=Math.max(0,state.feed-10);addLog("Les chats font le travail en quelques semaines.","good");}},
+     {label:"Refaire les silos en tôle",condition:()=>state.money>=sc(160),apply:()=>{state.money-=sc(160);state.feed+=15;addLog("Les silos de tôle mettent le grain hors d'atteinte pour de bon.","good");}},
+     {label:"Ignorer",apply:()=>{state.feed=Math.max(0,state.feed-rand(25,50));addLog("Les rats prélèvent leur dîme tout l'hiver.","bad");}}
+   ]},
+  {art:"crowd", title:"Un vétérinaire s'installe au bourg", text:"Pour la première fois, le comté a son praticien à demeure. Il cherche des clients réguliers.",
+   image:"Une plaque de cuivre sur une porte",
+   choices:[
+     {label:"Passer un contrat annuel",condition:()=>state.money>=sc(130),apply:()=>{state.money-=sc(130);state.cattle+=rand(2,6);addLog("Les visites régulières font baisser la mortalité du troupeau.","good");}},
+     {label:"L'appeler seulement en cas de besoin",apply:()=>{addLog("On l'appellera quand il le faudra.","info");}}
+   ]},
+  {art:"money", title:"Une commande de l'armée", text:"Un intendant militaire cherche de la viande en quantité, payée à terme mais garantie par l'État.",
+   image:"Un bon de commande à en-tête officiel",
+   choices:[
+     {label:"Accepter la commande",condition:()=>state.cattle>=25,apply:()=>{state.cattle-=25;state.money+=Math.round(25*state.cattlePrice*1.2);const l=factionOfType("law");if(l)l.relation=clamp(l.relation+18,-100,100);addLog("La commande est honorée. L'État paie bien, mais tard.","good");}},
+     {label:"Négocier un paiement comptant",apply:()=>{if(chance(.45)){state.money+=sc(rand(200,380));addLog("L'intendant accepte de payer comptant, avec une remise.","good");}else addLog("L'intendant va voir ailleurs.","info");}}
+   ]},
+  {art:"herd", title:"Le marquage de printemps", text:"Trois jours de fers rouges, de poussière et de cris. C'est le moment où le ranch se compte vraiment.",
+   image:"Un fer qui chauffe dans les braises",
+   choices:[
+     {label:"Y mettre toute la maison",apply:()=>{state.unity=clamp(state.unity+7);(state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty+5));addLog("Le marquage se finit dans les rires et la fatigue.","good");}},
+     {label:"Embaucher des saisonniers",condition:()=>state.money>=sc(80),apply:()=>{state.money-=sc(80);state.cattle+=rand(1,4);addLog("Les saisonniers accélèrent le travail. Quelques bêtes oubliées sont retrouvées.","good");}}
+   ]},
+  {art:"herd", title:"Une bête galeuse au marché", text:"L'inspecteur du marché refuse deux de vos bêtes et vous regarde autrement.",
+   image:"Une craie qui trace une croix sur un flanc",
+   choices:[
+     {label:"Retirer tout le lot et traiter",apply:()=>{state.money-=Math.min(state.money,sc(70));state.reputation=clamp(state.reputation+3);addLog("Le lot rentre au ranch pour traitement. L'honneur est sauf.","good");}},
+     {label:"Vendre le reste discrètement",apply:()=>{state.money+=sc(rand(80,160));state.reputation=clamp(state.reputation-8);state.legacy.greed++;addLog("Le reste du lot part quand même. On verra bien.","info");}}
+   ]},
+  {art:"money", title:"Une foire aux bestiaux", text:"La grande foire d'automne réunit tout le bétail de trois comtés. Les prix s'y font à la criée.",
+   image:"Des enclos numérotés à perte de vue",
+   choices:[
+     {label:"Y mener un lot important",condition:()=>state.cattle>=20,apply:()=>{const n=20;state.cattle-=n;const bonus=chance(.5)?1.25:.9;const g=Math.round(n*state.cattlePrice*bonus);state.money+=g;addLog(`Vingt bêtes vendues à la criée : +${g} $.`,bonus>1?"good":"info");}},
+     {label:"Y acheter du sang neuf",condition:()=>state.money>=sc(260),apply:()=>{state.money-=sc(260);state.cattle+=rand(8,14);addLog("Un lot de génisses de qualité rejoint le troupeau.","good");}},
+     {label:"S'y montrer sans rien traiter",apply:()=>{state.reputation=clamp(state.reputation+4);const t=factionOfType("trade");if(t)t.relation=clamp(t.relation+10,-100,100);addLog("On serre des mains, on écoute, on apprend les prix.","good");}}
+   ]},
+  {art:"money", title:"Une compagnie d'assurance", text:"Un agent propose de garantir le troupeau contre la maladie, le feu et le vol, moyennant une prime annuelle.",
+   image:"Un contrat en petits caractères",
+   choices:[
+     {label:"Assurer le troupeau",condition:()=>state.money>=sc(120),apply:()=>{state.money-=sc(120);if(chance(.4)){state.money+=sc(rand(250,500));addLog("Un sinistre survient dans l'année. L'assurance paie rubis sur l'ongle.","good");}else addLog("Rien n'est arrivé cette année. La prime est perdue, la nuit meilleure.","info");}},
+     {label:"Se passer d'assurance",apply:()=>{addLog("Le ranch reste son propre assureur.","info");}}
+   ]},
+  {art:"crowd", title:"Une quête pour l'église", text:"Le toit de la chapelle prend l'eau. Le pasteur fait le tour des fermes avec un chapeau à la main.",
+   image:"Un chapeau tendu sur le pas d'une porte",
+   choices:[
+     {label:"Payer le toit entier",condition:()=>state.money>=sc(150),apply:()=>{state.money-=sc(150);state.reputation=clamp(state.reputation+11);const c=factionOfType("community");if(c)c.relation=clamp(c.relation+22,-100,100);state.legacy.honor++;addLog("Le nouveau toit portera une plaque au nom de la famille.","good");}},
+     {label:"Donner ce qu'on peut",apply:()=>{state.money-=Math.min(state.money,sc(40));const c=factionOfType("community");if(c)c.relation=clamp(c.relation+8,-100,100);addLog("Une obole modeste, mais donnée de bon cœur.","good");}},
+     {label:"Passer son tour",apply:()=>{const c=factionOfType("community");if(c)c.relation=clamp(c.relation-8,-100,100);addLog("Le chapeau repart vide.","info");}}
+   ]},
+  {art:"crowd", title:"Des colporteurs sur la route", text:"Une famille de marchands ambulants demande à camper au bord du chemin pour la nuit.",
+   image:"Une roulotte bâchée sous les peupliers",
+   choices:[
+     {label:"Les accueillir et leur acheter quelque chose",apply:()=>{state.money-=Math.min(state.money,sc(45));state.unity=clamp(state.unity+5);state.reputation=clamp(state.reputation+3);addLog("On repart avec des rubans, des aiguilles et des nouvelles du monde.","good");}},
+     {label:"Les laisser passer la nuit sans plus",apply:()=>{addLog("Ils repartent au petit jour, sans avoir dérangé personne.","info");}},
+     {label:"Les chasser",apply:()=>{state.reputation=clamp(state.reputation-5);addLog("La roulotte s'éloigne dans la poussière.","bad");}}
+   ]},
+  {art:"law", title:"Un litige sur le fer de marquage", text:"Un éleveur du sud a déposé un fer trop semblable au vôtre. Les bêtes se confondent au marché.",
+   image:"Deux fers presque identiques côte à côte",
+   choices:[
+     {label:"Déposer un fer distinctif",condition:()=>state.money>=sc(60),apply:()=>{state.money-=sc(60);state.reputation=clamp(state.reputation+5);addLog("Le nouveau fer du ranch ne ressemble à aucun autre.","good");}},
+     {label:"Exiger qu'il change le sien",apply:()=>{if(chance(.5)){addLog("Il cède et modifie son fer.","good");}else{state.suspicion=clamp(state.suspicion+8);addLog("Il refuse, et l'affaire s'envenime au bureau des marques.","bad");}}}
+   ]},
+  {art:"night", title:"Un pisteur indien de passage", text:"Un homme silencieux traverse le domaine en suivant des traces que personne d'autre ne voit.",
+   image:"Une main posée à plat sur le sol",
+   choices:[
+     {label:"L'engager pour retrouver le bétail perdu",condition:()=>state.money>=sc(70),apply:()=>{state.money-=sc(70);state.cattle+=rand(2,7);addLog("Il ramène des bêtes qu'on croyait perdues depuis des mois.","good");}},
+     {label:"Lui offrir un repas et le laisser passer",apply:()=>{state.legacy.honor++;state.reputation=clamp(state.reputation+3);addLog("Il mange, remercie d'un signe, et disparaît vers le nord.","good");}}
+   ]},
+  {art:"ranch", title:"Le moulin à vent est cassé", text:"La pompe qui remonte l'eau des enclos s'est bloquée. Sans elle, il faut porter l'eau à dos de mulet.",
+   image:"Des pales immobiles contre le ciel",
+   choices:[
+     {label:"Faire venir un réparateur",condition:()=>state.money>=sc(100),apply:()=>{state.money-=sc(100);addLog("Le moulin tourne de nouveau dès le lendemain.","good");}},
+     {label:"Le réparer soi-même",apply:()=>{if(chance(.6)){addLog("Deux jours de bricolage et le moulin repart.","good");}else{state.feed=Math.max(0,state.feed-20);state.money-=Math.min(state.money,sc(140));addLog("La réparation échoue, et il faut finalement payer plus cher.","bad");}}}
+   ]},
+  {art:"ranch", title:"Une réserve de bois à faire", text:"L'hiver approche et le tas de bûches est bas. Trois jours de coupe suffiraient.",
+   image:"Une hache plantée dans un billot",
+   choices:[
+     {label:"Envoyer les hommes couper",condition:()=>(state.cowboys||[]).length>0,apply:()=>{(state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty-2));state.unity=clamp(state.unity+3);addLog("Le bûcher est plein jusqu'au printemps.","good");}},
+     {label:"Acheter le bois tout coupé",condition:()=>state.money>=sc(55),apply:()=>{state.money-=sc(55);addLog("Une charretée de bûches est livrée et rangée.","good");}},
+     {label:"Économiser le chauffage",apply:()=>{state.unity=clamp(state.unity-5);addLog("On dormira habillé cet hiver.","bad");}}
+   ]},
+  {art:"family", title:"Un mariage à préparer", text:"Une noce se prépare dans la famille. Reste à savoir jusqu'où ira la dépense.",
+   image:"Une robe étalée sur un lit",
+   choices:[
+     {label:"Une noce dont le comté parlera",condition:()=>state.money>=sc(230),apply:()=>{state.money-=sc(230);state.unity=clamp(state.unity+14);state.reputation=clamp(state.reputation+10);const c=factionOfType("community");if(c)c.relation=clamp(c.relation+18,-100,100);addLog("La noce dure deux jours. On en reparlera vingt ans.","good");}},
+     {label:"Une cérémonie simple",apply:()=>{state.unity=clamp(state.unity+7);addLog("Une cérémonie sobre, à l'église du bourg.","good");}}
+   ]},
+  {art:"family", title:"Une querelle d'héritage chez les voisins", text:"La ferme d'à côté se déchire entre trois frères. Le spectacle donne à réfléchir sur sa propre maison.",
+   image:"Un champ coupé en trois par des piquets",
+   choices:[
+     {label:"En tirer la leçon et parler à ses enfants",apply:()=>{adultHeirs().forEach(c=>c.resentment=clamp((c.resentment||0)-14));state.unity=clamp(state.unity+6);addLog("Une longue conversation autour de la table. Les choses sont dites.","good");}},
+     {label:"Racheter la part du frère cadet",condition:()=>state.money>=sc(280),apply:()=>{state.money-=sc(280);state.land+=25;addParcel(25);state.legacy.greed++;const c=factionOfType("community");if(c)c.relation=clamp(c.relation-12,-100,100);addLog("Vingt-cinq hectares de plus, et une famille de moins dans la vallée.","info");}}
+   ]},
+  {eraId:"foundation", art:"crowd", title:"La ligne de chemin de fer approche", text:"Les équipes de pose remontent la vallée. Le rail passera à quinze kilomètres, ou à trois, selon qui parle.",
+   image:"Des traverses empilées le long du tracé",
+   choices:[
+     {label:"Payer pour un embranchement",condition:()=>state.money>=sc(340),apply:()=>{state.money-=sc(340);state.cattlePriceMin=Math.min(state.cattlePriceMax-4,state.cattlePriceMin+3);const t=factionOfType("trade");if(t)t.relation=clamp(t.relation+25,-100,100);addLog("Un embranchement dessert le ranch. Le bétail part sans convoyage.","good");}},
+     {label:"Vendre du bois aux poseurs de rail",apply:()=>{state.money+=sc(rand(140,280));addLog("Le bois du domaine devient des traverses.","good");}},
+     {label:"S'opposer au tracé",apply:()=>{const t=factionOfType("trade");if(t)t.relation=clamp(t.relation-20,-100,100);state.land+=5;addLog("Le tracé contourne le domaine. Personne ne vous remerciera.","info");}}
+   ]},
+  {eraId:"foundation", art:"night", title:"Une nuit de convoyage", text:"Le troupeau doit traverser la plaine jusqu'au chargement. Trois semaines de piste, et tout peut arriver.",
+   image:"Une file de bêtes sous les étoiles",
+   choices:[
+     {label:"Mener le convoi soi-même",apply:()=>{if(chance(.62)){const g=sc(rand(200,380));state.money+=g;state.reputation=clamp(state.reputation+6);addLog(`Le convoi arrive au complet : +${g} $.`,"good");}else{const l=Math.min(state.cattle,rand(4,11));state.cattle-=l;state.founder.health=clamp(state.founder.health-rand(3,9));addLog(`La piste coûte ${l} bêtes et beaucoup de fatigue.`,"bad");}}},
+     {label:"Confier le convoi aux hommes",condition:()=>(state.cowboys||[]).length>=2,apply:()=>{const avg=state.cowboys.reduce((s,c)=>s+c.loyalty,0)/state.cowboys.length;if(avg>60){const g=sc(rand(180,320));state.money+=g;addLog(`Les hommes ramènent l'argent au complet : +${g} $.`,"good");}else{state.money+=sc(rand(60,140));addLog("Le compte n'y est pas tout à fait au retour.","info");}}}
+   ]},
+  {eraId:"prohibition", art:"machine", title:"La première automobile du comté", text:"Un modèle noir pétaradant s'arrête devant le portail. Les chevaux s'affolent, les enfants accourent.",
+   image:"Une carrosserie noire couverte de poussière",
+   choices:[
+     {label:"En acheter une",condition:()=>state.money>=sc(400),apply:()=>{state.money-=sc(400);state.reputation=clamp(state.reputation+9);state.unity=clamp(state.unity+5);addLog("Le ranch a sa voiture. La ville n'est plus à une journée.","good");}},
+     {label:"S'en tenir aux chevaux",apply:()=>{state.horses++;addLog("Un cheval de plus vaut mieux qu'un moteur qu'on ne sait pas réparer.","info");}}
+   ]},
+  {eraId:"prohibition", art:"crowd", title:"Un orchestre de jazz au bourg", text:"Une formation venue du sud joue une musique que personne ici n'a jamais entendue. La salle est comble.",
+   image:"Un cuivre qui brille sous une ampoule",
+   choices:[
+     {label:"Y emmener toute la maisonnée",apply:()=>{state.money-=Math.min(state.money,sc(50));state.unity=clamp(state.unity+9);state.children.forEach(c=>{if(c.alive!==false&&c.age>=14)c.bond=clamp((c.bond||50)+5);});addLog("Les jeunes de la maison n'ont pas dormi de la nuit.","good");}},
+     {label:"Interdire cette musique aux enfants",apply:()=>{adultHeirs().forEach(c=>c.resentment=clamp((c.resentment||0)+8));state.reputation=clamp(state.reputation+3);addLog("La maison reste sourde à la mode du jour.","info");}}
+   ]},
+  {eraId:"depression", art:"crowd", title:"Une soupe populaire au bourg", text:"La file devant la cantine municipale fait trois fois le tour de la place, et elle s'allonge chaque semaine.",
+   image:"Une file d'hommes en chapeau, immobile",
+   choices:[
+     {label:"Fournir la viande chaque semaine",condition:()=>state.cattle>=12,apply:()=>{state.cattle-=6;state.reputation=clamp(state.reputation+16);state.legacy.honor+=2;const c=factionOfType("community");if(c)c.relation=clamp(c.relation+30,-100,100);addLog("La cantine sert de la viande du ranch tout l'hiver.","good");}},
+     {label:"Donner une fois, pour l'exemple",apply:()=>{state.cattle=Math.max(0,state.cattle-2);state.reputation=clamp(state.reputation+5);addLog("Deux bêtes pour la cantine, et une photo dans le journal.","good");}},
+     {label:"Le ranch a ses propres soucis",apply:()=>{const c=factionOfType("community");if(c)c.relation=clamp(c.relation-15,-100,100);addLog("On garde ce qu'on a.","info");}}
+   ]},
+  {eraId:"depression", art:"storm", title:"Le vent noir", text:"Une muraille de poussière haute comme une montagne avance sur la plaine. Il fait nuit à trois heures.",
+   image:"Un mur brun qui avale l'horizon",
+   choices:[
+     {label:"Calfeutrer tout et rentrer les bêtes",apply:()=>{state.feed=Math.max(0,state.feed-rand(15,35));addLog("On a colmaté chaque interstice. La maison a tenu.","good");}},
+     {label:"Planter des haies coupe-vent ensuite",condition:()=>state.money>=sc(160),apply:()=>{state.money-=sc(160);state.feed+=rand(15,30);addLog("Des rangées d'arbres sont plantées face au vent. Elles serviront aux petits-enfants.","good");}},
+     {label:"Subir",apply:()=>{const l=Math.min(state.cattle,rand(3,9));state.cattle-=l;state.feed=Math.max(0,state.feed-rand(30,60));addLog(`Le vent noir emporte la terre arable et ${l} bêtes.`,"bad");}}
+   ]},
+  {eraId:"industrial", art:"machine", title:"Le camion frigorifique", text:"Un transporteur propose d'emmener la viande directement aux villes, sans passer par les intermédiaires.",
+   image:"Une remorque blanche et bourdonnante",
+   choices:[
+     {label:"Signer avec le transporteur",condition:()=>state.money>=sc(200),apply:()=>{state.money-=sc(200);state.cattlePriceMin=Math.min(state.cattlePriceMax-4,state.cattlePriceMin+5);addLog("Le circuit court avec la ville relève durablement les prix.","good");}},
+     {label:"Continuer avec la coopérative",apply:()=>{const t=factionOfType("trade");if(t)t.relation=clamp(t.relation+18,-100,100);addLog("La coopérative apprécie la fidélité.","good");}}
+   ]},
+  {eraId:"industrial", art:"crowd", title:"La télévision arrive au ranch", text:"Un poste à antenne rateau trône dans le salon. Les hommes viennent regarder après le dîner.",
+   image:"Un écran gris dans une pièce sombre",
+   choices:[
+     {label:"L'installer dans la salle commune",condition:()=>state.money>=sc(150),apply:()=>{state.money-=sc(150);state.unity=clamp(state.unity+8);(state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty+7));addLog("Le poste réunit toute la maisonnée chaque soir.","good");}},
+     {label:"Pas de ça dans cette maison",apply:()=>{state.unity=clamp(state.unity-4);state.reputation=clamp(state.reputation+2);addLog("Le soir, on continue de parler et de jouer aux cartes.","info");}}
+   ]},
+  {eraId:"corporate", art:"money", title:"Une offre publique d'achat", text:"Un groupe coté propose de racheter le ranch en actions plutôt qu'en argent. Le montant donne le vertige.",
+   image:"Un dossier relié de cuir",
+   choices:[
+     {label:"Céder une part minoritaire",apply:()=>{state.money+=sc(rand(700,1200));state.unity=clamp(state.unity-10);state.legacy.greed++;addLog("Une part du ranch appartient désormais à des inconnus.","info");}},
+     {label:"Refuser tout net",apply:()=>{state.unity=clamp(state.unity+10);state.reputation=clamp(state.reputation+8);state.legacy.honor++;addLog("Le dossier repart intact. Le ranch n'est pas à vendre.","good");}}
+   ]},
+  {eraId:"corporate", art:"law", title:"Une norme sur les effluents", text:"Une réglementation impose des bassins de décantation avant tout rejet. Les travaux sont conséquents.",
+   image:"Un plan d'ingénieur déplié sur un capot",
+   choices:[
+     {label:"Construire les bassins",condition:()=>state.money>=sc(380),apply:()=>{state.money-=sc(380);const c=factionOfType("community");if(c)c.relation=clamp(c.relation+20,-100,100);state.legacy.honor++;addLog("Les bassins sont creusés dans les règles. La rivière reste claire.","good");}},
+     {label:"Demander un délai",apply:()=>{state.suspicion=clamp(state.suspicion+10);addLog("Un délai de deux ans est obtenu. Il faudra bien s'y mettre.","info");}}
+   ]},
+  {eraId:"globalization", art:"city", title:"Un fonds d'investissement démarche", text:"Des gestionnaires en costume expliquent que la terre agricole est devenue une classe d'actifs.",
+   image:"Un tableau de chiffres projeté sur un mur",
+   choices:[
+     {label:"Vendre des terres périphériques",condition:()=>state.land>=200,apply:()=>{state.land-=40;ensureParcels();state.money+=sc(rand(600,1000));addLog("Quarante hectares deviennent une ligne dans un portefeuille.","info");}},
+     {label:"Refuser et se syndiquer avec les voisins",apply:()=>{const c=factionOfType("community");if(c)c.relation=clamp(c.relation+25,-100,100);state.reputation=clamp(state.reputation+8);addLog("Les exploitations de la vallée font front commun.","good");}}
+   ]},
+  {eraId:"globalization", art:"machine", title:"Des éoliennes sur la crête", text:"Un opérateur veut planter des mâts sur les hauteurs, avec un loyer annuel garanti sur vingt ans.",
+   image:"Des pales blanches contre un ciel gris",
+   choices:[
+     {label:"Signer le bail",apply:()=>{state.money+=sc(rand(400,700));const c=factionOfType("community");if(c)c.relation=clamp(c.relation-18,-100,100);addLog("Trois mâts s'élèvent sur la crête. Le loyer tombe chaque année.","good");}},
+     {label:"Refuser pour préserver le paysage",apply:()=>{const c=factionOfType("community");if(c)c.relation=clamp(c.relation+20,-100,100);state.reputation=clamp(state.reputation+6);addLog("La crête reste nue. Les voisins vous en savent gré.","good");}}
+   ]},
+  {eraId:"modern", art:"city", title:"Un tournage au ranch", text:"Une production cherche un décor authentique pour une série. Ils promettent d'être discrets, et ne le seront pas.",
+   image:"Des projecteurs montés dans la cour",
+   choices:[
+     {label:"Louer le domaine pour six semaines",apply:()=>{state.money+=sc(rand(500,900));state.unity=clamp(state.unity-8);const m=factionOfType("media");if(m)m.relation=clamp(m.relation+25,-100,100);addLog("Six semaines de câbles et de camions, et un chèque conséquent.","good");}},
+     {label:"Refuser l'intrusion",apply:()=>{state.unity=clamp(state.unity+6);addLog("Le ranch n'est pas un décor.","info");}}
+   ]},
+  {eraId:"modern", art:"law", title:"Un drone au-dessus des enclos", text:"Un appareil bourdonne au-dessus du troupeau depuis trois matins. Personne ne sait à qui il appartient.",
+   image:"Quatre hélices immobiles dans le ciel",
+   choices:[
+     {label:"Porter plainte pour survol",apply:()=>{const l=factionOfType("law");if(l)l.relation=clamp(l.relation+12,-100,100);addLog("La plainte identifie un cabinet mandaté par un concurrent.","info");if(state.rival)state.rival.relation=clamp(state.rival.relation-10,-100,100);}},
+     {label:"L'abattre",condition:()=>state.weapons>0,apply:()=>{state.suspicion=clamp(state.suspicion+15);state.reputation=clamp(state.reputation-4);addLog("L'appareil tombe dans le pré. L'affaire fera du bruit.","bad");}},
+     {label:"Le laisser filmer",apply:()=>{addLog("On laisse bourdonner. Il n'y a rien à cacher.","info");}}
+   ]},
+  {art:"family", title:"La fièvre chez les petits", text:"Deux enfants brûlent de fièvre depuis trois jours. Le médecin le plus proche est à une journée de cheval.",
+   image:"Un linge humide sur un front d'enfant",
+   choices:[
+     {label:"Envoyer chercher le médecin",condition:()=>state.money>=sc(120),apply:()=>{state.money-=sc(120);state.children.forEach(c=>{if(c.alive!==false&&c.age<14)c.health=clamp(c.health+25);});addLog("Le médecin arrive à temps. La fièvre tombe le lendemain.","good");}},
+     {label:"Soigner avec les remèdes de la maison",apply:()=>{state.children.forEach(c=>{if(c.alive!==false&&c.age<14)c.health=clamp(c.health-rand(5,20));});addLog("On veille, on éponge, on prie. La fièvre finit par céder.","info");}}
+   ]},
+  {art:"family", title:"Un portrait de famille", text:"Un photographe ambulant propose de fixer toute la maisonnée sur plaque de verre, devant la façade.",
+   image:"Un appareil sur trépied, un drap noir",
+   choices:[
+     {label:"Poser tous ensemble",condition:()=>state.money>=sc(50),apply:()=>{state.money-=sc(50);state.unity=clamp(state.unity+9);addLog("Le portrait sera accroché dans l'entrée pendant un siècle.","good");}},
+     {label:"Trop cher pour une image",apply:()=>{addLog("Le photographe remballe son matériel.","info");}}
+   ]},
+  {art:"family", title:"Une lettre d'un cousin d'Europe", text:"Une enveloppe froissée, timbrée d'un pays que la famille a quitté il y a longtemps. On demande de l'aide pour traverser.",
+   image:"Une écriture penchée sur du papier mince",
+   choices:[
+     {label:"Payer la traversée",condition:()=>state.money>=sc(200),apply:()=>{state.money-=sc(200);state.legacy.honor++;state.unity=clamp(state.unity+6);if((state.cowboys||[]).length<9){const n=pickPartnerName("m");state.cowboys.push({name:n+" "+state.familyName,loyalty:85,shoot:rand(30,55),ride:rand(35,60),salary:Math.round(rand(5,9)*state.costModifier),years:0,trait:"Fidèle"});decorateCowboy(state.cowboys[state.cowboys.length-1]);addLog(`${n} débarque six mois plus tard et se met au travail sans rien demander.`,"good");}else addLog("La traversée est payée. La famille s'agrandit d'un nom.","good");}},
+     {label:"Envoyer une petite somme et des regrets",apply:()=>{state.money-=Math.min(state.money,sc(50));addLog("Un mandat modeste part vers l'est.","info");}},
+     {label:"Ne pas répondre",apply:()=>{state.legacy.greed++;addLog("La lettre reste sans réponse dans un tiroir.","info");}}
+   ]},
+  {art:"family", title:"Un anniversaire qu'on n'attendait plus", text:"Le chef de famille passe un cap que peu d'hommes atteignent ici. Toute la vallée est invitée.",
+   image:"Une longue table dressée dans la cour",
+   choices:[
+     {label:"Recevoir en grand",condition:()=>state.money>=sc(140),apply:()=>{state.money-=sc(140);state.unity=clamp(state.unity+12);state.reputation=clamp(state.reputation+8);const c=factionOfType("community");if(c)c.relation=clamp(c.relation+15,-100,100);addLog("La fête dure jusqu'au matin. On en parlera longtemps.","good");}},
+     {label:"Un repas en famille, sans plus",apply:()=>{state.unity=clamp(state.unity+5);addLog("Un repas simple, entre soi. C'était très bien ainsi.","good");}}
+   ]},
+  {art:"family", title:"Un testament à écrire", text:"Le notaire de la ville insiste : sans acte écrit, le domaine se disloquera entre les héritiers.",
+   image:"Un encrier et un papier timbré",
+   choices:[
+     {label:"Coucher le domaine par écrit",condition:()=>state.money>=sc(90),apply:()=>{state.money-=sc(90);adultHeirs().forEach(c=>c.resentment=clamp((c.resentment||0)-12));state.unity=clamp(state.unity+6);addLog("Le testament est déposé. Chacun sait à quoi s'en tenir.","good");}},
+     {label:"Remettre à plus tard",apply:()=>{adultHeirs().forEach(c=>c.resentment=clamp((c.resentment||0)+8));addLog("On verra ça l'an prochain. Comme l'an dernier.","bad");}}
+   ]},
+  {art:"crowd", title:"La fête du comté", text:"Concours de tir, tarte aux pommes, course en sac. Tout le monde y va, et tout le monde s'y observe.",
+   image:"Des banderoles entre deux poteaux",
+   choices:[
+     {label:"Y tenir un stand du ranch",condition:()=>state.money>=sc(60),apply:()=>{state.money-=sc(60);state.reputation=clamp(state.reputation+8);const m=factionOfType("media");if(m)m.relation=clamp(m.relation+12,-100,100);addLog("Le stand du ranch ne désemplit pas.","good");}},
+     {label:"Y envoyer les enfants s'amuser",apply:()=>{state.unity=clamp(state.unity+6);addLog("Les enfants rentrent poisseux et heureux.","good");}},
+     {label:"Rester travailler",apply:()=>{state.money+=sc(rand(30,70));const c=factionOfType("community");if(c)c.relation=clamp(c.relation-8,-100,100);addLog("Le travail avance pendant que le comté danse.","info");}}
+   ]},
+  {art:"crowd", title:"Le feu chez le voisin", text:"Une lueur orange à trois kilomètres, en pleine nuit. La grange des voisins brûle avec la récolte dedans.",
+   image:"Une chaîne de seaux dans la nuit",
+   choices:[
+     {label:"Y aller avec tous les hommes",apply:()=>{const c=factionOfType("community");if(c)c.relation=clamp(c.relation+28,-100,100);state.reputation=clamp(state.reputation+10);state.legacy.honor++;(state.cowboys||[]).forEach(x=>x.loyalty=clamp(x.loyalty+4));addLog("La maison est sauvée, la grange perdue. On vous doit une fière chandelle.","good");}},
+     {label:"Leur offrir du foin ensuite",condition:()=>state.feed>=40,apply:()=>{state.feed-=40;const c=factionOfType("community");if(c)c.relation=clamp(c.relation+18,-100,100);addLog("Quarante balles partent chez les voisins le lendemain.","good");}},
+     {label:"Rester chez soi",apply:()=>{const c=factionOfType("community");if(c)c.relation=clamp(c.relation-20,-100,100);addLog("On a regardé brûler depuis le porche.","bad");}}
+   ]},
+  {art:"crowd", title:"Une école à bâtir", text:"Le comté veut une école. Il manque du bois, des bras et surtout de quoi payer l'institutrice.",
+   image:"Des planches empilées sur un terrain vague",
+   choices:[
+     {label:"Financer l'institutrice pour un an",condition:()=>state.money>=sc(160),apply:()=>{state.money-=sc(160);state.reputation=clamp(state.reputation+12);state.legacy.honor++;state.children.forEach(c=>{if(c.alive!==false&&c.age<16)c.ambition=clamp((c.ambition||40)+8);});addLog("L'école ouvre. Les enfants du ranch y sont les premiers inscrits.","good");}},
+     {label:"Fournir le bois du domaine",apply:()=>{const c=factionOfType("community");if(c)c.relation=clamp(c.relation+20,-100,100);addLog("Le bois du ranch devient les murs de l'école.","good");}},
+     {label:"Ce n'est pas l'affaire du ranch",apply:()=>{const c=factionOfType("community");if(c)c.relation=clamp(c.relation-12,-100,100);addLog("Le comté trouvera l'argent ailleurs.","info");}}
+   ]},
+  {art:"crowd", title:"Une épidémie en ville", text:"La ville est fermée. On parle de typhoïde, on enterre vite, et personne ne vient plus au marché.",
+   image:"Une rue vide en plein jour",
+   choices:[
+     {label:"Envoyer des vivres au dispensaire",condition:()=>state.money>=sc(130),apply:()=>{state.money-=sc(130);state.reputation=clamp(state.reputation+14);state.legacy.honor++;addLog("Les charrettes du ranch ravitaillent le dispensaire.","good");}},
+     {label:"Interdire tout déplacement en ville",apply:()=>{state.money-=Math.min(state.money,sc(60));state.unity=clamp(state.unity+4);addLog("Le ranch se referme sur lui-même le temps que ça passe.","info");}},
+     {label:"Profiter de la pénurie pour vendre cher",apply:()=>{state.money+=sc(rand(180,320));state.legacy.greed++;state.reputation=clamp(state.reputation-12);addLog("Les prix montent, et les rancunes avec.","bad");}}
+   ]},
+  {art:"crowd", title:"Une élection au comté", text:"Deux candidats sillonnent les fermes. Chacun promet ce que l'autre refuse, et tous deux veulent votre soutien.",
+   image:"Une affiche clouée sur un poteau",
+   choices:[
+     {label:"Soutenir le candidat de l'ordre",apply:()=>{const l=factionOfType("law");if(l)l.relation=clamp(l.relation+25,-100,100);const c=factionOfType("community");if(c)c.relation=clamp(c.relation-10,-100,100);addLog("Le ranch affiche son soutien à l'homme de l'ordre.","info");}},
+     {label:"Soutenir le candidat des petites fermes",apply:()=>{const c=factionOfType("community");if(c)c.relation=clamp(c.relation+25,-100,100);const t=factionOfType("trade");if(t)t.relation=clamp(t.relation-10,-100,100);addLog("Le ranch se range du côté des petites exploitations.","info");}},
+     {label:"Ne pas prendre parti",apply:()=>{state.reputation=clamp(state.reputation+3);addLog("Le ranch ne se mêle pas de politique. Officiellement.","info");}}
+   ]},
+  {art:"law", title:"Un nouveau shérif", text:"L'ancien est parti à la retraite. Le nouveau est jeune, zélé, et n'a d'arrangement avec personne.",
+   image:"Une étoile neuve sur une veste neuve",
+   choices:[
+     {label:"L'inviter à dîner au ranch",apply:()=>{state.sheriffRelation=clamp(state.sheriffRelation+20,-100,100);const l=factionOfType("law");if(l)l.relation=clamp(l.relation+15,-100,100);addLog("Le dîner se passe bien. On se comprend.","good");}},
+     {label:"Le tester avec une petite entorse",apply:()=>{if(chance(.45)){state.sheriffRelation=clamp(state.sheriffRelation+10,-100,100);addLog("Il ferme les yeux. On sait maintenant où il se situe.","good");}else{state.suspicion=clamp(state.suspicion+18);addLog("Il ne ferme pas les yeux. Le dossier du ranch s'ouvre.","bad");}}},
+     {label:"L'éviter soigneusement",apply:()=>{addLog("On change de trottoir quand on le croise.","info");}}
+   ]},
+  {art:"night", title:"Un chasseur de primes", text:"Un homme silencieux demande à camper une nuit. Il cherche quelqu'un, et il a une affiche pliée dans sa poche.",
+   image:"Un fusil posé contre une selle",
+   choices:[
+     {label:"L'aider dans sa traque",apply:()=>{state.money+=sc(rand(120,240));state.sheriffRelation=clamp(state.sheriffRelation+10,-100,100);const c=factionOfType("community");if(c)c.relation=clamp(c.relation-12,-100,100);addLog("La prime est partagée. Le comté n'aime pas les délateurs.","info");}},
+     {label:"Le loger sans rien dire",apply:()=>{addLog("Il repart avant l'aube, sans un mot de plus.","info");}},
+     {label:"Prévenir celui qu'il cherche",apply:()=>{state.legacy.honor++;state.suspicion=clamp(state.suspicion+10);const c=factionOfType("community");if(c)c.relation=clamp(c.relation+18,-100,100);addLog("L'homme recherché a disparu avant le lever du jour.","info");}}
+   ]},
+  {art:"night", title:"Un incendie qui n'a rien d'accidentel", text:"Le hangar à outils a brûlé, et on a retrouvé un bidon vide à trente mètres, dans l'herbe.",
+   image:"Un bidon renversé près des cendres",
+   choices:[
+     {label:"Mener l'enquête soi-même",apply:()=>{if(chance(.5)){state.rival.relation=clamp(state.rival.relation-15,-100,100);addLog("Les traces mènent vers le ranch d'en face. Rien ne le prouve.","info");}else addLog("Les traces se perdent dans le ruisseau.","info");state.money-=Math.min(state.money,sc(rand(80,160)));}},
+     {label:"Porter plainte et laisser faire",apply:()=>{const l=factionOfType("law");if(l&&l.relation>20){state.money+=sc(rand(60,140));addLog("L'enquête aboutit à un dédommagement.","good");}else{state.money-=Math.min(state.money,sc(rand(80,160)));addLog("L'enquête n'aboutit à rien.","bad");}}}
+   ]},
+  {art:"ranch", title:"Une bagarre au bunkhouse", text:"Deux hommes se sont battus pour une histoire de cartes. Une table est cassée, un nez aussi.",
+   image:"Une chaise en morceaux dans la sciure",
+   choices:[
+     {label:"Renvoyer celui qui a frappé le premier",condition:()=>(state.cowboys||[]).length>1,apply:()=>{const c=state.cowboys.pop();(state.cowboys||[]).forEach(x=>x.loyalty=clamp(x.loyalty-3));addLog(`${c.name} fait son sac. L'ordre règne, froidement.`,"info");}},
+     {label:"Les obliger à réparer ensemble",apply:()=>{(state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty+6));addLog("Ils refont la table à deux. Ils ne s'aiment pas, mais ça tient.","good");}},
+     {label:"Fermer les yeux",apply:()=>{(state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty-2));addLog("On ne dit rien. L'ambiance reste lourde.","info");}}
+   ]},
+  {art:"ranch", title:"Le cuisinier s'en va", text:"Le vieux cuistot part vivre chez sa sœur. Personne ne mesurait ce qu'il tenait dans cette maison.",
+   image:"Une louche accrochée à un clou vide",
+   choices:[
+     {label:"Engager un remplaçant coûteux",condition:()=>state.money>=sc(110),apply:()=>{state.money-=sc(110);(state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty+8));addLog("Le nouveau cuisinier vient de la ville. On mange mieux qu'avant.","good");}},
+     {label:"Confier la cuisine à la maison",apply:()=>{state.unity=clamp(state.unity-4);(state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty+2));addLog("La famille assure les repas. Ça ajoute au travail.","info");}},
+     {label:"Chacun se débrouille",apply:()=>{(state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty-9));addLog("On mange froid, et l'humeur s'en ressent.","bad");}}
+   ]},
+  {art:"ranch", title:"Un homme blessé au travail", text:"Une corde a lâché pendant le chargement. Il a la jambe cassée en deux endroits.",
+   image:"Une attelle de fortune et deux planches",
+   choices:[
+     {label:"Payer le médecin et le garder au ranch",condition:()=>state.money>=sc(130),apply:()=>{state.money-=sc(130);(state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty+12));state.legacy.honor++;addLog("Il remarchera. Tout le bunkhouse a compris le message.","good");}},
+     {label:"Le renvoyer avec ses gages",apply:()=>{if((state.cowboys||[]).length>1){const c=state.cowboys.pop();addLog(`${c.name} part avec sa paie et sa jambe cassée.`,"bad");}(state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty-14));}}
+   ]},
+  {art:"rider", title:"Une jument pleine", text:"La meilleure jument de l'écurie attend un poulain. Le père est un étalon de concours.",
+   image:"Une jument au ventre rond dans le pré",
+   choices:[
+     {label:"La ménager jusqu'au terme",apply:()=>{state.horses++;ensureChampion();if(state.champion)state.champion.speed=clamp(state.champion.speed+rand(0,3));addLog("Le poulain naît sans encombre, et il promet.","good");}},
+     {label:"La faire travailler quand même",apply:()=>{if(chance(.5)){state.horses++;state.money+=sc(rand(40,90));addLog("Elle a travaillé jusqu'au bout, et le poulain va bien.","good");}else{addLog("Le poulain est mort-né. La jument s'en remettra.","bad");}}}
+   ]},
+  {art:"rider", title:"Des mustangs sur le plateau", text:"Une harde de chevaux sauvages descend boire à la rivière chaque soir, à la même heure.",
+   image:"Des crinières libres au bord de l'eau",
+   choices:[
+     {label:"Tenter d'en capturer",condition:()=>(state.cowboys||[]).length>0,apply:()=>{const avg=state.cowboys.reduce((s,c)=>s+c.ride,0)/state.cowboys.length;if(rand(1,100)+avg/2>65){const n=rand(1,3);state.horses+=n;ensureChampion();addLog(`${n} mustang${n>1?"s sont capturés":" est capturé"} après trois jours de traque.`,"good");}else{state.founder.health=clamp(state.founder.health-rand(3,10));addLog("La harde s'échappe, et un homme se retrouve à terre.","bad");}}},
+     {label:"Les laisser tranquilles",apply:()=>{state.legacy.honor++;addLog("La harde continue de descendre boire. C'est bien ainsi.","info");}}
+   ]},
+  {art:"rider", title:"Un maréchal-ferrant de passage", text:"Il propose de referrer toute l'écurie avant l'hiver, à un prix qui se discute.",
+   image:"Une enclume posée à l'arrière d'une charrette",
+   choices:[
+     {label:"Faire referrer tous les chevaux",condition:()=>state.money>=sc(75),apply:()=>{state.money-=sc(75);if(state.champion)state.champion.training=clamp(state.champion.training+5);addLog("Toute l'écurie est referrée. Les chevaux vont mieux.","good");}},
+     {label:"Seulement le cheval de tête",condition:()=>state.money>=sc(30)&&!!state.champion,apply:()=>{state.money-=sc(30);state.champion.training=clamp(state.champion.training+8);addLog(`${state.champion.name} repart avec des fers neufs.`,"good");}},
+     {label:"Le renvoyer",apply:()=>{addLog("Le maréchal reprend la route.","info");}}
+   ]},
+  {art:"rider", title:"Une course de village", text:"Le bourg voisin organise une course sur deux miles, avec une bourse modeste et beaucoup d'amour-propre en jeu.",
+   image:"Une ligne tracée à la chaux dans la poussière",
+   choices:[
+     {label:"Y engager le cheval de tête",condition:()=>!!state.champion,apply:()=>{if(rand(1,100)+championForm()>95){const g=sc(rand(90,180));state.money+=g;state.reputation=clamp(state.reputation+6);state.champion.wins++;addLog(`${state.champion.name} passe la ligne en tête : +${g} $.`,"good");}else addLog(`${state.champion.name} termine dans le peloton.`,"info");}},
+     {label:"Parier sur un autre concurrent",apply:()=>{const mise=sc(60);if(state.money<mise){addLog("Pas de quoi parier ce jour-là.","info");return;}state.money-=mise;if(chance(.4)){state.money+=mise*3;addLog("Le pari rapporte le triple de la mise.","good");}else addLog("Le pari est perdu.","bad");}},
+     {label:"Y aller en spectateur",apply:()=>{state.unity=clamp(state.unity+4);addLog("Une bonne journée, sans rien y gagner.","info");}}
+   ]},
+  {art:"storm", title:"Le blizzard de février", text:"La neige monte à hauteur d'épaule contre le mur nord. On ne voit plus le corral depuis la cuisine.",
+   image:"Un mur blanc contre les fenêtres",
+   choices:[
+     {label:"Sortir chercher les bêtes à la corde",apply:()=>{if(chance(.62)){addLog("Les bêtes sont ramenées, les hommes gelés jusqu'aux os.","good");}else{const l=Math.min(state.cattle,rand(3,8));state.cattle-=l;addLog(`Le blizzard emporte ${l} bêtes et un doigt de gelé.`,"bad");}}},
+     {label:"Barricader et attendre la fin",apply:()=>{const l=Math.min(state.cattle,rand(5,12));state.cattle-=l;state.unity=clamp(state.unity+3);addLog(`On a tenu au chaud, mais ${l} bêtes sont restées dehors.`,"bad");}}
+   ]},
+  {art:"storm", title:"La crue de printemps", text:"La rivière est sortie de son lit dans la nuit. Le gué a disparu, les clôtures basses aussi.",
+   image:"De l'eau brune jusqu'aux barrières",
+   choices:[
+     {label:"Refaire les clôtures immédiatement",condition:()=>state.money>=sc(110),apply:()=>{state.money-=sc(110);addLog("Les clôtures sont relevées avant que le bétail ne s'égaille.","good");}},
+     {label:"Profiter du limon déposé",apply:()=>{state.feed+=rand(20,45);addLog("La crue laisse une terre grasse : le foin sera bon cette année.","good");}},
+     {label:"Attendre le retrait des eaux",apply:()=>{const l=Math.min(state.cattle,rand(1,5));state.cattle-=l;addLog(`${l} bête${l>1?"s se sont noyées":" s'est noyée"} dans le courant.`,"bad");}}
+   ]},
+  {art:"storm", title:"Un feu de prairie", text:"Une ligne orange court sur la crête, poussée par le vent d'ouest. Il reste peut-être deux heures.",
+   image:"Une fumée noire qui monte droit",
+   choices:[
+     {label:"Ouvrir un pare-feu au soc",condition:()=>(state.cowboys||[]).length>0,apply:()=>{if(chance(.7)){addLog("Le pare-feu tient. Le feu s'arrête à cinquante mètres des granges.","good");}else{state.feed=Math.max(0,state.feed-rand(30,70));addLog("Le feu saute le pare-feu et dévore les réserves.","bad");}}},
+     {label:"Allumer un contre-feu",apply:()=>{if(chance(.5)){addLog("Le contre-feu étouffe l'incendie sur la crête.","good");}else{state.land=Math.max(40,state.land-10);ensureParcels();addLog("Le contre-feu échappe à tout contrôle et brûle dix hectares.","bad");}}},
+     {label:"Évacuer le troupeau vers la rivière",apply:()=>{state.feed=Math.max(0,state.feed-rand(20,50));addLog("Le troupeau est sauvé, les pâtures du haut sont noires.","info");}}
+   ]},
+  {art:"storm", title:"Un gel tardif", text:"En mai, le thermomètre passe sous zéro trois nuits d'affilée. Les jeunes pousses noircissent.",
+   image:"Du givre sur l'herbe neuve",
+   choices:[
+     {label:"Acheter du foin de complément",condition:()=>state.money>=sc(100),apply:()=>{state.money-=sc(100);state.feed+=45;addLog("Du foin d'appoint compense les pousses perdues.","good");}},
+     {label:"Réduire la charge des pâtures",condition:()=>state.cattle>=12,apply:()=>{const n=8;state.cattle-=n;state.money+=n*state.cattlePrice;addLog(`Huit bêtes vendues pour soulager l'herbe rare.`,"info");}},
+     {label:"Compter sur la repousse",apply:()=>{state.feed=Math.max(0,state.feed-rand(15,35));addLog("L'herbe repart, mais avec trois semaines de retard.","info");}}
+   ]},
+  {art:"storm", title:"Une nuée de sauterelles", text:"Le ciel se voile à l'est. Ce n'est pas un nuage : c'est un vol d'insectes qui couvre l'horizon.",
+   image:"Un bourdonnement qui couvre les voix",
+   choices:[
+     {label:"Faire du bruit et de la fumée",apply:()=>{if(chance(.45)){addLog("Le vol dévie vers le comté voisin.","good");}else{state.feed=Math.max(0,state.feed-rand(40,90));addLog("Les sauterelles ne laissent que la terre nue.","bad");}}},
+     {label:"Rentrer tout le fourrage sous bâche",apply:()=>{state.feed=Math.max(0,state.feed-rand(10,25));addLog("L'essentiel des réserves est sauvé sous les bâches.","good");}}
+   ]},
+  {art:"storm", title:"Une tornade sur la vallée", text:"L'entonnoir descend à trois kilomètres, et il remonte la vallée droit sur le ranch.",
+   image:"Un ciel vert au-dessus des collines",
+   choices:[
+     {label:"Tout le monde à la cave",apply:()=>{if(chance(.55)){addLog("La tornade passe à côté. On ressort en tremblant.","good");}else{state.money-=Math.min(state.money,sc(rand(120,280)));addLog("La grange est éventrée. Les réparations coûteront cher.","bad");}}},
+     {label:"Lâcher le bétail pour qu'il fuie",apply:()=>{const l=Math.min(state.cattle,rand(0,4));state.cattle-=l;addLog(l?`Le troupeau se disperse : ${l} bêtes manquent à l'appel.`:"Le troupeau se disperse et revient au complet.",l?"bad":"good");}}
+   ]},
+  {art:"land", title:"Une source jaillit", text:"En creusant un fossé, les hommes ouvrent une veine d'eau claire là où personne n'en attendait.",
+   image:"De l'eau qui sourd entre les pierres",
+   choices:[
+     {label:"Aménager un abreuvoir",condition:()=>state.money>=sc(90),apply:()=>{state.money-=sc(90);state.feed+=rand(25,50);addLog("La nouvelle source abreuve tout le versant.","good");}},
+     {label:"La garder secrète",apply:()=>{state.legacy.greed++;state.feed+=rand(10,25);addLog("La source reste une affaire de famille.","info");}}
+   ]},
+  {art:"land", title:"Des ossements dans le canyon", text:"Un éboulement dégage des restes très anciens, avec des pointes de silex mêlées aux côtes.",
+   image:"Des os blanchis entre deux rochers",
+   choices:[
+     {label:"Prévenir l'université",apply:()=>{state.reputation=clamp(state.reputation+rand(6,12));state.legacy.honor++;addLog("Des savants viennent fouiller. Le nom du ranch paraît dans une revue.","good");}},
+     {label:"Vendre les pièces à un collectionneur",apply:()=>{state.money+=sc(rand(120,260));state.legacy.greed++;addLog("Les ossements partent dans une caisse, sans questions.","info");}},
+     {label:"Recouvrir et se taire",apply:()=>{state.unity=clamp(state.unity+2);addLog("Les os sont recouverts. Certaines choses doivent rester où elles sont.","info");}}
+   ]},
+  {art:"land", title:"Un filon affleure", text:"Une roche bleutée apparaît au flanc de la butte. Un prospecteur de passage prétend que ça vaut quelque chose.",
+   image:"Un éclat métallique dans la pierre",
+   choices:[
+     {label:"Faire venir un géologue",condition:()=>state.money>=sc(140),apply:()=>{state.money-=sc(140);if(chance(.4)){state.money+=sc(rand(500,1100));addLog("Le filon est réel. Une compagnie achète le droit d'extraction.","good");}else{addLog("Le géologue est formel : c'est de la pyrite.","info");}}},
+     {label:"Vendre le droit sans faire analyser",apply:()=>{state.money+=sc(rand(180,340));addLog("Le droit d'extraction est vendu à l'aveugle.","good");}},
+     {label:"Interdire toute fouille sur vos terres",apply:()=>{state.reputation=clamp(state.reputation+4);addLog("Aucun trou ne sera creusé ici de votre vivant.","info");}}
+   ]},
+  {art:"land", title:"Un chêne remarquable", text:"Le vieux chêne du pré du bas est fendu par la foudre. Il ombrageait les bêtes depuis la fondation.",
+   image:"Un tronc ouvert en deux",
+   choices:[
+     {label:"Le soigner et l'étayer",condition:()=>state.money>=sc(70),apply:()=>{state.money-=sc(70);state.unity=clamp(state.unity+7);addLog("Le vieux chêne est étayé. Il tiendra encore une génération.","good");}},
+     {label:"En faire du bois de charpente",apply:()=>{state.money+=sc(rand(90,170));state.unity=clamp(state.unity-5);addLog("Le chêne devient des poutres. Personne ne le dit tout haut, mais ça pince.","info");}}
+   ]},
+  {art:"land", title:"Un droit de passage contesté", text:"Le chemin qui traverse la parcelle nord sert à tout le monde depuis toujours. Un voisin veut désormais le faire fermer.",
+   image:"Une barrière neuve en travers d'un chemin",
+   choices:[
+     {label:"Maintenir le passage ouvert",apply:()=>{const c=factionOfType("community");if(c)c.relation=clamp(c.relation+22,-100,100);state.legacy.honor++;addLog("Le chemin reste ouvert. Le comté apprécie.","good");}},
+     {label:"Le fermer et faire payer un péage",apply:()=>{state.money+=sc(rand(80,160));const c=factionOfType("community");if(c)c.relation=clamp(c.relation-25,-100,100);state.legacy.greed++;addLog("Une barrière et un tarif. Les voisins font un détour, en maugréant.","info");}}
+   ]},
+  {art:"land", title:"Un arpenteur se présente", text:"Un homme au théodolite plante des jalons sur la crête. Il dit refaire le cadastre du comté.",
+   image:"Un trépied planté au sommet",
+   choices:[
+     {label:"L'accompagner sur tout le tour",apply:()=>{state.reputation=clamp(state.reputation+5);if(chance(.35)){state.land+=rand(5,15);ensureParcels();addLog("Le relevé révèle quelques hectares que vous ignoriez posséder.","good");}else addLog("Le cadastre confirme vos limites au mètre près.","good");}},
+     {label:"Le renvoyer sans façon",apply:()=>{const l=factionOfType("law");if(l)l.relation=clamp(l.relation-15,-100,100);addLog("L'arpenteur repart, et notera votre refus.","bad");}}
+   ]},
+  {art:"herd", title:"Un vêlage difficile", text:"La meilleure vache du troupeau est en travail depuis la nuit. Elle n'y arrivera pas seule.",
+   image:"Une lanterne dans l'étable, au petit matin",
+   choices:[
+     {label:"Y passer la nuit avec elle",apply:()=>{if(chance(.75)){state.cattle+=1;state.unity=clamp(state.unity+3);addLog("Le veau vit, la mère aussi. Le jour se lève sur trois hommes épuisés.","good");}else{state.cattle=Math.max(0,state.cattle-1);addLog("Ni l'un ni l'autre n'a survécu.","bad");}}},
+     {label:"Faire venir le vétérinaire",condition:()=>state.money>=sc(80),apply:()=>{state.money-=sc(80);state.cattle+=1;addLog("Le vétérinaire sauve la mère et le veau.","good");}}
+   ]},
+  {art:"herd", title:"Un taureau de concours à vendre", text:"Un éleveur du nord liquide son cheptel. Son reproducteur est le plus beau qu'on ait vu dans la région.",
+   image:"Une bête massive dans un enclos étroit",
+   choices:[
+     {label:"L'acheter au prix fort",condition:()=>state.money>=sc(380),apply:()=>{state.money-=sc(380);state.cattle+=1;state.reputation=clamp(state.reputation+6);addLog("Le taureau du nord entre au ranch. La descendance vaudra de l'or.","good");}},
+     {label:"Négocier une saillie seulement",condition:()=>state.money>=sc(110),apply:()=>{state.money-=sc(110);addLog("Une saillie négociée : le sang neuf entrera quand même dans le troupeau.","good");}},
+     {label:"Laisser passer",apply:()=>{addLog("Le taureau part chez un concurrent.","info");}}
+   ]},
+  {art:"herd", title:"Le piétin dans le troupeau", text:"Plusieurs bêtes boitent. Le sol détrempé du bas-fond a fait le reste.",
+   image:"Des sabots dans la boue noire",
+   choices:[
+     {label:"Traiter au pédiluve",condition:()=>state.money>=sc(70),apply:()=>{state.money-=sc(70);addLog("Le pédiluve enraye l'infection en deux semaines.","good");}},
+     {label:"Déplacer le troupeau sur les hauteurs",apply:()=>{state.feed=Math.max(0,state.feed-15);addLog("Le troupeau monte au sec. Les sabots sèchent.","good");}},
+     {label:"Laisser faire",apply:()=>{const l=Math.min(state.cattle,rand(2,6));state.cattle-=l;addLog(`${l} bêtes sont perdues, impossibles à remettre debout.`,"bad");}}
+   ]},
+  {art:"herd", title:"Des loups sur les hauteurs", text:"On a entendu hurler deux nuits de suite. Au matin, un veau manque et l'herbe est rouge.",
+   image:"Des traces à cinq doigts dans la boue",
+   choices:[
+     {label:"Organiser une battue",condition:()=>state.weapons>0,apply:()=>{if(chance(.6)){state.reputation=clamp(state.reputation+5);addLog("La meute est dispersée. Le comté vous en sait gré.","good");}else{state.founder.health=clamp(state.founder.health-rand(2,8));addLog("La battue tourne court dans les rochers.","info");}}},
+     {label:"Poster un homme la nuit",condition:()=>(state.cowboys||[]).length>0,apply:()=>{const c=state.cowboys[0];c.loyalty=clamp(c.loyalty-4);addLog(`${c.name} passe ses nuits en haut. Les loups ne reviennent pas.`,"good");}},
+     {label:"Accepter la perte",apply:()=>{const l=Math.min(state.cattle,rand(1,4));state.cattle-=l;addLog(`Les loups prélèvent leur part : ${l} bêtes.`,"bad");}}
+   ]},
+  {art:"herd", title:"Un troupeau sauvage traverse", text:"Une centaine de bêtes sans marque descendent du plateau et se mêlent aux vôtres.",
+   image:"Des cornes sans fer parmi les vôtres",
+   choices:[
+     {label:"Marquer celles que vous pouvez",apply:()=>{const g=rand(4,12);state.cattle+=g;state.suspicion=clamp(state.suspicion+rand(4,10));addLog(`${g} bêtes sans maître prennent votre fer.`,"good");}},
+     {label:"Prévenir le comté et les trier",apply:()=>{const c=factionOfType("community");if(c)c.relation=clamp(c.relation+18,-100,100);state.legacy.honor++;state.cattle+=rand(1,3);addLog("Le tri se fait devant témoins. Chacun récupère son bien.","good");}},
+     {label:"Les repousser vers le plateau",apply:()=>{addLog("Les bêtes sauvages remontent d'où elles venaient.","info");}}
+   ]},
+  {art:"herd", title:"Une saison de vêlage exceptionnelle", text:"Les naissances s'enchaînent sans un problème. On n'avait pas vu ça depuis longtemps.",
+   image:"Un pré plein de jeunes bêtes",
+   choices:[
+     {label:"Garder toutes les génisses",apply:()=>{state.cattle+=rand(6,14);state.feed=Math.max(0,state.feed-20);addLog("Le troupeau grossit d'un coup. Les réserves vont souffrir.","good");}},
+     {label:"Vendre le surplus tout de suite",apply:()=>{const g=sc(rand(160,300));state.money+=g;addLog(`Le surplus part au marché : +${g} $.`,"good");}}
+   ]},
+  {art:"herd", title:"Une bête tombe dans un puits", text:"Un vieux puits mal comblé s'est ouvert sous le poids d'une génisse. Elle beugle au fond depuis l'aube.",
+   image:"Une margelle effondrée dans l'herbe",
+   choices:[
+     {label:"La remonter au palan",apply:()=>{if(chance(.65)){addLog("La génisse remonte, sonnée mais vivante.","good");}else{state.cattle=Math.max(0,state.cattle-1);addLog("La sangle cède. On a fait ce qu'on a pu.","bad");}}},
+     {label:"Combler le puits pour de bon",apply:()=>{state.cattle=Math.max(0,state.cattle-1);state.money-=Math.min(state.money,sc(50));addLog("Le puits est comblé au moellon. Il n'y en aura pas d'autre.","info");}}
+   ]},
+  {art:"money", title:"Les cours s'effondrent", text:"Un télégramme du marché de Kansas City : le prix de la viande a perdu un tiers en une semaine.",
+   image:"Un cours affiché à la craie, corrigé deux fois",
+   choices:[
+     {label:"Vendre tout de suite avant pire",condition:()=>state.cattle>=15,apply:()=>{const n=15;state.cattle-=n;state.money+=Math.round(n*state.cattlePrice*.8);addLog("Quinze bêtes bradées avant que ça ne descende encore.","info");}},
+     {label:"Attendre la remontée",apply:()=>{state.cattlePrice=clamp(state.cattlePrice-rand(3,7),state.cattlePriceMin,state.cattlePriceMax);if(chance(.5)){state.cattlePrice=clamp(state.cattlePrice+rand(5,10),state.cattlePriceMin,state.cattlePriceMax);addLog("Le marché se reprend. La patience a payé.","good");}else addLog("Le marché reste bas. On ne vend rien ce trimestre.","bad");}}
+   ]},
+  {art:"money", title:"Un acheteur venu de loin", text:"Un négociant d'une ville que vous ne savez pas placer veut du bétail, beaucoup, et paie d'avance.",
+   image:"Une traite bancaire posée sur la table",
+   choices:[
+     {label:"Signer le contrat",condition:()=>state.cattle>=25,apply:()=>{const n=25;state.cattle-=n;const g=Math.round(n*state.cattlePrice*1.35);state.money+=g;const f=factionOfType("trade");if(f)f.relation=clamp(f.relation+15,-100,100);addLog(`Vingt-cinq bêtes vendues 35 % au-dessus du cours : +${g} $.`,"good");}},
+     {label:"Exiger de voir la couleur de son argent",apply:()=>{if(chance(.6)){state.money+=sc(rand(200,400));addLog("Il paie comptant. L'affaire se fait.","good");}else addLog("Le négociant se vexe et remonte dans sa voiture.","info");}},
+     {label:"Se méfier et refuser",apply:()=>{state.reputation=clamp(state.reputation+2);addLog("On ne vend pas à qui on ne connaît pas.","info");}}
+   ]},
+  {art:"money", title:"Le percepteur passe", text:"Un fonctionnaire méticuleux compte les bêtes, mesure les bâtiments et note tout dans un registre.",
+   image:"Un registre ouvert sur la table de la cuisine",
+   choices:[
+     {label:"Tout déclarer honnêtement",apply:()=>{state.money-=Math.min(state.money,sc(rand(90,190)));state.legacy.honor++;const l=factionOfType("law");if(l)l.relation=clamp(l.relation+15,-100,100);addLog("L'impôt est payé rubis sur l'ongle.","info");}},
+     {label:"Sous-déclarer le cheptel",apply:()=>{state.legacy.greed++;state.suspicion=clamp(state.suspicion+rand(8,16));state.money-=Math.min(state.money,sc(rand(30,70)));addLog("La moitié du troupeau n'existe pas sur le papier.","info");}}
+   ]},
+  {art:"money", title:"Un prêteur sur gages", text:"Un homme propose une avance immédiate, à un taux qu'il annonce d'une voix douce.",
+   image:"Une bourse de cuir sur un comptoir",
+   choices:[
+     {label:"Emprunter pour investir",apply:()=>{state.money+=sc(400);state.arcCooldown=state.arcCooldown;addLog("Quatre cents dollars entrent en caisse. Il faudra les rendre, et plus.","info");if(chance(.5)){state.money-=Math.min(state.money,sc(rand(140,260)));addLog("Le remboursement tombe plus tôt qu'annoncé.","bad");}}},
+     {label:"Refuser tout crédit",apply:()=>{state.unity=clamp(state.unity+3);addLog("Le ranch ne devra rien à personne.","good");}}
+   ]},
+  {art:"money", title:"De la fausse monnaie au marché", text:"Trois des billets encaissés au marché sont grossièrement contrefaits. Le marchand jure ne rien savoir.",
+   image:"Deux billets côte à côte, l'un plus pâle",
+   choices:[
+     {label:"Porter plainte",apply:()=>{const l=factionOfType("law");if(l)l.relation=clamp(l.relation+12,-100,100);state.money-=Math.min(state.money,sc(60));addLog("La plainte est déposée. L'argent est perdu, l'honneur sauf.","info");}},
+     {label:"Les faire passer ailleurs",apply:()=>{state.legacy.greed++;state.suspicion=clamp(state.suspicion+rand(6,14));addLog("Les faux billets repartent dans la circulation.","info");}}
+   ]},
   {
     title:"Une clôture déplacée",
     text:"La famille Dawson affirme que votre nouvelle clôture empiète sur ses terres. Ses hommes attendent une réponse avant la tombée de la nuit.",

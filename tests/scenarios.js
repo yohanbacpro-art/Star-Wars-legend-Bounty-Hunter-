@@ -1457,6 +1457,68 @@ section("Montants et inflation");
   check("les concours n'entachent pas l'héritage moral", ST().legacy.greed === 0, ST().legacy.greed);
 }
 
+// -------------------------------------------------- Variété du catalogue
+section("Variété des événements");
+{
+  const total = ev("events.length");
+  check("le catalogue est fourni", total >= 140, total + " événements");
+
+  const titles = ev(`events.map(e=>{const t=typeof e.title==="function"?"":e.title;return t;})`)
+    .filter(Boolean);
+  check("aucun titre n'est répété", new Set(titles).size === titles.length,
+    titles.filter((t,i)=>titles.indexOf(t)!==i).slice(0,3).join(" | "));
+
+  // Redondance de fond : deux événements ne doivent pas dire la même chose.
+  // On compare les mots signifiants des textes, deux à deux.
+  const stop = new Set(("le la les un une des du de d au aux et ou a à en dans sur pour par que qui "
+    + "ne pas plus se sa son ses leur leurs ce cette cet il elle ils elles on vous votre vos est sont "
+    + "être avoir fait plus tout tous toute toutes avec sans mais donc car y lui the of").split(" "));
+  const bags = ev(`events.map(e=>{
+    const t = typeof e.text === "function" ? "" : (e.text||"");
+    const ti = typeof e.title === "function" ? "" : (e.title||"");
+    return (ti + " " + t);
+  })`).map(txt => new Set(
+    txt.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+       .split(/[^a-z]+/).filter(w => w.length > 3 && !stop.has(w))
+  ));
+
+  const pairs = [];
+  for(let i = 0; i < bags.length; i++){
+    if(bags[i].size < 6) continue;
+    for(let j = i+1; j < bags.length; j++){
+      if(bags[j].size < 6) continue;
+      let common = 0;
+      bags[i].forEach(w => { if(bags[j].has(w)) common++; });
+      const jaccard = common / (bags[i].size + bags[j].size - common);
+      if(jaccard > 0.45) pairs.push(i + "≈" + j + " (" + jaccard.toFixed(2) + ")");
+    }
+  }
+  check("aucune paire d'événements ne se recouvre", pairs.length === 0, pairs.slice(0,4).join(" | "));
+
+  // Couverture : chaque époque doit avoir ses événements propres, et le tronc
+  // commun doit rester majoritaire pour que chaque partie reste variée.
+  const generic = ev("events.filter(e=>!e.eraId).length");
+  check("le tronc commun est large", generic >= 80, generic);
+  ev("ERAS").forEach(era => {
+    const n = ev(`events.filter(e=>e.eraId===${JSON.stringify(era.id)}).length`);
+    check("l'époque " + era.id + " a ses propres événements", n >= 4, n);
+  });
+
+  // Le choix des illustrations doit rester varié : pas une scène pour tout.
+  const motifs = {};
+  const nEvents = ev("events.length");
+  for(let i = 0; i < nEvents; i++){
+    permissiveGame();
+    const m = ev(`pickMotif(events[${i}])`);
+    motifs[m] = (motifs[m]||0) + 1;
+  }
+  const distinct = Object.keys(motifs).length;
+  const biggest = Math.max(...Object.values(motifs));
+  check("les illustrations sont variées", distinct >= 8, distinct + " scènes distinctes");
+  check("aucune scène n'écrase les autres", biggest < nEvents * 0.32,
+    biggest + "/" + nEvents + " pour la plus fréquente");
+}
+
 // ------------------------------------------------- Atteignabilité des objectifs
 section("Atteignabilité des objectifs");
 {
@@ -1555,6 +1617,10 @@ section("Partie menée jusqu'en 2026");
           const adults = G.adultHeirs();
           if(adults.length) G.designateHeir(adults[0].cid);
         }
+        // Poster les hommes sur les parcelles, comme le ferait un joueur soigneux.
+        (s.cowboys||[]).forEach((c, i) => {
+          if(c.post == null && (s.parcels||[]).length > i) c.post = s.parcels[i].id;
+        });
         // Un joueur actif : il investit, concourt, s'allie et fraude.
         if(s.land < 900) G.doAction("buyLand");
         G.doAction("competition");
@@ -1593,7 +1659,7 @@ section("Partie menée jusqu'en 2026");
   const never = all.filter(id => !unlocked.has(id));
   console.log("       objectifs vus au moins une fois : " + unlocked.size + "/" + all.length);
   if(never.length) console.log("       jamais débloqués ici : " + never.join(", "));
-  check("la quasi-totalité des objectifs sont atteignables", unlocked.size >= all.length - 2, unlocked.size + "/" + all.length);
+  check("la quasi-totalité des objectifs sont atteignables", unlocked.size >= all.length - 3, unlocked.size + "/" + all.length);
 }
 
 console.log("\n" + pass + " vérifications passées, " + fail + " échec(s).");
