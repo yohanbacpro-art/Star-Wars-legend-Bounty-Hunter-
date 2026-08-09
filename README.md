@@ -1,4 +1,4 @@
-# Ranch Dynasty — V3.2
+# Ranch Dynasty — V3.3
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -86,6 +86,15 @@ Chaque bascule d'époque, sauf la première, propose deux voies structurantes
 cheval, nourrir le comté ou racheter les ruinés, ouvrir au tourisme ou classer
 les terres en réserve. Le choix est mémorisé dans `state.doctrines`.
 
+**Les arcs relisent la doctrine** via `doctrine(eraId)`. La même affaire ne se
+joue pas de la même façon selon la ligne tenue : refuser la délégation ouvrière
+coûte 32 points de loyauté à une maison mécanisée contre 10 à une maison restée
+à cheval, et la mécanisation ouvre une branche propre — garantir qu'aucune
+machine ne remplacera un homme. Une exploitation restée familiale ne peut pas
+vendre de parts au conglomérat mais peut lui opposer l'indivision. Le comté
+secourt volontiers celui qui l'a nourri pendant la crise, et reste sourd à celui
+qui a racheté les fermes ruinées.
+
 ## Les deux maisons rivales
 
 En face aussi quelqu'un vieillit. Chaque maison a un chef (`leader`) avec un nom,
@@ -103,6 +112,11 @@ deux maisons réconciliées contre vous frappent bien plus (×1,45).
 Se rapprocher d'une maison refroidit l'autre. `sowDiscord()` permet de les
 monter l'une contre l'autre : réussi, cela les détourne durablement de vous ;
 éventé, les deux vous en veulent à la fois.
+
+Deux issues extrêmes se comptent. Quand les deux maisons sont hostiles **et**
+alliées entre elles, chaque trimestre tenu incrémente `state.stats.siegeQuarters`.
+À l'opposé, un événement permet de **marier un enfant dans une maison rivale** :
+la relation bondit durablement, mais l'autre maison le prend très mal.
 
 ## La carte du domaine
 
@@ -314,7 +328,8 @@ sans aucune dépendance :
 # montants et inflation, sexes et fertilité, chevaux, apport des cow-boys.
 # arcs, rival incarné, tournants d'époque, carte du domaine.
 # variété du catalogue, arcs d'époque, triangle, absence d'impasse.
-# 288 vérifications, sortie non nulle en cas d'échec.
+# doctrines couplées aux arcs, siège et mariage rival.
+# 306 vérifications, sortie non nulle en cas d'échec.
 node tests/scenarios.js index.html
 
 # Simulation de masse.
@@ -337,7 +352,8 @@ profils : il compare facilement deux versions du fichier
 - Quelques objectifs restent des jalons plus que des défis (`united`, `oldHand`
   sont atteints par ~98 % des parties bien menées)
 
-- Des objectifs liés au triangle : survivre à une alliance des deux maisons,
-  marier un enfant dans la maison d'en face
-- Faire porter les doctrines d'époque sur les arcs : une famille mécanisée
-  affronte le conflit social autrement
+- Étendre le couplage doctrine/arc aux deux arcs qui n'en profitent pas encore
+  (la piste de convoyage et le procès)
+- Des tournants d'époque pour la Fondation, qui n'en a pas
+- Un mode « chronique » en fin de partie : relire les grands moments de la saga
+  dans l'ordre, avec leurs illustrations

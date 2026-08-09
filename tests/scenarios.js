@@ -95,6 +95,9 @@ function permissiveGame(){
   s.champion = {name:"Comanche", age:6, speed:60, training:60, wins:2, alive:true};
   s.spouse.role = "none";
   s.factions.forEach((f,i) => f.relation = i === 0 ? -50 : 70);
+  // Une maison hostile, l'autre assez cordiale pour qu'un mariage soit proposé.
+  G.ensureSecondHouse();
+  s.rival2.relation = 45;
   addAdult(s, "Aîné", {age:35, resentment:80, ambition:70});
   addAdult(s, "Cadet", {age:25, resentment:60, ambition:90});
   G.addChild("Petit", {age:10, health:100});
@@ -877,6 +880,99 @@ section("Arcs d'époque");
     ST().arc === null && (ST().arcsDone||[]).includes("trailDrive"));
 }
 
+// ------------------------------------------- Les doctrines pèsent sur les arcs
+section("Doctrines et arcs");
+{
+  // Le refus face à la délégation doit coûter plus cher à une maison mécanisée.
+  function refusalSting(doctrineId){
+    const s = permissiveGame();
+    s.eraId = "industrial";
+    s.doctrines = doctrineId ? {industrial:doctrineId} : {};
+    s.cowboys = [{name:"A",loyalty:80,shoot:60,ride:60,salary:10,years:3,trait:"Fidèle"}];
+    s.arc = {id:"strike", step:0, data:{}};
+    const before = ST().cowboys[0].loyalty;
+    ev(`(function(){
+      const st = arcById("strike").steps[0];
+      const c = st.choices.find(x=>x.label.indexOf("Refuser")===0);
+      c.apply();
+    })()`);
+    return before - ST().cowboys[0].loyalty;
+  }
+  const mech = refusalSting("machines");
+  const hands = refusalSting("hands");
+  const none = refusalSting(null);
+  check("mécaniser rend le refus plus coûteux", mech > none, mech + " contre " + none);
+  check("être resté à cheval amortit le refus", hands < none, hands + " contre " + none);
+
+  // Une voie ouvre une branche qui n'existe pas autrement.
+  function branchCount(doctrineId){
+    const s = permissiveGame();
+    s.eraId = "industrial";
+    s.doctrines = doctrineId ? {industrial:doctrineId} : {};
+    s.money = 100000;
+    return ev(`(function(){
+      return arcById("strike").steps[0].choices.filter(c=>!c.condition||c.condition()).length;
+    })()`);
+  }
+  check("la mécanisation ouvre une branche propre",
+    branchCount("machines") > branchCount(null),
+    branchCount("machines") + " contre " + branchCount(null));
+
+  // L'indivision familiale ferme la vente de parts et en ouvre une autre.
+  const s2 = permissiveGame();
+  s2.eraId = "corporate"; s2.doctrines = {corporate:"family"}; s2.money = 100000;
+  const famChoices = ev(`arcById("takeover").steps[1].choices.filter(c=>!c.condition||c.condition()).map(c=>c.label)`);
+  check("une affaire de famille ne peut pas vendre ses parts",
+    !famChoices.some(l => l.indexOf("part minoritaire") >= 0), famChoices.join(" | "));
+  check("elle peut opposer l'indivision",
+    famChoices.some(l => l.indexOf("indivision") >= 0), famChoices.join(" | "));
+
+  // Le comté aide plus volontiers ceux qui l'ont nourri.
+  function rescued(doctrineId, communityRelation){
+    let ok = 0;
+    for(let i = 0; i < 30; i++){
+      const s = permissiveGame();
+      s.eraId = "depression";
+      s.doctrines = doctrineId ? {depression:doctrineId} : {};
+      s.factions.forEach(f => { if(f.type === "community") f.relation = communityRelation; });
+      s.arc = {id:"foreclosure", step:1, data:{}};
+      ev(`(function(){
+        const c = arcById("foreclosure").steps[1].choices.find(x=>x.label.indexOf("comté")>=0);
+        c.apply();
+      })()`);
+      if(ST().arc.data.paid) ok++;
+    }
+    return ok;
+  }
+  check("avoir nourri le comté le rend secourable", rescued("charity", 20) > 0, rescued("charity", 20));
+  check("avoir racheté les ruinés le rend sourd", rescued("buyout", 40) === 0, rescued("buyout", 40));
+
+  // Les textes doivent varier selon la doctrine.
+  function arcText(arcId, step, eraId, doctrineId){
+    const s = permissiveGame();
+    s.eraId = eraId;
+    s.doctrines = doctrineId ? {[eraId]:doctrineId} : {};
+    s.arc = {id:arcId, step:step, data:{}};
+    return ev(`(function(){
+      const f = arcById(${JSON.stringify(arcId)}).steps[${step}].text;
+      return typeof f === "function" ? f() : f;
+    })()`);
+  }
+  const pairs = [
+    ["strike", 0, "industrial", "machines", "hands"],
+    ["takeover", 0, "corporate", "company", "family"],
+    ["conservancy", 0, "modern", "conservancy", "tourism"],
+    ["warehouse", 0, "prohibition", "wet", "dry"]
+  ];
+  const same = [];
+  pairs.forEach(([id, st, era, a, b]) => {
+    const ta = arcText(id, st, era, a), tb = arcText(id, st, era, b), tn = arcText(id, st, era, null);
+    if(ta === tb || ta === tn || tb === tn) same.push(id);
+  });
+  check("chaque voie donne un texte différent au chapitre d'ouverture",
+    same.length === 0, same.join(", "));
+}
+
 // --------------------------------------------------- Deux maisons rivales
 section("Le triangle");
 {
@@ -942,6 +1038,81 @@ section("Le triangle");
     html.includes(ST().rival.name) && html.includes(ST().rival2.name));
   check("le panneau expose la querelle entre elles", html.includes("contre"));
   check("le panneau propose de semer la discorde", html.includes("sowDiscord"));
+}
+
+
+// --------------------------------------------- Siège et mariage rival
+section("Le triangle : siège et mariage");
+{
+  // Deux maisons liguées : chaque trimestre tenu se compte.
+  const s = freshGame();
+  s.money = 200000; s.feed = 5000; s.cattle = 60;
+  G.ensureSecondHouse();
+  ST().rival.relation = -70; ST().rival2.relation = -70; ST().rivalFeud = 70;
+  for(let i = 0; i < 10; i++){
+    ST().rival.relation = -70; ST().rival2.relation = -70; ST().rivalFeud = 70;
+    G.endTurn();
+    if(!$el("eventModal")._classes.has("hidden")){
+      const ch = $el("eventChoices").children;
+      if(ch.length) ch[0].onclick();
+    }
+  }
+  check("le siège se compte trimestre après trimestre",
+    ST().stats.siegeQuarters >= 8, ST().stats.siegeQuarters);
+  G.checkAchievements();
+  check("tenir deux ans sous siège débloque l'objectif",
+    ST().achievements.some(a=>a.id==="besieged"));
+
+  // Pas de siège si les maisons se détestent entre elles.
+  const s2 = freshGame();
+  s2.money = 200000; s2.feed = 5000;
+  G.ensureSecondHouse();
+  for(let i = 0; i < 6; i++){
+    ST().rival.relation = -70; ST().rival2.relation = -70; ST().rivalFeud = -70;
+    G.endTurn();
+    if(!$el("eventModal")._classes.has("hidden")){
+      const ch = $el("eventChoices").children;
+      if(ch.length) ch[0].onclick();
+    }
+  }
+  check("deux maisons brouillées ne font pas siège", ST().stats.siegeQuarters === 0,
+    ST().stats.siegeQuarters);
+}
+{
+  // Le mariage dans la maison d'en face.
+  const wedding = ev(`events.find(e=>{const t=typeof e.title==="function"?e.title():e.title;return t==="Une alliance par le mariage";})`);
+  check("l'événement de mariage rival existe", !!wedding);
+
+  const s = permissiveGame();
+  G.ensureSecondHouse();
+  ST().rival2.relation = 45;
+  ST().rival.relation = 10;
+  const relBefore = ST().rival2.relation;
+  const otherBefore = ST().rival.relation;
+  ev(`(function(){
+    const e = events.find(x=>{const t=typeof x.title==="function"?x.title():x.title;return t==="Une alliance par le mariage";});
+    e.choices[0].apply();
+  })()`);
+  check("le mariage est comptabilisé", ST().stats.rivalMarriages === 1, ST().stats.rivalMarriages);
+  check("la maison alliée se rapproche nettement", ST().rival2.relation > relBefore,
+    relBefore + " → " + ST().rival2.relation);
+  check("l'autre maison le prend mal", ST().rival.relation < otherBefore,
+    otherBefore + " → " + ST().rival.relation);
+  const wed = ST().children.find(c=>c.married && /McAllister|Dawson|Hargrove|Kessler|Voss|Bannister|Rourke|Crowley|Stanton|Maddox/.test(c.spouseName||""));
+  check("l'enfant marié porte le nom de la maison rivale", !!wed, wed && wed.spouseName);
+  G.checkAchievements();
+  check("le mariage rival débloque son objectif",
+    ST().achievements.some(a=>a.id==="weddingPeace"));
+
+  // Sans maison cordiale, l'événement ne se déclenche pas.
+  const s2 = permissiveGame();
+  G.ensureSecondHouse();
+  ST().rival.relation = -50; ST().rival2.relation = -50;
+  const reachable = ev(`(function(){
+    const e = events.find(x=>{const t=typeof x.title==="function"?x.title():x.title;return t==="Une alliance par le mariage";});
+    return !!e.condition();
+  })()`);
+  check("aucune union proposée avec deux maisons hostiles", !reachable);
 }
 
 // ------------------------------------------------------------ Le rival
@@ -1534,10 +1705,14 @@ section("Montants et inflation");
   const illeg8 = illegalGainAt(8);
   check("le gain de contrebande suit l'inflation",
     illeg8 > illeg1 * 5, Math.round(illeg1) + " → " + Math.round(illeg8));
-  // Arbitrage voulu : le crime paie davantage sur le coup, l'honnêteté gagne
-  // dans la durée par la réputation, qui majore les revenus du ranch.
-  check("la contrebande paie plus à l'action",
-    illeg1 > compet1, "trafic " + Math.round(illeg1) + " vs concours " + Math.round(compet1));
+  // Arbitrage voulu : à l'action les deux voies se valent à peu près — le crime
+  // sans mise ni cheval, le concours avec — et c'est la réputation qui départage
+  // dans la durée. Un écart marqué dans un sens ou l'autre serait un défaut.
+  const ratio = illeg1 / compet1;
+  check("crime et concours rapportent comparablement à l'action",
+    ratio > 0.7 && ratio < 1.5,
+    "trafic " + Math.round(illeg1) + " vs concours " + Math.round(compet1)
+      + " (rapport " + ratio.toFixed(2) + ")");
   function repDelta(action, setup){
     let total = 0;
     for(let i = 0; i < 150; i++){
@@ -1582,13 +1757,25 @@ section("Montants et inflation");
 {
   // La renommée doit s'émousser, sinon elle sature à 100 pour tout le monde
   // et la prime de marché ne récompense plus rien.
+  // Les événements et les brèves peuvent redonner de la réputation : on éprouve
+  // ici la règle d'usure elle-même, sur assez de trimestres pour trancher.
   const s = freshGame();
-  s.reputation = 100; s.cattle = 40; s.land = 200; s.money = 100000;
-  s.feed = 5000; s.rival.relation = 0;
+  s.reputation = 100; s.cattle = 40; s.land = 200; s.money = 500000;
+  s.feed = 50000; s.rival.relation = 0; s.rival2 && (s.rival2.relation = 0);
   s.factions.forEach(f => f.relation = 0);
-  for(let i = 0; i < 40; i++) G.endTurn();
+  for(let i = 0; i < 80; i++){
+    G.endTurn();
+    let guard = 0;
+    while(!$el("eventModal")._classes.has("hidden") && guard++ < 10){
+      if(ST().gameOver) break;
+      const ch = $el("eventChoices").children;
+      if(!ch.length) break;
+      ch[ch.length-1].onclick();
+    }
+    if(ST().gameOver) break;
+  }
   check("une réputation non entretenue redescend", ST().reputation < 100, ST().reputation);
-  check("elle ne s'effondre pas non plus", ST().reputation > 40, ST().reputation);
+  check("elle ne s'effondre pas non plus", ST().reputation > 20, ST().reputation);
 }
 {
   // Le verdict final doit refléter la contrebande, pas seulement les choix
