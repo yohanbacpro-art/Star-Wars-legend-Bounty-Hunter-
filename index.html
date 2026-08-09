@@ -171,6 +171,12 @@
     color:var(--muted);
     margin-bottom:28px;
   }
+  .start-note{
+    margin:6px 0 0;
+    font-size:.86rem;
+    line-height:1.45;
+    color:var(--muted);
+  }
   .form-grid{
     display:grid;
     grid-template-columns:1fr 1fr;
@@ -542,6 +548,13 @@
   }
   .saga-title{font-weight:700;line-height:1.3}
   .saga-detail{font-size:.86rem;color:var(--muted);line-height:1.4}
+  .saga-export{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+  .mini-btn{
+    font:inherit;font-size:.82rem;cursor:pointer;
+    padding:7px 12px;border:1px solid var(--line);
+    background:var(--card-bg);color:var(--ink);
+  }
+  .mini-btn:hover{border-color:var(--gold);color:var(--gold)}
   @media(max-width:520px){
     .saga-item{grid-template-columns:64px 1fr}
     .saga-body{padding-right:10px}
@@ -662,6 +675,15 @@
           <option value="breeder">Éleveurs expérimentés</option>
           <option value="outlaw">Passé hors-la-loi</option>
         </select>
+      </div>
+      <div class="full">
+        <label for="startMode">Départ</label>
+        <select id="startMode">
+          <option value="founder" selected>Fonder en 1885 — tout est à bâtir</option>
+          <option value="established">Reprendre un ranch établi — 1905, domaine et famille en place</option>
+          <option value="legacy" id="legacyOption" disabled>Repartir sur les cendres — aucune dynastie tombée</option>
+        </select>
+        <p class="start-note" id="startNote">Le départ classique : 160 hectares, 38 têtes, 141 ans devant vous.</p>
       </div>
       <div class="full">
         <button class="primary" id="startBtn">Fonder le ranch — Printemps 1885</button>
@@ -2397,6 +2419,7 @@ function finishArc(){
   if(!state.arcsDone) state.arcsDone = [];
   if(!state.arcOutcomes) state.arcOutcomes = {};
   if(!Array.isArray(state.saga)) state.saga = [];
+  ensureSecondSecret();
   // L'issue est conservée : d'autres arcs et événements la reliront des
   // décennies plus tard. C'est ce qui fait tenir la saga ensemble.
   state.arcOutcomes[state.arc.id] = state.arc.data.outcome || "done";
@@ -2429,6 +2452,7 @@ const SAGA_KINDS = {
 function recordSaga(kind, title, art, detail){
   if(!state) return;
   if(!Array.isArray(state.saga)) state.saga = [];
+  ensureSecondSecret();
   state.saga.push({
     kind, title,
     art: art || "ranch",
@@ -2469,6 +2493,189 @@ function renderSaga(){
   });
   h += "</ol>";
   box.innerHTML = h;
+}
+
+// ---- Exporter la chronique ----
+// Une partie dure 141 ans : ce qu'on veut garder, ce n'est pas la sauvegarde,
+// c'est le récit. On le met à plat en texte brut, lisible et partageable tel
+// quel, découpé par époque et refermé par un bilan.
+function sagaText(){
+  if(!state) return "";
+  const rule = (c) => c.repeat(58);
+  const L = [];
+  L.push(rule("="));
+  L.push("  RANCH DYNASTY — CHRONIQUE DE LA FAMILLE " + (state.familyName||"").toUpperCase());
+  L.push("  " + state.ranchName);
+  const first = (state.lineage && state.lineage[0]) || null;
+  L.push("  " + (first ? first.name + " " + state.familyName + ", " + first.role.toLowerCase()
+                         + " en " + first.startYear
+                       : ""));
+  L.push("  Chronique arrêtée en " + seasons[state.season] + " " + state.year);
+  L.push(rule("="));
+  L.push("");
+
+  const saga = state.saga || [];
+  if(!saga.length){
+    L.push("La saga commence à peine : aucun moment marquant n'a encore été consigné.");
+  }
+  let currentEra = null;
+  saga.forEach(m => {
+    if(m.eraId !== currentEra){
+      currentEra = m.eraId;
+      const era = ERAS.find(e => e.id === currentEra);
+      const d = state.doctrines && state.doctrines[currentEra];
+      const chosen = d && (DOCTRINES[currentEra]||[]).find(x => x.id === d);
+      L.push("");
+      L.push(rule("-"));
+      L.push("  " + (era ? era.name.toUpperCase() : String(currentEra).toUpperCase()));
+      if(chosen) L.push("  Tournant pris : " + chosen.name + " — " + chosen.what);
+      L.push(rule("-"));
+    }
+    const k = SAGA_KINDS[m.kind] || SAGA_KINDS.arc;
+    L.push("");
+    L.push("  " + seasons[m.season] + " " + m.year + " — [" + k.label + "] " + m.title);
+    if(m.detail) L.push("      " + m.detail);
+  });
+
+  L.push("");
+  L.push(rule("="));
+  L.push("  BILAN");
+  L.push(rule("="));
+  L.push("  Terres : " + state.land + " ha · Bétail : " + state.cattle
+       + " · Chevaux : " + state.horses);
+  L.push("  Trésorerie : " + moneyFmt.format(Math.round(state.money)) + " $ ("
+       + moneyFmt.format(Math.round(state.money / (getEra(state.year).inflation||1)))
+       + " $ de 1885)");
+  L.push("  Réputation : " + Math.round(state.reputation)
+       + " · Unité : " + Math.round(state.unity)
+       + " · Soupçons : " + Math.round(state.suspicion));
+  const lg = state.legacy || {};
+  L.push("  Héritage moral : " + (lg.honor||0) + " acte(s) d'honneur, "
+       + (lg.greed||0) + " de cupidité"
+       + ((lg.grudges||[]).length
+          ? ", rancunes : " + lg.grudges.map(g => g.name + " (" + g.year + ")").join(", ")
+          : ""));
+  (state.lineage||[]).forEach(g => {
+    L.push("  " + g.role + " : " + g.name + " ("
+      + g.startYear + "–" + (g.endYear || "…") + ")");
+  });
+  const unlocked = state.achievements || [];
+  L.push("");
+  L.push("  Objectifs accomplis : " + unlocked.length + "/" + ACHIEVEMENTS.length);
+  unlocked.forEach(u => {
+    const a = ACHIEVEMENTS.find(x => x.id === u.id);
+    if(a) L.push("    · " + a.title + " (" + u.year + ") — " + a.desc);
+  });
+  L.push("");
+  L.push("  " + saga.length + " moments retenus.");
+  L.push(rule("="));
+  return L.join("\n");
+}
+
+function exportSaga(){
+  if(!state){ toast("Aucune partie en cours."); return; }
+  const name = "chronique-" + (state.familyName||"famille").toLowerCase().replace(/[^a-z0-9]+/gi,"-")
+             + "-" + state.year + ".txt";
+  downloadText(name, sagaText(), "text/plain;charset=utf-8");
+  toast("Chronique exportée.");
+}
+
+// L'affiche : la même chronique, mais réduite à ce qui se raconte en un coup
+// d'œil. Un SVG autonome, sans police ni image extérieure, qui s'ouvre partout.
+function xmlEsc(s){
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;")
+                  .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+// Coupe un titre trop long en deux lignes plutôt que de le laisser déborder.
+function wrapLine(text, max){
+  const words = String(text).split(" ");
+  const out = [];
+  let line = "";
+  words.forEach(w => {
+    if((line + " " + w).trim().length > max && line){ out.push(line); line = w; }
+    else line = (line ? line + " " : "") + w;
+  });
+  if(line) out.push(line);
+  return out;
+}
+
+const POSTER_KINDS = ["founding","doctrine","succession","secret","era","rival"];
+
+function sagaPosterSVG(){
+  const saga = state.saga || [];
+  // On garde les moments qui font l'ossature du récit, puis on complète.
+  const major = saga.filter(m => POSTER_KINDS.includes(m.kind));
+  const rest = saga.filter(m => !POSTER_KINDS.includes(m.kind));
+  const picked = major.length >= 22 ? major.slice(0, 22)
+               : major.concat(rest.slice(0, 22 - major.length))
+                      .sort((a,b) => (a.year-b.year) || (a.season-b.season));
+
+  const W = 760;
+  const rows = [];
+  let y = 232;
+  let currentEra = null;
+  picked.forEach(m => {
+    if(m.eraId !== currentEra){
+      currentEra = m.eraId;
+      const era = ERAS.find(e => e.id === currentEra);
+      rows.push(`<text x="46" y="${y}" class="era">${xmlEsc(era ? era.name : currentEra)}</text>`);
+      rows.push(`<line x1="46" y1="${y+9}" x2="${W-46}" y2="${y+9}" class="rule"/>`);
+      y += 40;
+    }
+    const k = SAGA_KINDS[m.kind] || SAGA_KINDS.arc;
+    rows.push(`<text x="46" y="${y}" class="date">${xmlEsc(seasons[m.season] + " " + m.year)}</text>`);
+    wrapLine(k.label + " · " + m.title, 46).slice(0,2).forEach((ln,i) => {
+      rows.push(`<text x="196" y="${y + i*20}" class="moment">${xmlEsc(ln)}</text>`);
+      if(i) y += 20;
+    });
+    y += 30;
+  });
+
+  const H = y + 76;
+  const gens = (state.lineage||[]).length;
+  const footer = `${state.land} ha · ${state.cattle} têtes · ${gens} génération${gens>1?"s":""}`
+    + ` · ${(state.achievements||[]).length}/${ACHIEVEMENTS.length} objectifs`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`
+    + `<style>
+      text{font-family:Georgia,'Times New Roman',serif;fill:#f2e4cc}
+      .title{font-size:38px;letter-spacing:2px;text-anchor:middle}
+      .sub{font-size:17px;fill:#c8a86a;text-anchor:middle;font-style:italic}
+      .era{font-size:19px;fill:#c8a86a;letter-spacing:1px}
+      .date{font-size:14px;fill:#a08a63}
+      .moment{font-size:16px}
+      .foot{font-size:14px;fill:#a08a63;text-anchor:middle}
+      .rule{stroke:#5a4526;stroke-width:1}
+    </style>`
+    + `<rect width="${W}" height="${H}" fill="#1b140c"/>`
+    + `<rect x="16" y="16" width="${W-32}" height="${H-32}" fill="none" stroke="#5a4526" stroke-width="2"/>`
+    + `<text x="${W/2}" y="86" class="title">${xmlEsc((state.familyName||"").toUpperCase())}</text>`
+    + `<text x="${W/2}" y="118" class="sub">${xmlEsc(state.ranchName)}</text>`
+    + `<text x="${W/2}" y="148" class="sub">${(state.lineage&&state.lineage[0]?state.lineage[0].startYear:1885)} — ${state.year}</text>`
+    + `<line x1="${W/2-120}" y1="176" x2="${W/2+120}" y2="176" class="rule"/>`
+    + rows.join("")
+    + `<text x="${W/2}" y="${H-34}" class="foot">${xmlEsc(footer)}</text>`
+    + `</svg>`;
+}
+
+function exportSagaImage(){
+  if(!state){ toast("Aucune partie en cours."); return; }
+  const name = "affiche-" + (state.familyName||"famille").toLowerCase().replace(/[^a-z0-9]+/gi,"-")
+             + "-" + state.year + ".svg";
+  downloadText(name, sagaPosterSVG(), "image/svg+xml;charset=utf-8");
+  toast("Affiche de la saga exportée.");
+}
+
+function downloadText(filename, content, type){
+  const blob = new Blob([content], {type:type||"text/plain"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ---- Doctrines : le choix qui ouvre chaque époque ----
@@ -2630,6 +2837,7 @@ function chooseDoctrine(eraId, id){
   if(!Array.isArray(state.arcsDone)) state.arcsDone = [];
   if(!state.arcOutcomes) state.arcOutcomes = {};
   if(!Array.isArray(state.saga)) state.saga = [];
+  ensureSecondSecret();
   if(typeof state.arcCooldown !== "number") state.arcCooldown = 0;
   // Un arc dont l'identifiant a disparu du code ne doit pas bloquer la partie.
   if(state.arc && !arcById(state.arc.id)) state.arc = null;
@@ -3281,6 +3489,12 @@ const ACHIEVEMENTS = [
    check:()=>state.eraId==="modern"},
   {id:"secret", icon:"🗝️", title:"Le secret élucidé", desc:"Résoudre les trois chapitres du secret du fondateur.",
    check:()=>state.secret && state.secret.stage>=3},
+  {id:"bothSecrets", icon:"🔐", title:"Rien n'est resté caché", desc:"Résoudre entièrement les deux secrets de la famille.",
+   check:()=>state.secret && state.secret.stage>=3 && state.secret2 && state.secret2.stage>=3},
+  {id:"phoenix", icon:"🔥", title:"Relever le nom", desc:"Repartir sur les cendres d'une dynastie tombée et tenir jusqu'en 1935.",
+   check:()=>(state.plus||0) > 0 && state.year >= 1935},
+  {id:"heirloom", icon:"🏛️", title:"Le domaine hérité", desc:"Reprendre un ranch établi et doubler sa superficie de départ.",
+   check:()=>state.startMode === "established" && state.land >= 1000},
   {id:"chronicler", icon:"📜", title:"Le chroniqueur", desc:"Mener à leur terme six grandes affaires au fil du siècle.",
    check:()=>(state.arcsDone||[]).length >= 6},
   {id:"triangle", icon:"🎭", title:"Diviser pour régner", desc:"Dresser les deux maisons rivales l'une contre l'autre, jusqu'à la guerre ouverte.",
@@ -3313,6 +3527,8 @@ function ensureProgress(){
     if(typeof state.stats[k] !== "number") state.stats[k] = 0;
   });
   if(state.heirId === undefined) state.heirId = null;
+  if(typeof state.plus !== "number") state.plus = 0;
+  if(!state.startMode) state.startMode = "founder";
   if(!state.doctrines) state.doctrines = {};
   if(typeof state.nextParcelId !== "number") state.nextParcelId = 1;
   ensureParcels();
@@ -3322,6 +3538,7 @@ function ensureProgress(){
   if(!Array.isArray(state.arcsDone)) state.arcsDone = [];
   if(!state.arcOutcomes) state.arcOutcomes = {};
   if(!Array.isArray(state.saga)) state.saga = [];
+  ensureSecondSecret();
   if(typeof state.arcCooldown !== "number") state.arcCooldown = 0;
   // Un arc dont l'identifiant a disparu du code ne doit pas bloquer la partie.
   if(state.arc && !arcById(state.arc.id)) state.arc = null;
@@ -3476,27 +3693,53 @@ const SECRETS = {
   }
 };
 
+// Deux secrets courent dans une partie : celui du fondateur, révélé tôt, et un
+// second tiré parmi les types non utilisés, qui remonte une génération plus
+// tard. Deux parties ne racontent donc pas la même histoire souterraine.
+const SECRET_WINDOWS = {
+  primary:   {1:1890, 2:1950, 3:2015},
+  secondary: {1:1912, 2:1968, 3:2019}
+};
+
+function activeSecrets(){
+  const list = [];
+  if(state.secret)  list.push({key:"secret",  data:state.secret,  windows:SECRET_WINDOWS.primary,   rank:"du fondateur"});
+  if(state.secret2) list.push({key:"secret2", data:state.secret2, windows:SECRET_WINDOWS.secondary, rank:"de la seconde génération"});
+  return list;
+}
+
+// Tire le second secret parmi les types que le premier n'utilise pas.
+function ensureSecondSecret(){
+  if(!state || state.secret2 !== undefined) return;
+  const used = state.secret ? [state.secret.type] : [];
+  const pool = SECRET_TYPES.filter(t => !used.includes(t));
+  state.secret2 = pool.length ? {type: pool[rand(0,pool.length-1)], stage: 0} : null;
+}
+
 function maybeShowSecretEvent(){
-  if(!state.secret || state.secret.stage >= 3) return false;
-  const nextStage = state.secret.stage + 1;
-  const windowStart = {1:1890, 2:1950, 3:2015}[nextStage];
-  if(state.year < windowStart) return false;
-  if(!chance(nextStage === 3 ? 1 : .15)) return false;
-  const data = SECRETS[state.secret.type]["stage"+nextStage];
-  const event = {
-    title:data.title, text:data.text, image:data.image,
-    choices:data.choices.map(c=>({
-      label:c.label,
-      condition:c.condition,
-      apply:()=>{
-        c.apply();
-        state.secret.stage = nextStage;
-        recordSaga("secret", data.title, "night", `Chapitre ${nextStage} sur 3 du secret du fondateur.`);
-      }
-    }))
-  };
-  presentEvent(event);
-  return true;
+  for(const s of activeSecrets()){
+    if(!s.data || s.data.stage >= 3) continue;
+    const nextStage = s.data.stage + 1;
+    const windowStart = s.windows[nextStage];
+    if(state.year < windowStart) continue;
+    if(!chance(nextStage === 3 ? 1 : .15)) continue;
+    const data = SECRETS[s.data.type]["stage"+nextStage];
+    presentEvent({
+      title:data.title, text:data.text, image:data.image,
+      choices:data.choices.map(c=>({
+        label:c.label,
+        condition:c.condition,
+        apply:()=>{
+          c.apply();
+          s.data.stage = nextStage;
+          recordSaga("secret", data.title, "night",
+            `Chapitre ${nextStage} sur 3 du secret ${s.rank}.`);
+        }
+      }))
+    });
+    return true;
+  }
+  return false;
 }
 
 // Chaque époque présente les mêmes quatre pouvoirs locaux sous des visages différents.
@@ -3704,7 +3947,9 @@ function baseState() {
     eraId:getEra(1885).id,
     factions:generateFactions(getEra(1885)),
     secret:{type:SECRET_TYPES[rand(0,SECRET_TYPES.length-1)], stage:0},
+    secret2:undefined,
     legacy:{honor:0, greed:0, grudges:[]},
+    plus:0,
     achievements:[],
     doctrines:{},
     parcels:[],
@@ -3731,7 +3976,133 @@ function baseState() {
   } else {
     s.land += 20; s.feed += 10;
   }
+  s.startMode = ($("startMode") && $("startMode").value) || "founder";
   return s;
+}
+
+// ---- Variantes de départ ----
+// Toutes les parties ne commencent pas sur un piquet planté dans la prairie.
+// On peut reprendre un domaine déjà debout — plus riche, mais vingt ans de
+// moins pour écrire son histoire — ou relever le nom d'une dynastie tombée,
+// avec ce que ce nom traîne derrière lui.
+const LEGACY_KEY = "ranchDynastyLegacy";
+
+function loadLegacyRecord(){
+  try{
+    const raw = safeStorage.get(LEGACY_KEY);
+    if(!raw) return null;
+    const rec = JSON.parse(raw);
+    return (rec && rec.familyName) ? rec : null;
+  }catch(e){ return null; }
+}
+
+function saveLegacyRecord(){
+  if(!state) return;
+  const l = state.legacy || {};
+  const prev = loadLegacyRecord();
+  const rec = {
+    familyName: state.familyName,
+    ranchName: state.ranchName,
+    honor: l.honor || 0,
+    greed: l.greed || 0,
+    grudges: (l.grudges || []).slice(0, 6),
+    year: state.year,
+    generations: (state.lineage || []).length,
+    goals: (state.achievements || []).length,
+    plus: ((prev && prev.plus) || 0) + 1
+  };
+  try{ safeStorage.set(LEGACY_KEY, JSON.stringify(rec)); }catch(e){}
+}
+
+function legacyVerdict(rec){
+  if(rec.honor > rec.greed + 1) return "honorable";
+  if(rec.greed > rec.honor + 1) return "avide";
+  return "tenace";
+}
+
+function applyStartMode(){
+  const mode = state.startMode || "founder";
+
+  if(mode === "established"){
+    // Vingt ans déjà écoulés : le prédécesseur a laissé un domaine debout,
+    // une famille commencée, et une réputation qui ouvre des portes.
+    state.year = 1905;
+    state.season = 0;
+    state.turn = (1905 - 1885) * 4 + 1;
+    state.eraId = getEra(1905).id;
+    state.land += 340;
+    state.cattle += 52;
+    state.horses += 3;
+    state.feed += 90;
+    state.money += sc(900);
+    state.weapons += 1;
+    state.reputation = clamp(state.reputation + 20);
+    state.unity = clamp(state.unity + 4);
+    state.founder.age = 34;
+    state.spouse.age = 31;
+    // Le domaine hérité se redécoupe proprement autour de la nouvelle surface.
+    state.parcels = [];
+
+    const predecessor = pickName("m");
+    state.lineage = [
+      {name:predecessor, role:"Fondateur", startYear:1885, endYear:1905},
+      {name:state.founder.name, role:"Héritier", startYear:1905, endYear:null}
+    ];
+    // Deux enfants déjà nés : la succession se prépare dès le premier tour.
+    const a = addChild(pickName("m"), {sex:"m"}); a.age = 11; a.bond = 62;
+    const b = addChild(pickName("f"), {sex:"f"}); b.age = 7;  b.bond = 60;
+    // Un domaine établi a déjà des voisins qui comptent — en bien ou en mal.
+    (state.factions||[]).forEach(f => {
+      f.relation = clamp(f.relation + rand(-10, 25), -100, 100);
+    });
+    state.rival.strength += 12;
+    addLog(`${state.founder.name} reprend un domaine bâti par ${predecessor}, mort au printemps.`, "info");
+    recordSaga("founding", `${state.founder.name} hérite du ${state.ranchName}`, "family",
+      `1905. Le ranch tient debout depuis vingt ans. Il reste 121 ans à tenir.`);
+    return;
+  }
+
+  if(mode === "legacy"){
+    const rec = loadLegacyRecord();
+    if(!rec) return;
+    const verdict = legacyVerdict(rec);
+    state.plus = rec.plus || 1;
+    // La moitié du poids moral se transmet : assez pour peser, pas assez
+    // pour figer la partie dans le jugement de la précédente.
+    state.legacy.honor = Math.floor((rec.honor || 0) / 2);
+    state.legacy.greed = Math.floor((rec.greed || 0) / 2);
+    state.legacy.grudges = (rec.grudges || []).slice();
+
+    if(verdict === "honorable"){
+      state.reputation = clamp(state.reputation + 16);
+      state.unity = clamp(state.unity + 8);
+      const c = factionOfType("community"); if(c) c.relation = clamp(c.relation + 30, -100, 100);
+      const l = factionOfType("law"); if(l) l.relation = clamp(l.relation + 15, -100, 100);
+      addLog(`Le nom ${state.familyName} est encore respecté : on prête volontiers main-forte.`, "good");
+    } else if(verdict === "avide"){
+      state.money += sc(700);
+      state.weapons += 1;
+      state.suspicion = clamp(state.suspicion + 14);
+      state.reputation = clamp(state.reputation - 6);
+      const l = factionOfType("law"); if(l) l.relation = clamp(l.relation - 25, -100, 100);
+      state.rival.relation = clamp(state.rival.relation - 20, -100, 100);
+      addLog(`L'argent de l'ancienne dynastie a survécu à son nom. Les regards, eux, restent lourds.`, "info");
+    } else {
+      state.reputation = clamp(state.reputation + 7);
+      state.money += sc(300);
+      addLog(`On se souvient vaguement des ${state.familyName}. Ni gloire ni scandale : à refaire.`, "info");
+    }
+    // Chaque rancune héritée revient chercher son dû.
+    state.legacy.grudges.forEach(g => {
+      const f = (state.factions||[]).find(x => x.name === g.name);
+      if(f) f.relation = clamp(f.relation - 25, -100, 100);
+      else state.rival.relation = clamp(state.rival.relation - 8, -100, 100);
+    });
+    recordSaga("founding", `Les ${state.familyName} relèvent le nom`, "ranch",
+      `La dynastie précédente s'est éteinte en ${rec.year} après ${rec.generations} génération(s). `
+      + `Deuxième nom, mêmes terres, même réputation à porter.`);
+    return;
+  }
 }
 
 function startGame(){
@@ -3741,12 +4112,17 @@ function startGame(){
   ensureChampion();
   ensureRivalLeader(state.rival);
   ensureSecondHouse();
-  ensureParcels();
   $("setupScreen").classList.add("hidden");
   $("gameScreen").classList.remove("hidden");
   addLog(`La famille ${state.familyName} prend possession du ${state.ranchName}.`, "good");
-  recordSaga("founding", `${state.founder.name} ${state.familyName} fonde le ${state.ranchName}`, "ranch",
-    "Printemps 1885. Le premier piquet est planté.");
+  if((state.startMode || "founder") === "founder"){
+    recordSaga("founding", `${state.founder.name} ${state.familyName} fonde le ${state.ranchName}`, "ranch",
+      "Printemps 1885. Le premier piquet est planté.");
+  }
+  applyStartMode();
+  // Le domaine et les parcelles se réconcilient après la variante de départ,
+  // qui a pu ajouter plusieurs centaines d'hectares d'un coup.
+  ensureParcels();
   addLog("Le territoire est rude, mais la terre promet un avenir.", "info");
   render();
   showFoundingChoice();
@@ -6204,16 +6580,21 @@ function showDynastyEnding(){
         +" — contestées : "+(st.contestedSuccessions||0)+"\n";
   const allied = (state.factions||[]).filter(f=>f.relation>40).map(f=>f.name);
   bilan += "• Appuis locaux à la fin : "+(allied.length?allied.join(", "):"aucun")+"\n";
-  if(state.secret && state.secret.stage >= 3){
-    bilan += "• Le secret du fondateur a été résolu.\n";
-  } else if(state.secret){
-    bilan += "• Le secret du fondateur n'a jamais été entièrement élucidé.\n";
-  }
+  [["secret","fondateur"],["secret2","seconde génération"]].forEach(([k,label]) => {
+    const sec = state[k];
+    if(!sec) return;
+    bilan += sec.stage >= 3
+      ? `• Le secret de la ${label} a été résolu.\n`.replace("de la fondateur","du fondateur")
+      : `• Le secret de la ${label} n'a jamais été entièrement élucidé.\n`.replace("de la fondateur","du fondateur");
+  });
 
   showGameOver(verdict, verdictText + bilan);
 }
 
 function showGameOver(title,text){
+  // Une dynastie qui tombe laisse une trace : la partie suivante pourra
+  // relever le nom, avec son crédit ou son ardoise.
+  saveLegacyRecord();
   $("eventTitle").textContent = title;
   $("eventText").textContent = text;
   $("eventText").style.whiteSpace = "pre-line";
@@ -6325,6 +6706,56 @@ function toast(text){
   clearTimeout(window.toastTimer);
   window.toastTimer = setTimeout(()=>$("toast").classList.add("hidden"),2200);
 }
+
+// ---- Écran de création : la variante de départ se lit avant de cliquer ----
+const START_NOTES = {
+  founder:"Le départ classique : 160 hectares, 38 têtes, 141 ans devant vous.",
+  established:"1905 : le domaine compte déjà 500 hectares, un troupeau constitué, "
+    + "deux enfants et un nom connu au comté. Mais vingt ans sont perdus, et les "
+    + "voisins ont eu le temps de se faire une opinion."
+};
+
+function refreshStartMode(fromUser){
+  const sel = $("startMode");
+  const note = $("startNote");
+  const opt = $("legacyOption");
+  const btn = $("startBtn");
+  if(!sel) return;
+  const rec = loadLegacyRecord();
+  if(opt){
+    opt.disabled = !rec;
+    opt.textContent = rec
+      ? `Repartir sur les cendres — les ${rec.familyName}, éteints en ${rec.year}`
+      : "Repartir sur les cendres — aucune dynastie tombée";
+  }
+  if(!rec && sel.value === "legacy") sel.value = "founder";
+  if(note){
+    if(sel.value === "legacy" && rec){
+      const v = legacyVerdict(rec);
+      const heritage = v === "honorable"
+        ? "Un nom respecté : réputation, unité et appuis locaux d'emblée."
+        : v === "avide"
+        ? "Un nom craint : de l'argent et des armes, mais des soupçons et la loi contre vous."
+        : "Un nom sans éclat : un peu de crédit, un peu d'avance, rien de plus.";
+      if(fromUser && $("familyName")) $("familyName").value = rec.familyName;
+      note.textContent = `${rec.generations} génération(s), ${rec.goals} objectif(s), `
+        + `${(rec.grudges||[]).length} rancune(s) héritée(s). ${heritage} `
+        + `Départ en 1885, partie n°${(rec.plus||0)+1} de la lignée.`;
+    } else {
+      note.textContent = START_NOTES[sel.value] || START_NOTES.founder;
+    }
+  }
+  if(btn){
+    btn.textContent = sel.value === "established"
+      ? "Reprendre le ranch — Printemps 1905"
+      : sel.value === "legacy"
+      ? "Relever le nom — Printemps 1885"
+      : "Fonder le ranch — Printemps 1885";
+  }
+}
+
+$("startMode").addEventListener("change", ()=>refreshStartMode(true));
+refreshStartMode();
 
 $("startBtn").addEventListener("click",startGame);
 // Indirection volontaire : un bloc <script> ultérieur enveloppe endTurn.
@@ -6463,6 +6894,10 @@ document.getElementById("familyBtn").addEventListener("click",()=>{renderFamily(
 <div id="chronicleModal" class="modal hidden"><div class="modal-card">
 <h2>Chroniques du ranch</h2>
 <h3 class="section-head">La saga, année après année</h3>
+<div class="saga-export">
+<button class="mini-btn" id="sagaTextBtn" onclick="exportSaga()">📜 Exporter la chronique (texte)</button>
+<button class="mini-btn" id="sagaImgBtn" onclick="exportSagaImage()">🖼️ Exporter l'affiche (image)</button>
+</div>
 <div id="sagaContent"></div>
 <h3 class="section-head">Généalogie de la dynastie</h3>
 <div id="lineageContent"></div>
@@ -6862,18 +7297,19 @@ function renderLineage(){
    }
    h += "</p>";
  }
- if(state.secret){
-   const labels = {landClaim:"l'origine douteuse des terres", hiddenCrime:"une disparition jamais élucidée", buriedTreasure:"un trésor caché par le fondateur"};
-   h += "<p><b>Secret de famille :</b> ";
-   if(state.secret.stage === 0){
-     h += "<i>rien n'a encore refait surface...</i>";
-   } else if(state.secret.stage >= 3){
-     h += "l'affaire concernant "+labels[state.secret.type]+" a été résolue.";
-   } else {
-     h += "l'affaire concernant "+labels[state.secret.type]+" reste en suspens (chapitre "+state.secret.stage+"/3).";
-   }
-   h += "</p>";
- }
+ const secretLabels = {landClaim:"l'origine douteuse des terres",
+   hiddenCrime:"une disparition jamais élucidée",
+   buriedTreasure:"un trésor caché par le fondateur"};
+ const secretLine = (sec, titre) => {
+   if(!sec) return "";
+   let t = "<p><b>"+titre+" :</b> ";
+   if(sec.stage === 0) t += "<i>rien n'a encore refait surface...</i>";
+   else if(sec.stage >= 3) t += "l'affaire concernant "+secretLabels[sec.type]+" a été résolue.";
+   else t += "l'affaire concernant "+secretLabels[sec.type]+" reste en suspens (chapitre "+sec.stage+"/3).";
+   return t + "</p>";
+ };
+ h += secretLine(state.secret, "Secret du fondateur");
+ h += secretLine(state.secret2, "Secret de la seconde génération");
  lineageContent.innerHTML = h;
 }
 const oldEnd=endTurn;

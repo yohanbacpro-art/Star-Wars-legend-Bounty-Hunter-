@@ -1,4 +1,4 @@
-# Ranch Dynasty — V3.4
+# Ranch Dynasty — V3.5
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -29,7 +29,13 @@ Le CSS est dans un unique `<style>` en tête de fichier.
 - **`sc(n)`** — met un montant à l'échelle de l'inflation de l'époque courante.
   **Toujours** l'utiliser pour un montant en dollars.
 - **`state.legacy`** — héritage moral (`honor`, `greed`, `grudges`) transmis entre générations.
-- **`state.secret`** — fil narratif principal, révélé en 3 chapitres (1890 / 1950 / 2015).
+- **`state.secret` / `state.secret2`** — deux fils narratifs souterrains, révélés en
+  3 chapitres chacun (fenêtres dans `SECRET_WINDOWS` : 1890 / 1950 / 2015 pour le
+  premier, 1912 / 1968 / 2019 pour le second). Le second est tiré parmi les types
+  **non joués** par le premier, donc deux parties ne racontent jamais la même
+  histoire cachée. `activeSecrets()` les parcourt tous les deux.
+- **`state.startMode`** — variante de départ : `founder` | `established` | `legacy`.
+- **`state.plus`** — nombre de dynasties tombées avant celle-ci (mode `legacy`).
 - **`state.achievements`** — objectifs accomplis, `[{id, year, season}]`. Voir `ACHIEVEMENTS`
   et `checkAchievements()`, appelé après chaque action et à la fin de chaque trimestre.
 - **`state.stats`** — compteurs cumulés que certains objectifs consultent
@@ -117,6 +123,24 @@ son époque et sa scène. `recordSaga(kind, title, art, detail)` pour en ajouter
 accessible depuis le panneau **Chroniques**, et surtout proposée sur l'écran de
 fin de partie : c'est la vraie conclusion de 141 ans de jeu. Une partie complète
 en produit une cinquantaine.
+
+### Exporter la chronique
+
+Deux boutons en tête du panneau **Chroniques** :
+
+- **`sagaText()` / `exportSaga()`** — un `.txt` lisible tel quel : en-tête de la
+  famille, moments découpés par époque avec le tournant pris à chacune, puis un
+  bilan (domaine, trésorerie en dollars courants *et* de 1885, héritage moral,
+  lignée, objectifs accomplis).
+- **`sagaPosterSVG()` / `exportSagaImage()`** — une affiche `.svg` autonome : au
+  plus 22 moments, priorité à ceux qui font l'ossature du récit
+  (`POSTER_KINDS`), et un pied de page chiffré. Aucune police ni image
+  extérieure, donc elle s'ouvre partout.
+
+Les deux passent par `downloadText()` (`Blob` + `URL.createObjectURL`), qui
+fonctionne y compris dans un Artifact. ⚠️ Tout texte inséré dans l'affiche doit
+passer par `xmlEsc()` : le joueur nomme sa famille et son ranch librement, et un
+`&` non échappé casse le fichier SVG.
 
 ## Les deux maisons rivales
 
@@ -231,6 +255,30 @@ toutes les paires (indice de Jaccard sur les mots signifiants) et **échoue
 au-delà de 0,45** : deux événements ne peuvent pas raconter la même chose. Il
 vérifie aussi qu'aucune illustration n'écrase les autres.
 
+## Variantes de départ
+
+`applyStartMode()` s'exécute juste après `baseState()`, avant le dernier
+`ensureParcels()` — car elle peut ajouter des centaines d'hectares d'un coup.
+
+- **`founder`** — le départ classique. 1885, 160 ha, 38 têtes, rien d'acquis.
+- **`established`** — 1905 (`turn` recalé sur `(1905-1885)*4+1`, époque
+  inchangée : la Fondation court jusqu'en 1919, donc **l'inflation ne bouge
+  pas** et l'équilibrage reste comparable). Le prédécesseur laisse ~500 ha,
+  un troupeau constitué, deux enfants, une réputation faite et des voisins qui
+  ont déjà un avis. `state.parcels` est vidé pour se redécouper proprement.
+  C'est le départ le plus clément : en simulation, même un jeu au hasard tient
+  jusqu'en 1986 en médiane, contre 1885–1890 depuis 1885.
+- **`legacy`** — relever le nom d'une dynastie tombée. `showGameOver()` écrit un
+  `LEGACY_KEY` dans `safeStorage` (nom, honneur, cupidité, rancunes, année,
+  générations, objectifs, compteur `plus`). La partie suivante repart en 1885
+  avec **la moitié** du poids moral et **toutes** les rancunes, et un départ
+  qui dépend du verdict (`legacyVerdict()`) : un nom honorable ouvre les portes,
+  un nom craint donne de l'argent et des soupçons, un nom terne donne peu.
+
+`refreshStartMode()` tient l'écran de création à jour : elle verrouille l'option
+`legacy` tant qu'aucune dynastie n'est tombée, réécrit la note explicative et le
+libellé du bouton de départ.
+
 ## Compatibilité des sauvegardes
 
 `ensureProgress()` complète tout `state` chargé avec les champs ajoutés après coup
@@ -244,6 +292,8 @@ chargement et à l'import. **Toute nouvelle propriété de `state` doit y être 
   `state` n'existe → `ReferenceError: Cannot access 'state' before initialization`.
   Mettre les montants dans `condition:` et `apply:`, jamais dans `label:`.
 - Les identifiants HTML doivent rester uniques (plusieurs panneaux les réutilisent).
+- `scripts/build-artifact.js` échoue sur **toute** URL restante, sauf
+  `http://www.w3.org/2000/svg` (espace de noms XML, pas une requête réseau).
 - Le jeu tourne volontairement en léger déficit passif : c'est ce qui pousse à agir.
 - ⚠️ `endTurn` est **enveloppée** par le bloc 3 (`const oldEnd=endTurn; endTurn=function(){…}`).
   Ne jamais passer la référence directement à `addEventListener` : cela figerait la version
@@ -353,7 +403,8 @@ sans aucune dépendance :
 # variété du catalogue, arcs d'époque, triangle, absence d'impasse.
 # doctrines couplées aux arcs, siège et mariage rival.
 # chronique de la saga, tournant fondateur.
-# 340 vérifications, sortie non nulle en cas d'échec.
+# export de la chronique, variantes de départ.
+# 415 vérifications, sortie non nulle en cas d'échec.
 node tests/scenarios.js index.html
 
 # Simulation de masse.
@@ -376,7 +427,12 @@ profils : il compare facilement deux versions du fichier
 - Quelques objectifs restent des jalons plus que des défis (`united`, `oldHand`
   sont atteints par ~98 % des parties bien menées)
 
-- Exporter la chronique de la saga en texte ou en image, pour la partager
-- Des variantes de départ : reprendre un ranch déjà établi, ou repartir de
-  zéro après une faillite, avec l'héritage moral conservé
-- Un second secret de famille, tiré au sort parmi ceux non joués
+- Le départ `established` est nettement plus clément que les deux autres : il
+  mériterait sa propre difficulté, ou un handicap compensatoire (dettes du
+  prédécesseur, rancune héritée)
+- L'affiche exportée est un SVG ; un export PNG demanderait un passage par
+  `<canvas>`, faisable sans dépendance
+- Une galerie des dynasties tombées plutôt qu'une seule entrée `LEGACY_KEY`,
+  pour choisir quel nom relever
+- Faire peser `state.plus` sur la partie elle-même (le comté se souvient des
+  familles qui ont déjà échoué deux fois)

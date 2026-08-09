@@ -48,7 +48,12 @@ out = out.replace(
   '$1photoCredit:"",'
 );
 
-const leftovers = out.match(/https?:\/\/[^\s"')]+/g) || [];
+// L'espace de noms SVG n'est pas une requête : c'est une déclaration XML, et
+// l'affiche exportée doit la porter pour s'ouvrir hors du navigateur.
+const ALLOWED = ["http://www.w3.org/2000/svg"];
+
+const leftovers = (out.match(/https?:\/\/[^\s"')]+/g) || [])
+  .filter(u => !ALLOWED.includes(u));
 if (leftovers.length) {
   console.error("Références externes restantes, la CSP les bloquerait :");
   [...new Set(leftovers)].forEach(u => console.error("  " + u));

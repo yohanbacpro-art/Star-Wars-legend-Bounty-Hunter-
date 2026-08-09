@@ -23,6 +23,7 @@ function makeEl(id){
     addEventListener:(ev,fn)=>{ (el._h=el._h||{})[ev]=fn; },
     appendChild:(c)=>{ el.children.push(c); return c; },
     removeChild:(c)=>{ el.children = el.children.filter(x=>x!==c); },
+    click:()=>{ if(el._h && el._h.click) el._h.click(); else if(el.onclick) el.onclick(); },
     querySelectorAll:()=>[]
   };
   Object.defineProperty(el,"innerHTML",{get:()=>el._html,set:v=>{el._html=String(v);if(el._html==="")el.children=[];}});
@@ -36,9 +37,12 @@ ALL_IDS.forEach($el);
 const actionTypes = [...HTML.matchAll(/data-action="([^"]+)"/g)].map(m=>m[1]);
 const actionBtns = actionTypes.map(t=>{ const b=makeEl("a-"+t); b.dataset.action=t; return b; });
 const store = {};
+// On garde la trace du dernier élément créé et du dernier Blob : c'est ainsi
+// qu'on vérifie ce qu'un téléchargement aurait réellement produit.
+let lastCreated = null, lastBlob = null;
 const document = {
   getElementById:id=>els.has(id)?els.get(id):null,
-  createElement:()=>makeEl("created"),
+  createElement:()=>{ lastCreated = makeEl("created"); return lastCreated; },
   querySelectorAll:sel=>sel===".action"?actionBtns:[],
   addEventListener:(ev,fn)=>{ if(ev==="DOMContentLoaded") document._ready=fn; },
   body:makeEl("body")
@@ -48,7 +52,8 @@ const sandbox = {
   isNaN, parseInt, parseFloat, setTimeout:()=>0, clearTimeout:()=>{}, confirm:()=>true,
   location:{reload:()=>{}},
   localStorage:{getItem:k=>k in store?store[k]:null, setItem:(k,v)=>{store[k]=String(v);}, removeItem:k=>{delete store[k];}},
-  Blob:function(){}, FileReader:function(){}, URL:{createObjectURL:()=>"b", revokeObjectURL:()=>{}}
+  Blob:function(parts,opts){ lastBlob = {text:(parts||[]).join(""), type:(opts||{}).type||""}; },
+  FileReader:function(){}, URL:{createObjectURL:()=>"b", revokeObjectURL:()=>{}}
 };
 sandbox.window = sandbox; sandbox.globalThis = sandbox;
 ALL_IDS.forEach(id => { if(!(id in sandbox)) sandbox[id] = $el(id); });
@@ -947,6 +952,215 @@ section("Chronique de la saga");
     labels.some(l => l.indexOf("Relire la saga") >= 0), labels.join(" | "));
   check("elle propose aussi de recommencer",
     labels.some(l => l.indexOf("écran de création") >= 0));
+}
+
+// ------------------------------------------------- Exporter la chronique
+section("Exporter la chronique");
+{
+  const s = freshGame();
+  G.recordSaga("era", "L'automobile arrive au comté", "city", "1921, la première Ford du canton.");
+  G.chooseDoctrine("foundation", ev('DOCTRINES.foundation[0].id'));
+  s.cattle = 250; G.checkAchievements();
+  s.legacy.grudges.push({name:"Shérif Boyd", year:1902});
+
+  const txt = G.sagaText();
+  check("la chronique porte le nom de la famille", txt.indexOf(s.familyName.toUpperCase()) >= 0);
+  check("la chronique porte le nom du ranch", txt.indexOf(s.ranchName) >= 0);
+  check("la chronique date le début de la lignée",
+    txt.indexOf("fondateur en " + s.lineage[0].startYear) >= 0, txt.split("\n")[3]);
+  check("la chronique liste les moments", txt.indexOf("L'automobile arrive au comté") >= 0);
+  check("la chronique nomme l'époque traversée", txt.indexOf("LA FONDATION") >= 0);
+  check("la chronique rappelle le tournant pris", txt.indexOf("Tournant pris") >= 0);
+  check("la chronique se referme sur un bilan", txt.indexOf("BILAN") >= 0);
+  check("le bilan chiffre le domaine", /Terres : \d+ ha/.test(txt), txt.slice(-400));
+  check("le bilan liste les objectifs accomplis", txt.indexOf("Objectifs accomplis") >= 0);
+  check("le bilan nomme les rancunes lisiblement",
+    txt.indexOf("Shérif Boyd (1902)") >= 0 && txt.indexOf("[object Object]") < 0);
+  check("le bilan retrace la lignée", txt.indexOf("Fondateur : ") >= 0);
+  check("la chronique ne contient aucune balise", !/<[a-z/]/i.test(txt));
+
+  G.exportSaga();
+  check("l'export texte produit un fichier", lastBlob && lastBlob.text.length > 200, lastBlob && lastBlob.text.length);
+  check("le fichier texte est nommé d'après la famille",
+    /^chronique-duflot-\d{4}\.txt$/.test(lastCreated.download), lastCreated.download);
+  check("le fichier texte est bien typé", /text\/plain/.test(lastBlob.type), lastBlob.type);
+
+  const svg = G.sagaPosterSVG();
+  check("l'affiche est un SVG autonome", svg.indexOf("<svg xmlns=") === 0);
+  check("l'affiche est bien fermée", svg.trim().slice(-6) === "</svg>");
+  check("l'affiche n'appelle aucune ressource externe", !/https?:\/\/[^"]*\.(png|jpg|svg|css)/.test(svg));
+  check("l'affiche porte le nom de la famille", svg.indexOf(s.familyName.toUpperCase()) >= 0);
+  check("l'affiche annonce la période couverte",
+    svg.indexOf(s.lineage[0].startYear + " — " + s.year) >= 0);
+  check("l'affiche chiffre le domaine", svg.indexOf(s.land + " ha") >= 0);
+
+  G.exportSagaImage();
+  check("l'export image produit un fichier", lastBlob && lastBlob.text.indexOf("<svg") === 0);
+  check("le fichier image est nommé d'après la famille",
+    /^affiche-duflot-\d{4}\.svg$/.test(lastCreated.download), lastCreated.download);
+  check("le fichier image est bien typé", /image\/svg/.test(lastBlob.type), lastBlob.type);
+
+  // Les caractères réservés du XML ne doivent pas casser l'affiche.
+  const s2 = freshGame();
+  s2.familyName = "Du <Pré> & Fils";
+  G.recordSaga("era", 'Un titre "avec" <balises> & esperluette', "city");
+  const svg2 = G.sagaPosterSVG();
+  check("l'affiche échappe les caractères XML",
+    svg2.indexOf("<balises>") < 0 && svg2.indexOf("&lt;balises&gt;") >= 0);
+  check("l'affiche échappe les esperluettes", !/&(?!amp;|lt;|gt;|quot;|#)/.test(svg2));
+
+  // Une saga vide ne doit rien casser non plus.
+  const s3 = freshGame();
+  s3.saga = [];
+  let threw = false;
+  try{ G.sagaText(); G.sagaPosterSVG(); }catch(e){ threw = e.message; }
+  check("une saga vide s'exporte sans erreur", threw === false, threw);
+  check("une saga vide le dit dans le texte", G.sagaText().indexOf("commence à peine") >= 0);
+
+  // Une saga très longue reste exportable.
+  const s4 = freshGame();
+  for(let i = 0; i < 300; i++) G.recordSaga("arc", "Moment " + i, "ranch", "détail " + i);
+  threw = false;
+  let poster = "";
+  try{ G.sagaText(); poster = G.sagaPosterSVG(); }catch(e){ threw = e.message; }
+  check("une longue saga s'exporte sans erreur", threw === false, threw);
+  check("l'affiche reste de taille raisonnable", poster.length < 30000, poster.length);
+}
+
+// ------------------------------------------------- Variantes de départ
+section("Variantes de départ");
+{
+  const modes = [...HTML.matchAll(/<option value="(founder|established|legacy)"/g)].map(m=>m[1]);
+  check("les trois départs sont proposés", modes.length === 3, modes.join(","));
+
+  // 1885, le départ classique : rien ne change.
+  $el("startMode").value = "founder";
+  const s0 = freshGame();
+  check("le départ classique commence en 1885", s0.year === 1885, s0.year);
+  check("le départ classique garde le domaine d'origine", s0.land <= 200, s0.land);
+  check("le départ classique n'a pas d'enfant", s0.children.length === 0);
+
+  // Reprendre un ranch établi.
+  $el("startMode").value = "established";
+  const s1 = freshGame();
+  check("le départ établi commence en 1905", s1.year === 1905, s1.year);
+  check("le tour correspond à l'année", s1.turn === (1905-1885)*4 + 1, s1.turn);
+  check("l'époque reste la Fondation", s1.eraId === "foundation", s1.eraId);
+  check("le domaine hérité est plus vaste", s1.land >= 480, s1.land);
+  check("les parcelles couvrent exactement le domaine",
+    s1.parcels.reduce((a,p)=>a+p.ha,0) === s1.land,
+    s1.parcels.reduce((a,p)=>a+p.ha,0) + " vs " + s1.land);
+  check("le domaine hérité est découpé en plusieurs parcelles", s1.parcels.length >= 3, s1.parcels.length);
+  check("le troupeau hérité est constitué", s1.cattle >= 80, s1.cattle);
+  check("deux enfants sont déjà nés", s1.children.length === 2, s1.children.length);
+  check("les enfants ont un sexe et un identifiant",
+    s1.children.every(c => (c.sex === "m" || c.sex === "f") && typeof c.cid === "number"));
+  check("la lignée compte le prédécesseur", s1.lineage.length === 2, s1.lineage.length);
+  check("le prédécesseur a cédé la place en 1905", s1.lineage[0].endYear === 1905, s1.lineage[0].endYear);
+  check("le successeur est en poste depuis 1905", s1.lineage[1].endYear === null);
+  check("la reprise est consignée dans la saga",
+    ST().saga.some(m => m.kind === "founding" && m.title.indexOf("hérite") >= 0),
+    ST().saga.map(m=>m.title).join(" | "));
+  check("la saga ne raconte pas aussi une fondation en 1885",
+    !ST().saga.some(m => m.title.indexOf("fonde le") >= 0));
+  check("le tournant fondateur est tout de même proposé",
+    !$el("eventModal")._classes.has("hidden") || $el("eventChoices").children.length > 0);
+  // Le jeu doit tourner normalement depuis 1905.
+  let threw = false;
+  try{
+    for(let i = 0; i < 12; i++){
+      ST().money = 20000; ST().feed = 200;
+      G.endTurn();
+      let guard = 0;
+      while(!$el("eventModal")._classes.has("hidden") && guard++ < 30){
+        if(ST().gameOver) break;
+        const ch = $el("eventChoices").children;
+        if(!ch.length) throw new Error("modale sans choix");
+        ch[0].onclick();
+      }
+    }
+  }catch(e){ threw = e.message; }
+  check("douze trimestres se jouent depuis 1905 sans erreur", threw === false, threw);
+  check("l'année a bien avancé", ST().year >= 1907, ST().year);
+
+  // Repartir sur les cendres : l'option n'existe qu'après une dynastie tombée.
+  ev("safeStorage.set('" + ev("LEGACY_KEY") + "', '')");
+  G.refreshStartMode();
+  check("sans dynastie tombée, l'option est verrouillée", $el("legacyOption").disabled === true);
+  check("le libellé le dit", $el("legacyOption").textContent.indexOf("aucune dynastie") >= 0);
+
+  // Une fin de partie enregistre l'héritage moral.
+  $el("startMode").value = "founder";
+  const sEnd = freshGame();
+  sEnd.familyName = "Marchand";
+  sEnd.legacy.honor = 6; sEnd.legacy.greed = 1;
+  sEnd.legacy.grudges = [{name:"Shérif Boyd", year:1899}];
+  sEnd.year = 1954;
+  G.showGameOver("Faillite", "Fin de test.");
+  const rec = G.loadLegacyRecord();
+  check("la dynastie tombée est enregistrée", !!rec);
+  check("l'héritage retient le nom", rec.familyName === "Marchand", rec && rec.familyName);
+  check("l'héritage retient l'année de chute", rec.year === 1954, rec && rec.year);
+  check("l'héritage retient les rancunes", rec.grudges.length === 1);
+  check("le compteur de reprises s'incrémente", rec.plus >= 1, rec.plus);
+
+  G.refreshStartMode();
+  check("l'option de reprise se déverrouille", $el("legacyOption").disabled === false);
+  check("le libellé nomme la dynastie tombée",
+    $el("legacyOption").textContent.indexOf("Marchand") >= 0, $el("legacyOption").textContent);
+
+  // Une lignée honorable transmet du crédit.
+  $el("startMode").value = "legacy";
+  $el("familyName").value = "Marchand";
+  const s2 = freshGame();
+  check("la reprise commence en 1885", s2.year === 1885, s2.year);
+  check("le poids moral est transmis de moitié", s2.legacy.honor === 3, s2.legacy.honor);
+  check("les rancunes sont héritées", s2.legacy.grudges.length === 1);
+  check("le compteur de reprises est repris", s2.plus >= 1, s2.plus);
+  check("un nom honorable ouvre des portes", s2.reputation > 20, s2.reputation);
+  check("la reprise est consignée dans la saga",
+    ST().saga.some(m => m.title.indexOf("relèvent le nom") >= 0),
+    ST().saga.map(m=>m.title).join(" | "));
+
+  // Une lignée avide transmet de l'argent et des ennuis.
+  const raw = JSON.parse(ev("safeStorage.get(LEGACY_KEY)"));
+  raw.honor = 0; raw.greed = 8;
+  ev("safeStorage.set(LEGACY_KEY, " + JSON.stringify(JSON.stringify(raw)) + ")");
+  const s3 = freshGame();
+  check("un nom craint laisse des soupçons", s3.suspicion >= 14, s3.suspicion);
+  check("un nom craint laisse aussi de la cupidité", s3.legacy.greed === 4, s3.legacy.greed);
+  check("la loi s'en souvient",
+    s3.factions.some(f => f.type === "law" ? f.relation < 0 : true));
+
+  // La sauvegarde d'une partie reprise se recharge sans perte.
+  G.saveGame();
+  const before = JSON.stringify(ST());
+  G.loadGame();
+  check("une partie reprise se recharge", JSON.stringify(ST()).length > 0 && !!ST().legacy);
+  check("le mode de départ survit au rechargement", ST().startMode === "legacy", ST().startMode);
+  const after = JSON.parse(JSON.stringify(ST()));
+  const bef = JSON.parse(before);
+  check("l'héritage moral survit au rechargement",
+    JSON.stringify(after.legacy) === JSON.stringify(bef.legacy));
+  check("le domaine survit au rechargement",
+    after.land === bef.land && after.money === bef.money && after.year === bef.year);
+
+  // Les deux objectifs propres aux variantes se débloquent bien.
+  ST().plus = 1; ST().year = 1940;
+  G.checkAchievements();
+  check("l'objectif de la reprise se débloque",
+    ST().achievements.some(a => a.id === "phoenix"),
+    ST().achievements.map(a=>a.id).join(","));
+  $el("startMode").value = "established";
+  const s4 = freshGame();
+  s4.land = 1200;
+  G.checkAchievements();
+  check("l'objectif du domaine hérité se débloque",
+    ST().achievements.some(a => a.id === "heirloom"),
+    ST().achievements.map(a=>a.id).join(","));
+
+  $el("startMode").value = "founder";
+  $el("familyName").value = "Duflot";
 }
 
 // ------------------------------------------------------ Le tournant fondateur
@@ -2229,7 +2443,10 @@ section("Partie menée jusqu'en 2026");
   check("des parties atteignent 2026", reached >= 3, reached + "/30");
   check("des successions préparées ont lieu", successions > 0, successions);
   check("des successions sont contestées", contested > 0, contested);
-  const all = ev("ACHIEVEMENTS").map(a=>a.id);
+  // `phoenix` et `heirloom` dépendent d'une variante de départ : ils sont
+  // vérifiés dans leur propre section, pas dans ces parties classiques.
+  const startModeGoals = ["phoenix","heirloom"];
+  const all = ev("ACHIEVEMENTS").map(a=>a.id).filter(id => !startModeGoals.includes(id));
   const never = all.filter(id => !unlocked.has(id));
   console.log("       objectifs vus au moins une fois : " + unlocked.size + "/" + all.length);
   if(never.length) console.log("       jamais débloqués ici : " + never.join(", "));

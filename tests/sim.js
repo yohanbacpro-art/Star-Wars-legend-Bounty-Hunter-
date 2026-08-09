@@ -99,6 +99,7 @@ $el("familyName").value = "Duflot";
 $el("ranchName").value = "Ranch de l'Aigle Noir";
 $el("founderName").value = "Yohan";
 $el("spouseName").value = "Élise";
+$el("startMode").value = process.env.START || "founder";
 
 BLOCKS.forEach((src,i) => {
   try{ vm.runInContext(src, sandbox, {filename:"bloc"+i+".js"}); }
@@ -328,7 +329,8 @@ for(let run = 0; run < RUNS; run++){
   });
 }
 
-console.log("Politique :", POLICY, "— parties simulées :", RUNS, "— rendus d'interface :", uiCalls);
+console.log("Politique :", POLICY, "— départ :", $el("startMode").value,
+            "— parties simulées :", RUNS, "— rendus d'interface :", uiCalls);
 const ys=summary.years.slice().sort((a,b)=>a-b);
 console.log("Année de fin — médiane :", ys[Math.floor(ys.length/2)], "max :", summary.maxYear);
 console.log("Successions préparées :", summary.planned, "— contestées :", summary.contested,
