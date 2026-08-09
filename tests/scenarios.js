@@ -796,6 +796,154 @@ section("Arcs narratifs");
   check("tous les textes de chapitres s'évaluent", textErrors.length === 0, textErrors.slice(0,3).join(" | "));
 }
 
+// ------------------------------------------------------- Arcs par époque
+section("Arcs d'époque");
+{
+  const eraArcs = ev("ERA_ARCS.map(a=>({id:a.id, era:a.eraId, steps:a.steps.length}))");
+  check("chaque époque a son arc", eraArcs.length >= 7, eraArcs.length);
+  const eras = ev("ERAS.map(e=>e.id)");
+  const covered = eraArcs.map(a=>a.era);
+  const missing = eras.filter(e => !covered.includes(e));
+  check("aucune époque n'est oubliée", missing.length === 0, missing.join(","));
+  check("les arcs d'époque tiennent en plusieurs chapitres",
+    eraArcs.every(a=>a.steps>=2), eraArcs.filter(a=>a.steps<2).map(a=>a.id).join(","));
+  check("les arcs d'époque rejoignent le catalogue général",
+    eraArcs.every(a => !!ev(`arcById(${JSON.stringify(a.id)})`)));
+
+  // Un arc d'époque ne se déclenche que dans la sienne.
+  const leaks = [];
+  eraArcs.forEach(a => {
+    eras.forEach(era => {
+      const s = permissiveGame();
+      s.eraId = era; s.cattle = 200; s.land = 400; s.money = 100000;
+      const can = ev(`(function(){const x=arcById(${JSON.stringify(a.id)});try{return !!x.canStart();}catch(e){return false;}})()`);
+      if(can && era !== a.era) leaks.push(a.id + " déclenchable en " + era);
+    });
+  });
+  check("un arc d'époque reste dans son époque", leaks.length === 0, leaks.slice(0,3).join(" | "));
+
+  // Toutes les branches de tous les chapitres d'époque doivent tenir.
+  const errors = [];
+  let branches = 0;
+  eraArcs.forEach(a => {
+    for(let si = 0; si < a.steps; si++){
+      const n = ev(`arcById(${JSON.stringify(a.id)}).steps[${si}].choices.length`);
+      for(let ci = 0; ci < n; ci++){
+        for(let k = 0; k < 3; k++){
+          const s = permissiveGame();
+          s.eraId = a.era; s.money = 200000; s.cattle = 200; s.land = 500;
+          s.arc = {id:a.id, step:si, data:{head:40, name:"Test", inside:true, honest:true,
+                   sold:true, developed:true, paid:true, refused:true, scabs:true, exposed:true}};
+          try{
+            const ran = ev(`(function(){
+              const c = arcById(${JSON.stringify(a.id)}).steps[${si}].choices[${ci}];
+              if(c.condition && !c.condition()) return false;
+              c.apply(); return true;
+            })()`);
+            if(ran) branches++;
+          }catch(e){ errors.push(a.id + " ch." + si + " choix " + ci + " : " + e.message); }
+        }
+      }
+    }
+  });
+  check("toutes les branches d'arcs d'époque s'exécutent", errors.length === 0, errors.slice(0,3).join(" | "));
+  check("des branches d'époque ont été exercées", branches > 50, branches);
+
+  // Les textes citant `state.arc.data` doivent s'évaluer.
+  const textErrors = [];
+  eraArcs.forEach(a => {
+    for(let si = 0; si < a.steps; si++){
+      const s = permissiveGame();
+      s.eraId = a.era;
+      s.arc = {id:a.id, step:si, data:{head:30, name:"Test"}};
+      try{
+        ev(`(function(){
+          const st = arcById(${JSON.stringify(a.id)}).steps[${si}];
+          return [st.title, st.text, st.image].map(f=>typeof f==="function"?f():f).join("");
+        })()`);
+      }catch(e){ textErrors.push(a.id + " ch." + si + " : " + e.message); }
+    }
+  });
+  check("tous les textes d'arcs d'époque s'évaluent", textErrors.length === 0, textErrors.slice(0,3).join(" | "));
+
+  // Un `goto` hors bornes doit refermer l'arc, pas le bloquer.
+  const s = permissiveGame();
+  s.eraId = "foundation"; s.cattle = 60; s.turn = 5;
+  s.arc = {id:"trailDrive", step:0, due:0, data:{}};
+  G.maybeShowArcStep();
+  const ch = $el("eventChoices").children;
+  ch[ch.length-1].onclick();
+  check("une sortie anticipée referme l'arc proprement",
+    ST().arc === null && (ST().arcsDone||[]).includes("trailDrive"));
+}
+
+// --------------------------------------------------- Deux maisons rivales
+section("Le triangle");
+{
+  const s = freshGame();
+  G.ensureSecondHouse();
+  check("une seconde maison existe", !!ST().rival2 && !!ST().rival2.name);
+  check("les deux maisons ont des noms différents", ST().rival2.name !== ST().rival.name);
+  check("la seconde maison a un chef", !!ST().rival2.leader && !!ST().rival2.leader.name);
+  check("la querelle entre elles est chiffrée", typeof ST().rivalFeud === "number");
+  check("rivalHouses renvoie les deux", ev("rivalHouses().length") === 2);
+
+  // Deux maisons en guerre vous laissent souffler ; alliées, elles frappent plus.
+  ST().rivalFeud = -80;
+  const shielded = ev("feudShield()");
+  ST().rivalFeud = 80;
+  const exposed = ev("feudShield()");
+  ST().rivalFeud = 0;
+  const neutral = ev("feudShield()");
+  check("une querelle ouverte réduit la pression", shielded < neutral, shielded + " < " + neutral);
+  check("une entente entre elles l'aggrave", exposed > neutral, exposed + " > " + neutral);
+
+  // Semer la discorde
+  const s2 = freshGame();
+  s2.money = 100000; s2.actions = 3; s2.rivalFeud = 0; s2.reputation = 70; s2.suspicion = 0;
+  let dropped = 0;
+  for(let i = 0; i < 120; i++){
+    const s3 = freshGame();
+    s3.money = 100000; s3.actions = 3; s3.rivalFeud = 0; s3.reputation = 70; s3.suspicion = 0;
+    G.sowDiscord();
+    if(ST().rivalFeud < 0) dropped++;
+  }
+  check("semer la discorde fonctionne souvent", dropped > 60, dropped + "/120");
+
+  const s4 = freshGame();
+  s4.money = 100000; s4.actions = 3;
+  G.sowDiscord();
+  check("semer la discorde consomme une action", ST().actions === 2, ST().actions);
+  check("semer la discorde coûte de l'argent", ST().money < 100000);
+
+  // Se rapprocher d'une maison refroidit l'autre.
+  const s5 = freshGame();
+  s5.money = 100000; s5.actions = 3; s5.rivalFeud = 0;
+  const otherBefore = ST().rival2.relation;
+  G.negotiateHouse(0);
+  check("se rapprocher d'une maison refroidit l'autre",
+    ST().rival2.relation <= otherBefore, otherBefore + " → " + ST().rival2.relation);
+
+  // Le chef de la seconde maison vieillit lui aussi.
+  const s6 = freshGame();
+  ST().rival2.leader = {name:"Doyen", sex:"m", age:72, trait:"brutal", alive:true, since:1885};
+  let replaced = false;
+  for(let y = 0; y < 40 && !replaced; y++){
+    G.ageRivalLeader(ST().rival2);
+    if(ST().rival2.leader.name !== "Doyen") replaced = true;
+  }
+  check("le chef de la seconde maison est remplacé à sa mort", replaced);
+
+  // Le panneau montre le triangle.
+  const s7 = freshGame();
+  G.renderDiplomacy();
+  const html = $el("diplomacyContent").innerHTML;
+  check("le panneau nomme les deux maisons",
+    html.includes(ST().rival.name) && html.includes(ST().rival2.name));
+  check("le panneau expose la querelle entre elles", html.includes("contre"));
+  check("le panneau propose de semer la discorde", html.includes("sowDiscord"));
+}
+
 // ------------------------------------------------------------ Le rival
 section("La lignée rivale");
 {
@@ -1455,6 +1603,59 @@ section("Montants et inflation");
   s2.money = 1000000; s2.legacy.greed = 0; s2.horses = 6;
   for(let i = 0; i < 120; i++){ ST().actions = 3; G.doAction("competition"); }
   check("les concours n'entachent pas l'héritage moral", ST().legacy.greed === 0, ST().legacy.greed);
+}
+
+// ------------------------------------------------ Aucune impasse possible
+section("Impasses");
+{
+  // Un événement dont toutes les branches sont verrouillées afficherait une
+  // modale sans bouton : la partie serait bloquée pour de bon.
+  const s = freshGame();
+  // État volontairement démuni : pas d'argent, pas d'hommes, pas de cheval.
+  s.money = 0; s.cattle = 0; s.horses = 0; s.weapons = 0; s.feed = 0;
+  s.cowboys = []; s.children = []; s.champion = null;
+  s.factions.forEach(f => f.relation = 0);
+  const stuck = [];
+  const total = ev("events.length");
+  for(let i = 0; i < total; i++){
+    $el("eventChoices").innerHTML = "";
+    ST().money = 0; ST().cattle = 0; ST().horses = 0; ST().weapons = 0;
+    ST().cowboys = []; ST().champion = null;
+    // Un événement n'est tiré que si sa condition passe : on teste donc dans
+    // les mêmes termes que le jeu.
+    const reachable = ev("(function(){const e=events["+i+"];try{return !e.condition||!!e.condition();}catch(err){return false;}})()");
+    if(!reachable) continue;
+    try{
+      G.presentEvent(ev("events["+i+"]"));
+      if(!$el("eventChoices").children.length){
+        stuck.push(ev("(function(){const t=events["+i+"].title;try{return typeof t==='function'?t():t;}catch(e){return 'événement '+" + i + ";}})()"));
+      }
+    }catch(e){
+      stuck.push("erreur sur l'événement " + i + " : " + e.message);
+    }
+  }
+  check("aucun événement ne laisse la modale sans issue, même démuni",
+    stuck.length === 0, stuck.slice(0,4).join(" | "));
+
+  // Même garantie pour les chapitres d'arcs.
+  const arcStuck = [];
+  const arcs = ev("ARCS.map(a=>({id:a.id, n:a.steps.length}))");
+  arcs.forEach(a => {
+    for(let si = 0; si < a.n; si++){
+      const s2 = freshGame();
+      s2.money = 0; s2.cattle = 0; s2.horses = 0; s2.weapons = 0;
+      s2.cowboys = []; s2.children = []; s2.champion = null;
+      s2.arc = {id:a.id, step:si, due:0, data:{name:"X"}};
+      $el("eventChoices").innerHTML = "";
+      // maybeShowArcStep enveloppe le chapitre : un sujet disparu referme
+      // l'arc proprement au lieu de bloquer. C'est ce chemin qu'on éprouve.
+      const opened = G.maybeShowArcStep();
+      if(opened && !$el("eventChoices").children.length) arcStuck.push(a.id + " ch." + si);
+      if(!opened && ST().arc) arcStuck.push(a.id + " ch." + si + " : ni ouvert ni refermé");
+    }
+  });
+  check("aucun chapitre d'arc ne laisse la modale sans issue",
+    arcStuck.length === 0, arcStuck.slice(0,4).join(" | "));
 }
 
 // -------------------------------------------------- Variété du catalogue

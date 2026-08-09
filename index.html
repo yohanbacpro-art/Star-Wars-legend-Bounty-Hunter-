@@ -1786,6 +1786,423 @@ const ARCS = [
   }
 ];
 
+// Un arc par époque, ancré dans son temps. Ils s'ajoutent aux cinq arcs
+// intemporels : une partie n'en voit jamais la totalité.
+const ERA_ARCS = [
+  {
+    id:"trailDrive", eraId:"foundation", title:"La grande piste",
+    canStart:()=>state.cattle >= 40,
+    steps:[
+      {art:"herd", title:"Mille kilomètres de poussière",
+       text:()=>`Les acheteurs du nord paient le double. Il faut mener le troupeau jusqu'au terminus ferroviaire : trois mois de piste.`,
+       image:"Une colonne de bétail jusqu'à l'horizon",
+       choices:[
+         {label:"Partir avec la moitié du troupeau",condition:()=>state.cattle>=40,apply:()=>{
+           const n=Math.floor(state.cattle*.5);state.arc.data.head=n;state.cattle-=n;
+           addLog(`${n} bêtes prennent la piste du nord.`,"info");}},
+         {label:"N'envoyer qu'un lot d'essai",condition:()=>state.cattle>=20,apply:()=>{
+           const n=20;state.arc.data.head=n;state.cattle-=n;state.arc.data.cautious=true;
+           addLog("Vingt bêtes partent en éclaireur.","info");}},
+         {label:"Renoncer et vendre sur place",apply:()=>{
+           const n=Math.min(state.cattle,15);state.cattle-=n;state.money+=n*state.cattlePrice;
+           state.arc.data.head=0;state.arc.data.outcome="declined";
+           addLog("Le troupeau reste au pays, vendu au cours local.","info");},goto:99}
+       ]},
+      {art:"night", title:"La rivière en crue",
+       text:()=>`À mi-chemin, la rivière est infranchissable à gué. Les bêtes s'agitent sur la berge depuis deux jours.`,
+       image:"Un troupeau massé au bord d'une eau brune",
+       choices:[
+         {label:"Forcer la traversée",apply:()=>{
+           if(chance(.55)){addLog("La traversée se fait sans perte notable.","good");}
+           else{const l=Math.floor(state.arc.data.head*.25);state.arc.data.head-=l;
+             addLog(`${l} bêtes se noient dans le courant.`,"bad");}}},
+         {label:"Remonter jusqu'au pont à péage",apply:()=>{
+           state.money-=Math.min(state.money,sc(rand(60,130)));
+           state.arc.data.slow=true;
+           addLog("Le détour coûte cher et trois semaines de retard.","info");}},
+         {label:"Attendre la décrue",apply:()=>{
+           const l=Math.floor(state.arc.data.head*.12);state.arc.data.head-=l;state.arc.data.slow=true;
+           addLog(`L'attente amaigrit le troupeau : ${l} bêtes perdues.`,"info");}}
+       ]},
+      {art:"money", title:"Le terminus",
+       text:()=>`Les enclos du chemin de fer sont en vue. Les acheteurs attendent, et ils savent d'où vous venez.`,
+       image:"Des wagons à bestiaux alignés",
+       choices:[
+         {label:"Vendre au premier prix offert",apply:()=>{
+           const n=Math.max(0,state.arc.data.head||0);
+           const g=Math.round(n*state.cattlePrice*(state.arc.data.slow?1.4:1.8));
+           state.money+=g;state.reputation=clamp(state.reputation+6);state.arc.data.outcome="sold";
+           addLog(`${n} bêtes vendues au terminus : +${g} $.`,"good");}},
+         {label:"Attendre un meilleur acheteur",apply:()=>{
+           const n=Math.max(0,state.arc.data.head||0);
+           if(chance(.5)){const g=Math.round(n*state.cattlePrice*2.3);state.money+=g;state.arc.data.outcome="sold";
+             addLog(`La patience paie : +${g} $.`,"good");}
+           else{const g=Math.round(n*state.cattlePrice*1.2);state.money+=g;state.arc.data.outcome="sold";
+             addLog(`Le marché se referme : +${g} $ seulement.`,"info");}}}
+       ]}
+    ]
+  },
+  {
+    id:"warehouse", eraId:"prohibition", title:"L'entrepôt",
+    canStart:()=>true,
+    steps:[
+      {art:"night", title:"Une proposition qu'on ne refuse pas deux fois",
+       text:()=>`Trois hommes en manteau long descendent d'une automobile. Ils ont repéré votre grange à l'écart de la route.`,
+       image:"Des phares éteints devant une grange",
+       choices:[
+         {label:"Louer la grange sans poser de questions",apply:()=>{
+           state.money+=sc(300);state.suspicion=clamp(state.suspicion+15);state.arc.data.inside=true;
+           addLog("Des caisses arrivent la nuit même. On ne compte pas, on ne regarde pas.","good");}},
+         {label:"Refuser poliment mais fermement",apply:()=>{
+           state.arc.data.inside=false;
+           addLog("Ils remontent en voiture sans un mot. Ce n'est pas fini.","info");}},
+         {label:"Les dénoncer aux fédéraux",apply:()=>{
+           state.arc.data.inside=false;state.arc.data.snitch=true;
+           state.suspicion=clamp(state.suspicion-20);
+           const l=factionOfType("law");if(l)l.relation=clamp(l.relation+25,-100,100);
+           addLog("Le Bureau est prévenu. Le syndicat l'apprendra tôt ou tard.","info");}}
+       ]},
+      {art:"law", title:"Une descente",
+       text:()=>state.arc.data.inside
+         ? `Trois automobiles noires remontent l'allée à l'aube. Ils savent ce qu'il y a dans la grange.`
+         : `Trois automobiles noires remontent l'allée à l'aube. Quelqu'un a parlé de vous au Bureau.`,
+       image:"Des hommes en costume sombre dans la cour",
+       choices:[
+         {label:"Tout nier",apply:()=>{
+           const odds=state.arc.data.inside?.35:.75;
+           if(chance(odds)){state.suspicion=clamp(state.suspicion-10);addLog("Ils repartent sans rien trouver.","good");}
+           else{state.money-=Math.min(state.money,sc(rand(200,400)));state.suspicion=clamp(state.suspicion+25);
+             addLog("La grange est vidée et le ranch inscrit sur une liste.","bad");}}},
+         {label:"Coopérer et livrer les noms",condition:()=>!!state.arc.data.inside,apply:()=>{
+           state.suspicion=clamp(state.suspicion-30);state.arc.data.betrayed=true;
+           const l=factionOfType("law");if(l)l.relation=clamp(l.relation+30,-100,100);
+           addLog("Les noms sont donnés. Le ranch est blanchi, et marqué.","info");}},
+         {label:"Les acheter",condition:()=>state.money>=sc(250),apply:()=>{
+           state.money-=sc(250);state.legacy.greed++;
+           if(chance(.6)){state.suspicion=clamp(state.suspicion-15);addLog("Le rapport ne mentionnera pas la grange.","good");}
+           else{state.suspicion=clamp(state.suspicion+35);addLog("La tentative est consignée noir sur blanc.","bad");}}}
+       ]},
+      {art:"night", title:"Le règlement de comptes",
+       text:()=>state.arc.data.betrayed || state.arc.data.snitch
+         ? `Une automobile stationne au bout du chemin depuis deux jours. Le syndicat n'oublie pas ceux qui parlent.`
+         : `Le syndicat envoie un homme régler les comptes de l'année. Il a un carnet et pas d'humour.`,
+       image:"Un homme adossé à une portière, immobile",
+       choices:[
+         {label:"Payer ce qu'on vous réclame",condition:()=>state.money>=sc(200),apply:()=>{
+           state.money-=sc(200);state.arc.data.outcome="paid";
+           addLog("La dette est soldée. On ne les reverra plus de sitôt.","info");}},
+         {label:"Les recevoir armes à la main",condition:()=>state.weapons>=2,apply:()=>{
+           if(chance(.55)){state.reputation=clamp(state.reputation+8);state.arc.data.outcome="stood";
+             addLog("Ils repartent. Le comté saura que le ranch ne plie pas.","good");}
+           else{state.founder.health=clamp(state.founder.health-rand(12,26));
+             state.money-=Math.min(state.money,sc(rand(120,240)));state.arc.data.outcome="beaten";
+             addLog("La nuit se termine mal. Très mal.","bad");}}},
+         {label:"Demander la protection des autorités",apply:()=>{
+           const l=factionOfType("law");
+           if(l&&l.relation>30){state.arc.data.outcome="protected";
+             addLog("Le Bureau place le ranch sous surveillance. L'homme s'en va.","good");}
+           else{state.suspicion=clamp(state.suspicion+15);state.arc.data.outcome="exposed";
+             addLog("Personne ne bouge. Il faudra se débrouiller seul.","bad");}}}
+       ]}
+    ]
+  },
+  {
+    id:"foreclosure", eraId:"depression", title:"La saisie",
+    canStart:()=>true,
+    steps:[
+      {art:"money", title:"Une lettre recommandée de la banque",
+       text:()=>`L'échéance du prêt hypothécaire tombe dans six mois, et la banque du comté ne renouvellera pas.`,
+       image:"Un cachet rouge sur une enveloppe",
+       choices:[
+         {label:"Vendre du bétail pour constituer la somme",condition:()=>state.cattle>=20,apply:()=>{
+           const n=20;state.cattle-=n;state.money+=n*state.cattlePrice;state.arc.data.saving=true;
+           addLog("Vingt bêtes vendues pour faire un matelas.","info");}},
+         {label:"Négocier un rééchelonnement",apply:()=>{
+           const t=factionOfType("trade");
+           if(t&&t.relation>20){state.arc.data.rescheduled=true;t.relation=clamp(t.relation-10,-100,100);
+             addLog("La banque accepte d'étaler l'échéance.","good");}
+           else addLog("La banque refuse de discuter.","bad");}},
+         {label:"Ignorer la lettre",apply:()=>{state.arc.data.ignored=true;
+           addLog("La lettre rejoint les autres dans le tiroir.","bad");}}
+       ]},
+      {art:"law", title:"L'huissier au portail",
+       text:()=>`Un huissier vient dresser l'inventaire de ce qui sera vendu si la somme n'est pas réunie.`,
+       image:"Un homme qui compte les bêtes une à une",
+       choices:[
+         {label:"Réunir la somme coûte que coûte",condition:()=>state.money>=sc(320),apply:()=>{
+           state.money-=sc(320);state.arc.data.paid=true;
+           addLog("La somme est versée au guichet, à l'heure dite.","good");}},
+         {label:"Appeler le comté à la rescousse",apply:()=>{
+           const c=factionOfType("community");
+           if(c&&c.relation>30){state.arc.data.paid=true;c.relation=clamp(c.relation-15,-100,100);
+             addLog("Les voisins se cotisent. Personne ne dira jamais combien.","good");}
+           else{state.arc.data.paid=false;addLog("Le comté a ses propres dettes.","bad");}}},
+         {label:"Céder des terres pour éteindre la dette",condition:()=>state.land>=120,apply:()=>{
+           state.land-=50;ensureParcels();state.arc.data.paid=true;state.arc.data.soldLand=true;
+           addLog("Cinquante hectares partent à la banque. Le reste est sauvé.","info");}}
+       ]},
+      {art:"crowd", title:"La vente aux enchères",
+       text:()=>state.arc.data.paid
+         ? `L'affiche de la vente a été retirée du panneau municipal. Les voisins viennent quand même, pour voir.`
+         : `L'affiche est placardée sur la place. La vente du ranch aura lieu à dix heures.`,
+       image:"Une affiche jaune sur un panneau de bois",
+       choices:[
+         {label:"Faire face, quoi qu'il arrive",apply:()=>{
+           if(state.arc.data.paid){state.reputation=clamp(state.reputation+14);state.unity=clamp(state.unity+10);
+             state.arc.data.outcome="saved";
+             addLog("Il n'y a rien à vendre. Le comté applaudit sans oser le dire.","good");}
+           else{state.land=Math.max(40,Math.floor(state.land*.65));ensureParcels();
+             state.cattle=Math.floor(state.cattle*.7);state.arc.data.outcome="stripped";
+             addLog("Un tiers du domaine est adjugé. Le ranch survit, amputé.","bad");}}},
+         {label:"Racheter en sous-main par un prête-nom",condition:()=>state.money>=sc(260),apply:()=>{
+           state.money-=sc(260);state.legacy.greed++;state.suspicion=clamp(state.suspicion+12);
+           state.arc.data.outcome="schemed";
+           addLog("Un inconnu emporte les lots. Il travaille pour vous.","info");}}
+       ]}
+    ]
+  },
+  {
+    id:"strike", eraId:"industrial", title:"Le conflit social",
+    canStart:()=>(state.cowboys||[]).length >= 2,
+    steps:[
+      {art:"crowd", title:"Une délégation dans la cour",
+       text:()=>`Les hommes ont désigné trois d'entre eux pour parler. Ils demandent des salaires alignés sur la ville.`,
+       image:"Trois hommes qui attendent, chapeau à la main",
+       choices:[
+         {label:"Accorder l'augmentation",apply:()=>{
+           (state.cowboys||[]).forEach(c=>{c.salary=Math.round(c.salary*1.2);c.loyalty=clamp(c.loyalty+18);});
+           state.arc.data.gave=true;
+           addLog("Les salaires montent d'un cinquième. Le calme revient.","good");}},
+         {label:"Proposer un intéressement aux bénéfices",apply:()=>{
+           (state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty+10));
+           state.arc.data.shared=true;
+           addLog("Une part des bénéfices leur reviendra. C'est nouveau, ici.","good");}},
+         {label:"Refuser tout net",apply:()=>{
+           (state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty-20));
+           state.arc.data.refused=true;
+           addLog("La délégation redescend au bunkhouse sans un mot.","bad");}}
+       ]},
+      {art:"crowd", title:"Les bras croisés",
+       text:()=>state.arc.data.refused
+         ? `Au matin, personne ne sort. Les bêtes beuglent, les seaux restent vides.`
+         : `Le syndicat régional envoie un permanent pour convaincre vos hommes de se joindre au mouvement général.`,
+       image:"Un bunkhouse silencieux à sept heures",
+       choices:[
+         {label:"Négocier avec le permanent syndical",apply:()=>{
+           state.money-=Math.min(state.money,sc(140));
+           const c=factionOfType("community");if(c)c.relation=clamp(c.relation+20,-100,100);
+           (state.cowboys||[]).forEach(x=>x.loyalty=clamp(x.loyalty+12));
+           state.arc.data.settled=true;
+           addLog("Un accord est signé dans la cuisine, devant témoins.","good");}},
+         {label:"Embaucher des remplaçants",condition:()=>state.money>=sc(180),apply:()=>{
+           state.money-=sc(180);
+           (state.cowboys||[]).forEach(x=>x.loyalty=clamp(x.loyalty-25));
+           const c=factionOfType("community");if(c)c.relation=clamp(c.relation-30,-100,100);
+           state.arc.data.scabs=true;
+           addLog("Des hommes venus d'ailleurs prennent le travail. L'ambiance est irrespirable.","bad");}},
+         {label:"Attendre qu'ils cèdent",apply:()=>{
+           state.money-=Math.min(state.money,sc(rand(80,200)));
+           (state.cowboys||[]).forEach(x=>x.loyalty=clamp(x.loyalty-8));
+           addLog("Trois semaines sans travail. Tout le monde y perd.","bad");}}
+       ]},
+      {art:"ranch", title:"Ce qu'il en reste",
+       text:()=>state.arc.data.scabs
+         ? `Le travail a repris, mais deux camps se croisent sans se parler dans la même cour.`
+         : `Le conflit s'est éteint. Reste à savoir ce qu'il a laissé derrière lui.`,
+       image:"Deux groupes d'hommes qui s'ignorent",
+       choices:[
+         {label:"Réunir tout le monde autour d'une table",apply:()=>{
+           (state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty+15));
+           state.unity=clamp(state.unity+8);state.arc.data.outcome="mended";
+           addLog("On mange ensemble. Ce n'est pas l'amitié, mais ça suffit pour travailler.","good");}},
+         {label:"Renvoyer les meneurs",condition:()=>(state.cowboys||[]).length>2,apply:()=>{
+           const c=state.cowboys.pop();
+           (state.cowboys||[]).forEach(x=>x.loyalty=clamp(x.loyalty-10));
+           state.arc.data.outcome="purged";
+           addLog(`${c.name} est remercié. Les autres ont compris.`,"info");}},
+         {label:"Ne rien dire et tourner la page",apply:()=>{
+           state.arc.data.outcome="silent";
+           addLog("On n'en reparle plus. Le silence tient lieu de paix.","info");}}
+       ]}
+    ]
+  },
+  {
+    id:"takeover", eraId:"corporate", title:"Le rachat",
+    canStart:()=>true,
+    steps:[
+      {art:"money", title:"Un groupe s'intéresse au ranch",
+       text:()=>`Un conglomérat agroalimentaire fait discrètement le tour des exploitations de la vallée. La vôtre est la plus belle.`,
+       image:"Une berline immatriculée hors du comté",
+       choices:[
+         {label:"Écouter leur offre",apply:()=>{state.arc.data.listening=true;
+           addLog("Un rendez-vous est fixé en ville, dans leurs bureaux.","info");}},
+         {label:"Fermer la porte tout de suite",apply:()=>{state.arc.data.hostile=true;
+           addLog("La berline repart. Ils reviendront autrement.","info");}},
+         {label:"Prévenir les autres exploitants",apply:()=>{
+           const c=factionOfType("community");if(c)c.relation=clamp(c.relation+22,-100,100);
+           state.arc.data.allied=true;
+           addLog("La vallée est prévenue. Les portes se ferment les unes après les autres.","good");}}
+       ]},
+      {art:"law", title:"La pression monte",
+       text:()=>state.arc.data.hostile || state.arc.data.allied
+         ? `Ne pouvant acheter, ils achètent ce qui vous entoure : le transporteur, l'abattoir, le vétérinaire.`
+         : `L'offre est sur la table, et elle est considérable. Elle est valable quinze jours.`,
+       image:"Un contrat de trente pages et un stylo",
+       choices:[
+         {label:"Vendre une part minoritaire",apply:()=>{
+           state.money+=sc(rand(700,1100));state.unity=clamp(state.unity-12);
+           state.legacy.greed++;state.arc.data.sold=true;
+           addLog("Un tiers du capital leur appartient. L'argent est réel, la liberté moins.","info");}},
+         {label:"Tenir bon et diversifier",condition:()=>state.money>=sc(300),apply:()=>{
+           state.money-=sc(300);
+           const t=factionOfType("trade");if(t)t.relation=clamp(t.relation+20,-100,100);
+           state.arc.data.diversified=true;
+           addLog("Le ranch ouvre ses propres circuits. Coûteux, mais indépendant.","good");}},
+         {label:"Porter l'affaire sur la place publique",apply:()=>{
+           const m=factionOfType("media");if(m)m.relation=clamp(m.relation+28,-100,100);
+           state.reputation=clamp(state.reputation+12);state.arc.data.publicised=true;
+           addLog("La presse s'empare de l'histoire du petit ranch contre le groupe.","good");}}
+       ]},
+      {art:"city", title:"Le dernier mot",
+       text:()=>state.arc.data.sold
+         ? `Le conseil d'administration se réunit pour la première fois dans votre salle à manger.`
+         : `Le groupe annonce son retrait de la vallée. On ne saura jamais ce qui l'a décidé.`,
+       image:"Une poignée de main devant des photographes",
+       choices:[
+         {label:"En tirer le meilleur parti",apply:()=>{
+           if(state.arc.data.sold){state.money+=sc(rand(200,400));state.arc.data.outcome="absorbed";
+             addLog("Les capitaux affluent, mais le ranch n'est plus tout à fait à vous.","info");}
+           else{state.reputation=clamp(state.reputation+16);state.legacy.honor++;
+             state.arc.data.outcome="independent";
+             const c=factionOfType("community");if(c)c.relation=clamp(c.relation+25,-100,100);
+             addLog("Le ranch reste indépendant. Toute la vallée s'en souviendra.","good");}}},
+         {label:"Racheter les parts cédées",condition:()=>state.arc.data.sold&&state.money>=sc(900),apply:()=>{
+           state.money-=sc(900);state.unity=clamp(state.unity+15);state.legacy.honor++;
+           state.arc.data.outcome="reclaimed";
+           addLog("Le capital est racheté au prix fort. Le ranch redevient une affaire de famille.","good");}}
+       ]}
+    ]
+  },
+  {
+    id:"label", eraId:"globalization", title:"Le label",
+    canStart:()=>state.cattle >= 50,
+    steps:[
+      {art:"money", title:"Une certification à décrocher",
+       text:()=>`Un cahier des charges exigeant, une inspection annuelle, et le droit d'apposer un label qui double le prix au kilo.`,
+       image:"Un logo vert sur un dossier épais",
+       choices:[
+         {label:"Engager la démarche complète",condition:()=>state.money>=sc(280),apply:()=>{
+           state.money-=sc(280);state.arc.data.honest=true;
+           addLog("Le ranch entre en conversion. Deux ans de contraintes avant le premier logo.","info");}},
+         {label:"Chercher un label plus accommodant",apply:()=>{
+           state.money-=Math.min(state.money,sc(90));state.arc.data.honest=false;
+           addLog("Un label moins regardant est trouvé. Il vaut ce qu'il coûte.","info");}},
+         {label:"Vendre sans label",apply:()=>{state.arc.data.outcome="declined";
+           addLog("Le ranch continue de vendre au cours ordinaire.","info");},goto:99}
+       ]},
+      {art:"media", title:"Un journaliste enquête",
+       text:()=>state.arc.data.honest
+         ? `Une journaliste veut suivre la conversion de l'intérieur, du pré à l'étal.`
+         : `Une journaliste enquête sur les labels de complaisance. Le vôtre figure dans sa liste.`,
+       image:"Un carnet et un enregistreur sur une barrière",
+       choices:[
+         {label:"Tout lui ouvrir",apply:()=>{
+           const m=factionOfType("media");
+           if(state.arc.data.honest){if(m)m.relation=clamp(m.relation+30,-100,100);
+             state.reputation=clamp(state.reputation+14);state.arc.data.praised=true;
+             addLog("Le reportage est un éloge. Les commandes affluent.","good");}
+           else{if(m)m.relation=clamp(m.relation-25,-100,100);
+             state.reputation=clamp(state.reputation-15);state.arc.data.exposed=true;
+             addLog("Le reportage démonte le label. Le nom du ranch y est cité.","bad");}}},
+         {label:"Refuser l'accès",apply:()=>{
+           const m=factionOfType("media");if(m)m.relation=clamp(m.relation-18,-100,100);
+           state.reputation=clamp(state.reputation-5);
+           addLog("Le refus est mentionné dans l'article. Cela ne plaide pas.","bad");}},
+         {label:"L'acheter",condition:()=>state.money>=sc(200),apply:()=>{
+           state.money-=sc(200);state.legacy.greed++;
+           if(chance(.5)){addLog("L'article ne paraîtra pas.","info");}
+           else{state.reputation=clamp(state.reputation-20);state.arc.data.exposed=true;
+             addLog("La tentative d'achat devient le sujet de l'article.","bad");}}}
+       ]},
+      {art:"money", title:"Le prix au kilo",
+       text:()=>state.arc.data.exposed
+         ? `Les acheteurs se sont détournés. Il faut reconstruire une réputation, ou changer de métier.`
+         : `Les commandes dépassent la production. Le label tient ses promesses.`,
+       image:"Une étiquette collée sur une caisse",
+       choices:[
+         {label:"Consolider et augmenter les prix",apply:()=>{
+           if(state.arc.data.exposed){state.cattlePriceMin=Math.max(4,state.cattlePriceMin-2);
+             state.arc.data.outcome="ruined";
+             addLog("Il faudra des années pour effacer ça.","bad");}
+           else{state.cattlePriceMin=Math.min(state.cattlePriceMax-4,state.cattlePriceMin+6);
+             state.cattlePriceMax=Math.round(state.cattlePriceMax*1.2);
+             state.arc.data.outcome="premium";
+             addLog("Le cours plancher du ranch est durablement relevé.","good");}}},
+         {label:"Repartir sur des bases modestes",apply:()=>{
+           state.reputation=clamp(state.reputation+6);state.arc.data.outcome="humbled";
+           addLog("On reprend au prix ordinaire, sans étiquette et sans mensonge.","info");}}
+       ]}
+    ]
+  },
+  {
+    id:"conservancy", eraId:"modern", title:"Le classement",
+    canStart:()=>state.land >= 200,
+    steps:[
+      {art:"land", title:"Une association frappe à la porte",
+       text:()=>`Une fondation propose de classer une partie du domaine en réserve naturelle, avec une compensation annuelle.`,
+       image:"Une carte du domaine annotée au crayon vert",
+       choices:[
+         {label:"Étudier sérieusement la proposition",apply:()=>{state.arc.data.open=true;
+           const c=factionOfType("community");if(c)c.relation=clamp(c.relation+15,-100,100);
+           addLog("Les experts de la fondation viennent inventorier la faune.","info");}},
+         {label:"Refuser : la terre doit produire",apply:()=>{state.arc.data.open=false;
+           addLog("La fondation repart avec ses dépliants.","info");}}
+       ]},
+      {art:"city", title:"Un promoteur surenchérit",
+       text:()=>`Un aménageur propose trois fois la compensation de la fondation pour les mêmes hectares, en vue d'un lotissement.`,
+       image:"Une maquette de lotissement sous plexiglas",
+       choices:[
+         {label:"Vendre au promoteur",condition:()=>state.land>=160,apply:()=>{
+           state.land-=60;ensureParcels();state.money+=sc(rand(900,1500));
+           const c=factionOfType("community");if(c)c.relation=clamp(c.relation-30,-100,100);
+           state.legacy.greed++;state.arc.data.developed=true;
+           addLog("Soixante hectares deviendront des pavillons. Le chèque est énorme.","info");}},
+         {label:"Classer avec la fondation",apply:()=>{
+           state.money+=sc(rand(250,450));state.arc.data.conserved=true;
+           const c=factionOfType("community");if(c)c.relation=clamp(c.relation+30,-100,100);
+           state.legacy.honor++;
+           addLog("La réserve est actée. Ces hectares ne seront jamais bâtis.","good");}},
+         {label:"Ne rien signer du tout",apply:()=>{state.arc.data.neutral=true;
+           addLog("Ni réserve ni lotissement. Le domaine reste ce qu'il est.","info");}}
+       ]},
+      {art:"family", title:"Ce qu'on laisse",
+       text:()=>state.arc.data.developed
+         ? `Les premières maisons sortent de terre là où le troupeau pâturait. On les voit depuis la cuisine.`
+         : `Un panneau discret marque désormais la limite du domaine. Les enfants du comté y viennent en sortie scolaire.`,
+       image:"Un panneau de bois au bord d'un pré",
+       choices:[
+         {label:"Assumer devant la famille",apply:()=>{
+           if(state.arc.data.developed){state.unity=clamp(state.unity-10);state.arc.data.outcome="developed";
+             addLog("L'argent est là. Le paysage, lui, ne reviendra pas.","info");}
+           else{state.unity=clamp(state.unity+12);state.reputation=clamp(state.reputation+14);
+             state.legacy.honor++;state.arc.data.outcome="conserved";
+             addLog("Le nom de la famille est gravé sur le panneau. Pour longtemps.","good");}}},
+         {label:"Racheter les parcelles bâties",condition:()=>state.arc.data.developed&&state.money>=sc(1400),apply:()=>{
+           state.money-=sc(1400);state.land+=40;addParcel(40);
+           state.reputation=clamp(state.reputation+10);state.arc.data.outcome="undone";
+           addLog("Le lotissement est racheté avant d'être achevé. Une folie, disent-ils.","good");}}
+       ]}
+    ]
+  }
+];
+
+// Un arc d'époque ne se déclenche que dans la sienne.
+ERA_ARCS.forEach(a => {
+  const own = a.canStart;
+  a.canStart = () => state.eraId === a.eraId && own();
+  ARCS.push(a);
+});
+
 function arcById(id){ return ARCS.find(a => a.id === id); }
 
 // Comment s'est terminé un arc passé ? `null` s'il n'a pas encore eu lieu.
@@ -2034,26 +2451,22 @@ function newRivalLeader(surname, age){
   };
 }
 
-function ensureRivalLeader(){
-  if(!state.rival) return null;
-  if(!state.rival.leader || state.rival.leader.alive === false){
-    state.rival.leader = newRivalLeader(state.rival.name);
-    if(!state.rival.lineage) state.rival.lineage = [];
-    state.rival.lineage.push({
-      name: state.rival.leader.name,
-      trait: state.rival.leader.trait,
-      from: state.year,
-      to: null
-    });
+function ensureRivalLeader(house){
+  const h = house || state.rival;
+  if(!h) return null;
+  if(!h.leader || h.leader.alive === false){
+    h.leader = newRivalLeader(h.name);
+    if(!h.lineage) h.lineage = [];
+    h.lineage.push({name:h.leader.name, trait:h.leader.trait, from:state.year, to:null});
   }
-  return state.rival.leader;
+  return h.leader;
 }
 
 // Vieillissement annuel du chef d'en face, et passage de témoin.
-function ageRivalLeader(){
-  const r = state.rival;
+function ageRivalLeader(house){
+  const r = house || state.rival;
   if(!r) return;
-  const leader = ensureRivalLeader();
+  const leader = ensureRivalLeader(r);
   leader.age++;
   let mortality = 0;
   if(leader.age > 62) mortality += (leader.age - 61) * .02;
@@ -2063,7 +2476,7 @@ function ageRivalLeader(){
   const line = (r.lineage||[]).find(l => l.to === null);
   if(line) line.to = state.year;
   const era = ERAS.find(e=>e.id===state.eraId) || getEra(state.year);
-  addLog(`${leader.name} ${r.name}, à la tête de ${era.rivalType}, est mort à ${leader.age} ans.`, "info");
+  addLog(`${leader.name} ${r.name} est mort à ${leader.age} ans, laissant ${era.rivalType} sans chef.`, "info");
 
   const heir = newRivalLeader(r.name, rand(26,42));
   r.leader = heir;
@@ -2078,9 +2491,96 @@ function ageRivalLeader(){
   addLog(`${heir.name} ${r.name} prend la suite. ${t.desc}`, heir.trait === "brutal" ? "bad" : "info");
 }
 
-function rivalTraitOf(){
-  const leader = state.rival && state.rival.leader;
+function rivalTraitOf(house){
+  const h = house || state.rival;
+  const leader = h && h.leader;
   return (leader && RIVAL_TRAITS[leader.trait]) || RIVAL_TRAITS.calculateur;
+}
+
+// ---- Le triangle ----
+// Une seconde maison rivale change la nature du jeu : on ne subit plus un
+// adversaire, on arbitre entre deux. `state.rivalFeud` mesure ce que les deux
+// maisons se portent l'une à l'autre, indépendamment de vous.
+const RIVAL_SURNAMES = ["Dawson","Hargrove","Kessler","McAllister","Voss",
+  "Bannister","Rourke","Crowley","Stanton","Maddox"];
+
+function ensureSecondHouse(){
+  if(!state) return null;
+  if(!state.rival2){
+    const taken = state.rival ? state.rival.name : "";
+    const pool = RIVAL_SURNAMES.filter(n => n !== taken);
+    state.rival2 = {
+      name: pool[rand(0,pool.length-1)],
+      relation: rand(-15,15),
+      strength: rand(25,45),
+      leader: null,
+      lineage: []
+    };
+  }
+  if(typeof state.rivalFeud !== "number") state.rivalFeud = rand(-20,20);
+  ensureRivalLeader(state.rival2);
+  return state.rival2;
+}
+
+function rivalHouses(){
+  const houses = [];
+  if(state.rival) houses.push(state.rival);
+  if(state.rival2) houses.push(state.rival2);
+  return houses;
+}
+
+// Deux maisons qui se détestent se surveillent l'une l'autre et vous laissent
+// tranquille ; deux maisons alliées contre vous frappent bien plus fort.
+function feudShield(){
+  if(state.rivalFeud <= -40) return .55;
+  if(state.rivalFeud >= 40) return 1.45;
+  return 1;
+}
+
+function sowDiscord(){
+  ensureSecondHouse();
+  const cost = spend(90);
+  if(cost === false) return;
+  useAction();
+  if(chance(.34)) state.legacy.greed++;
+  const odds = .55 + factionStance("media") * .12 + state.reputation/400 - state.suspicion/300;
+  if(chance(Math.max(.15, Math.min(.9, odds)))){
+    const drop = rand(18,32);
+    state.rivalFeud = clamp(state.rivalFeud - drop, -100, 100);
+    state.suspicion = clamp(state.suspicion + rand(3,9));
+    addLog(`Une rumeur bien placée dresse les ${state.rival.name} contre les ${state.rival2.name} (${drop} points de discorde).`, "good");
+  } else {
+    state.rivalFeud = clamp(state.rivalFeud + rand(4,10), -100, 100);
+    rivalHouses().forEach(h => h.relation = clamp(h.relation - rand(5,12), -100, 100));
+    state.suspicion = clamp(state.suspicion + rand(8,16));
+    addLog("La manœuvre est éventée. Les deux maisons savent d'où venait la rumeur.", "bad");
+  }
+  renderDiplomacy();
+  render();
+}
+
+// Évolution annuelle de la querelle entre les deux maisons : celle qui a le
+// chef le plus brutal envenime les choses, et vous jouer d'elles se paie.
+function feudPhase(){
+  ensureSecondHouse();
+  let drift = rand(-3,3);
+  rivalHouses().forEach(h => {
+    const t = rivalTraitOf(h);
+    if(t === RIVAL_TRAITS.brutal) drift -= 2;
+    if(t === RIVAL_TRAITS.conciliant) drift += 2;
+  });
+  state.rivalFeud = clamp(state.rivalFeud + drift, -100, 100);
+
+  // Deux maisons en guerre ouverte s'usent l'une l'autre.
+  if(state.rivalFeud <= -55 && chance(.2)){
+    rivalHouses().forEach(h => h.strength = clamp(h.strength - rand(2,6), 10, 100));
+    addLog(`Les ${state.rival.name} et les ${state.rival2.name} se sont encore affrontés cette année. Les deux maisons s'affaiblissent.`, "good");
+  }
+  // Deux maisons réconciliées peuvent se retourner ensemble contre vous.
+  if(state.rivalFeud >= 55 && rivalHouses().every(h => h.relation < -20) && chance(.18)){
+    rivalHouses().forEach(h => h.strength = clamp(h.strength + rand(2,6), 10, 100));
+    addLog(`Les deux maisons rivales s'entendent contre le ranch. Cela ne présage rien de bon.`, "bad");
+  }
 }
 
 // ---- Les chevaux ----
@@ -2546,8 +3046,10 @@ const ACHIEVEMENTS = [
    check:()=>state.eraId==="modern"},
   {id:"secret", icon:"🗝️", title:"Le secret élucidé", desc:"Résoudre les trois chapitres du secret du fondateur.",
    check:()=>state.secret && state.secret.stage>=3},
-  {id:"chronicler", icon:"📜", title:"Le chroniqueur", desc:"Mener à leur terme les cinq grandes affaires de la saga.",
-   check:()=>(state.arcsDone||[]).length >= ARCS.length},
+  {id:"chronicler", icon:"📜", title:"Le chroniqueur", desc:"Mener à leur terme six grandes affaires au fil du siècle.",
+   check:()=>(state.arcsDone||[]).length >= 6},
+  {id:"triangle", icon:"🎭", title:"Diviser pour régner", desc:"Dresser les deux maisons rivales l'une contre l'autre, jusqu'à la guerre ouverte.",
+   check:()=>typeof state.rivalFeud === "number" && state.rivalFeud <= -55},
   {id:"doctrine3", icon:"🧭", title:"Une ligne tenue", desc:"Trancher le tournant de trois époques successives.",
    check:()=>Object.keys(state.doctrines||{}).length >= 3},
   {id:"oldGround", icon:"🌳", title:"La terre des origines", desc:"Détenir encore, après 1985, une parcelle acquise avant 1900.",
@@ -2583,7 +3085,8 @@ function ensureProgress(){
   // Un arc dont l'identifiant a disparu du code ne doit pas bloquer la partie.
   if(state.arc && !arcById(state.arc.id)) state.arc = null;
   if(state.rival && !state.rival.lineage) state.rival.lineage = [];
-  if(state.rival) ensureRivalLeader();
+  if(state.rival) ensureRivalLeader(state.rival);
+  ensureSecondHouse();
   if(state.champion === undefined) state.champion = null;
   if(state.champion){
     if(typeof state.champion.training !== "number") state.champion.training = 0;
@@ -2950,6 +3453,8 @@ function baseState() {
       leader:null,
       lineage:[]
     },
+    rival2:null,
+    rivalFeud:0,
     eraId:getEra(1885).id,
     factions:generateFactions(getEra(1885)),
     secret:{type:SECRET_TYPES[rand(0,SECRET_TYPES.length-1)], stage:0},
@@ -2986,7 +3491,8 @@ function startGame(){
   ensureProgress();
   ensureCowboys();
   ensureChampion();
-  ensureRivalLeader();
+  ensureRivalLeader(state.rival);
+  ensureSecondHouse();
   ensureParcels();
   $("setupScreen").classList.add("hidden");
   $("gameScreen").classList.remove("hidden");
@@ -3555,7 +4061,9 @@ function endTurn(){
   const guards = roleCount("security");
   // Un voisinage acquis surveille les pistes ; un voisinage hostile ferme les yeux
   const defense = state.weapons*4 + avgShootDef*0.4 + guards*10 + communityStance*18;
-  const raidChance = clamp((state.rival.strength - defense) / 300, .03, .35);
+  // Deux maisons occupées à se battre entre elles vous laissent souffler ;
+  // deux maisons réconciliées contre vous frappent bien plus souvent.
+  const raidChance = clamp((state.rival.strength - defense) / 300 * feudShield(), .02, .45);
   if(state.rival.relation < -40 && chance(raidChance)){
     const target = pickExposedParcel();
     const posted = target ? guardsOn(target.id) : 0;
@@ -3582,6 +4090,28 @@ function endTurn(){
     const bonus = Math.round(rand(15,40) * state.costModifier);
     state.money += bonus;
     addLog(`L'alliance avec les ${state.rival.name} profite discrètement au ranch (+${bonus} $).`, "good");
+  }
+
+  // La seconde maison mène sa propre politique, et vous êtes son voisin aussi.
+  ensureSecondHouse();
+  const t2 = rivalTraitOf(state.rival2);
+  state.rival2.relation = clamp(state.rival2.relation + rand(-2,2) + t2.relationDrift, -100, 100);
+  state.rival2.strength = clamp(state.rival2.strength + rand(-2,2) + t2.strengthDrift, 10, 100);
+  const raid2 = clamp((state.rival2.strength - defense) / 340 * feudShield(), .02, .35);
+  if(state.rival2.relation < -45 && chance(raid2)){
+    const target2 = pickExposedParcel();
+    const posted2 = target2 ? guardsOn(target2.id) : 0;
+    const loss2 = Math.max(0, Math.min(state.cattle, rand(2, 3 + Math.floor(state.rival2.strength/25)) - posted2));
+    if(loss2 > 0){
+      state.cattle -= loss2;
+      addLog(`Les ${state.rival2.name} profitent de la nuit pour emmener ${loss2} bête${loss2>1?"s":""}.`, "bad");
+    } else {
+      addLog(`Une incursion des ${state.rival2.name} est repoussée avant l'aube.`, "good");
+    }
+  } else if(state.rival2.relation > 55 && chance(.18)){
+    const g = Math.round(rand(20,55) * state.costModifier);
+    state.money += g;
+    addLog(`L'entente avec les ${state.rival2.name} ouvre un débouché discret (+${g} $).`, "good");
   }
 
   // Fin du trimestre
@@ -3723,7 +4253,8 @@ function ageCowboys(){
 function ageFamily(){
   ageCowboys();
   ageHorses();
-  ageRivalLeader();
+  rivalHouses().forEach(h => ageRivalLeader(h));
+  feudPhase();
   [state.founder,state.spouse].forEach(p => {
     if(!p.alive) return;
     p.age++;
@@ -3864,7 +4395,7 @@ const events = [
      {label:"Alléger la charge dès maintenant",condition:()=>state.cattle>=15,apply:()=>{const n=10;state.cattle-=n;state.money+=n*state.cattlePrice;addLog("Dix bêtes vendues avant que l'herbe ne manque tout à fait.","info");}},
      {label:"Compter sur les pluies de printemps",apply:()=>{if(chance(.45)){state.feed+=rand(20,40);addLog("Les pluies arrivent juste à temps.","good");}else{state.feed=Math.max(0,state.feed-rand(25,55));addLog("Le printemps est aussi sec que l'hiver.","bad");}}}
    ]},
-  {art:"rider", title:"Un cheval qui refuse l'obstacle", text:"Le cheval de tête se dérobe systématiquement depuis sa chute. Il faut le reprendre en main, ou l'abandonner.",
+  {art:"rider", condition:()=>!!state.champion, title:"Un cheval qui refuse l'obstacle", text:"Le cheval de tête se dérobe systématiquement depuis sa chute. Il faut le reprendre en main, ou l'abandonner.",
    image:"Un cavalier désarçonné dans la poussière",
    choices:[
      {label:"Le retravailler patiemment",condition:()=>!!state.champion,apply:()=>{if(chance(.65)){state.champion.training=clamp(state.champion.training+rand(8,16));addLog(`${state.champion.name} reprend confiance. La peur est passée.`,"good");}else{state.champion.training=clamp(state.champion.training-rand(5,12));addLog(`${state.champion.name} reste bloqué. Il faudra du temps.`,"bad");}}},
@@ -5132,7 +5663,12 @@ function showBrief(){
 // `title`, `text` et `image` acceptent une fonction : le texte peut alors citer
 // des noms de la partie en cours. Une chaîne littérale serait évaluée au
 // chargement, avant que `state` n'existe.
-function evalField(v){ return typeof v === "function" ? v() : v; }
+// Un texte qui lance ne doit jamais emporter le trimestre : au pire il manque
+// une phrase, la partie continue.
+function evalField(v, fallback){
+  if(typeof v !== "function") return v;
+  try{ return v(); }catch(e){ return fallback || ""; }
+}
 
 // ---- Illustrations ----
 // Scènes dessinées en SVG dans la page : aucune requête réseau, et les couleurs
@@ -5223,14 +5759,16 @@ function setEventArt(event){
 }
 
 function presentEvent(event){
-  $("eventTitle").textContent = evalField(event.title);
-  $("eventText").textContent = evalField(event.text);
+  $("eventTitle").textContent = evalField(event.title, "Au ranch");
+  $("eventText").textContent = evalField(event.text, "Une affaire demande votre décision.");
   $("eventText").style.whiteSpace = "normal";
   setEventArt(event);
   $("eventChoices").innerHTML = "";
 
+  let offered = 0;
   event.choices.forEach(choice => {
     if(choice.condition && !choice.condition()) return;
+    offered++;
     const btn = document.createElement("button");
     btn.className = "choice";
     btn.textContent = choice.label;
@@ -5241,6 +5779,19 @@ function presentEvent(event){
     };
     $("eventChoices").appendChild(btn);
   });
+
+  // Si toutes les branches sont verrouillées, il faut malgré tout une sortie :
+  // une modale sans bouton bloquerait la partie définitivement.
+  if(offered === 0){
+    const btn = document.createElement("button");
+    btn.className = "choice";
+    btn.textContent = "Laisser passer";
+    btn.onclick = () => {
+      $("eventModal").classList.add("hidden");
+      finishTurn();
+    };
+    $("eventChoices").appendChild(btn);
+  }
 
   $("eventModal").classList.remove("hidden");
 }
@@ -5764,22 +6315,49 @@ function renderDiplomacy(){
  }
  const currentEra = ERAS.find(e=>e.id===state.eraId) || getEra(state.year);
  let h = "";
- if(state.rival){
-   const r = state.rival;
-   const leader = ensureRivalLeader();
-   const t = rivalTraitOf();
+ ensureSecondHouse();
+ const houseBlock = (r, idx) => {
+   const leader = ensureRivalLeader(r);
+   const t = rivalTraitOf(r);
    const status = r.relation>60?"Alliance":(r.relation>20?"Cordiale":(r.relation<-60?"Guerre ouverte":(r.relation<-20?"Hostile":"Neutre")));
-   h += "<div style='margin-bottom:14px;padding:10px;border:2px solid var(--line);'>";
-   h += "<b>"+r.name+"</b> — "+currentEra.rivalType+" <i>(rival principal de la saga)</i><br>";
-   h += "À sa tête : <b>"+leader.name+" "+r.name+"</b>, "+leader.age+" ans — "
-      + t.icon+" <i>"+t.label+"</i><br><small>"+t.desc+"</small><br>";
-   h += "Statut : <b>"+status+"</b> (relation : "+r.relation+", force : "+r.strength+")<br>";
-   h += "<button class=\"choice\" onclick=\"doAction('rivalNegotiate');renderDiplomacy();\">Négocier ("+sc(50)+" $)</button> ";
-   h += "<button class=\"choice\" onclick=\"doAction('rivalAction');renderDiplomacy();\">Affronter ("+sc(70)+" $)</button>";
-   if(r.relation>60) h += "<br><small>Une alliance solide profite discrètement au ranch chaque trimestre.</small>";
-   if(r.relation<-60) h += "<br><small>La guerre ouverte expose le troupeau à des raids fréquents.</small>";
-   h += "</div>";
- }
+   const cls = r.relation>40?"good":(r.relation<-30?"bad":"info");
+   let b = "<div class=\"faction\">";
+   b += "<div class=\"faction-head\"><span class=\"faction-name\">🏚️ Les " + r.name + "</span>"
+      + "<span class=\"fact " + cls + "\">" + status + " · " + r.relation + "</span></div>";
+   b += "<div class=\"faction-meter\"><div class=\"faction-fill " + cls + "\" style=\"width:"
+      + Math.round((r.relation+100)/2) + "%\"></div></div>";
+   b += "<div class=\"faction-role\">À sa tête : <b>" + leader.name + "</b>, " + leader.age + " ans — "
+      + t.icon + " <i>" + t.label + "</i><br><span>" + t.desc + " Force : " + r.strength + ".</span></div>";
+   b += "<div class=\"faction-acts\">"
+      + "<button class=\"choice\" onclick=\"negotiateHouse(" + idx + ")\">Négocier (" + sc(50) + " $)</button>"
+      + "<button class=\"choice\" onclick=\"confrontHouse(" + idx + ")\">Affronter (" + sc(70) + " $)</button>"
+      + "</div></div>";
+   return b;
+ };
+
+ const feud = state.rivalFeud;
+ const feudLabel = feud <= -55 ? "Guerre ouverte entre elles" : (feud <= -20 ? "Hostiles l'une à l'autre"
+   : (feud >= 55 ? "Alliées entre elles" : (feud >= 20 ? "En bons termes" : "Indifférentes")));
+ const feudCls = feud <= -20 ? "good" : (feud >= 20 ? "bad" : "info");
+ h += "<h3 class=\"section-head\">Les deux maisons</h3>";
+ h += "<p class=\"modal-intro\">Vous n'avez plus un rival mais deux, et ils ont aussi une histoire "
+    + "entre eux. Deux maisons qui se détestent se surveillent l'une l'autre et vous laissent souffler ; "
+    + "deux maisons réconciliées contre vous frappent bien plus souvent.</p>";
+ h += "<div class=\"faction\">";
+ h += "<div class=\"faction-head\"><span class=\"faction-name\">⚔️ " + state.rival.name
+    + " contre " + state.rival2.name + "</span>"
+    + "<span class=\"fact " + feudCls + "\">" + feudLabel + " · " + feud + "</span></div>";
+ h += "<div class=\"faction-meter\"><div class=\"faction-fill " + feudCls + "\" style=\"width:"
+    + Math.round((feud+100)/2) + "%\"></div></div>";
+ h += "<div class=\"faction-favour\">";
+ h += "<button class=\"choice\" onclick=\"sowDiscord()\">🎭 Monter les deux maisons l'une contre l'autre ("
+    + sc(90) + " $)</button>";
+ h += "<small><b>Une rumeur bien placée, et ils se regardent en chiens de faïence.</b><br>"
+    + "Réussi, cela les détourne durablement de vous. Éventé, les deux vous en veulent à la fois.</small>";
+ h += "</div></div>";
+ h += houseBlock(state.rival, 0);
+ h += houseBlock(state.rival2, 1);
+
  h += "<p class=\"modal-intro\">Une faction devient <b>alliée</b> au-delà de 40 et <b>hostile</b> en dessous de -30. "
    + "Son effet s'applique alors chaque trimestre — et une alliance ouvre une <b>faveur</b>, "
    + "rare et puissante, qui coûte une action et entame la relation. "
@@ -5818,6 +6396,57 @@ function renderDiplomacy(){
  });
  diplomacyContent.innerHTML = h;
 }
+function negotiateHouse(idx){
+ const h = rivalHouses()[idx];
+ if(!h) return;
+ const cost = spend(50);
+ if(cost === false) return;
+ useAction();
+ const t = rivalTraitOf(h);
+ const odds = .55 + (t === RIVAL_TRAITS.conciliant ? .2 : 0) - (t === RIVAL_TRAITS.brutal ? .15 : 0);
+ if(chance(odds)){
+   h.relation = clamp(h.relation + rand(12,24), -100, 100);
+   addLog(`La négociation avec les ${h.name} porte ses fruits.`, "good");
+ } else {
+   h.relation = clamp(h.relation - rand(2,6), -100, 100);
+   addLog(`Les ${h.name} restent sur leurs positions.`, "info");
+ }
+ // Se rapprocher d'une maison refroidit l'autre : c'est tout l'arbitrage.
+ const other = rivalHouses()[idx === 0 ? 1 : 0];
+ if(other && state.rivalFeud < 20){
+   other.relation = clamp(other.relation - rand(3,9), -100, 100);
+ }
+ renderDiplomacy();
+ render();
+}
+
+function confrontHouse(idx){
+ const h = rivalHouses()[idx];
+ if(!h) return;
+ const cost = spend(70);
+ if(cost === false) return;
+ useAction();
+ const avgShoot = (state.cowboys&&state.cowboys.length) ? state.cowboys.reduce((s,c)=>s+c.shoot,0)/state.cowboys.length : 0;
+ const power = state.weapons*5 + avgShoot*0.6 + rand(1,40);
+ if(power > h.strength){
+   h.strength = clamp(h.strength - rand(6,14), 10, 100);
+   h.relation = clamp(h.relation - rand(4,10), -100, 100);
+   addLog(`Une confrontation directe affaiblit les ${h.name}.`, "good");
+ } else {
+   state.suspicion = clamp(state.suspicion + rand(5,15));
+   state.founder.health = clamp(state.founder.health - rand(4,12));
+   addLog(`La tentative d'affronter les ${h.name} tourne mal.`, "bad");
+ }
+ // Frapper une maison rapproche l'autre de vous, ou l'inquiète.
+ const other = rivalHouses()[idx === 0 ? 1 : 0];
+ if(other){
+   if(state.rivalFeud < -20) other.relation = clamp(other.relation + rand(2,8), -100, 100);
+   else other.relation = clamp(other.relation - rand(2,7), -100, 100);
+ }
+ renderDiplomacy();
+ render();
+}
+
 function allyFaction(i){
  const f = state.factions[i];
  if(!f) return;

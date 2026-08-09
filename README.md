@@ -1,4 +1,4 @@
-# Ranch Dynasty — V3.1
+# Ranch Dynasty — V3.2
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -37,10 +37,11 @@ Le CSS est dans un unique `<style>` en tête de fichier.
 - **`state.heirId`** — `cid` de l'héritier désigné, ou `null`. Tout enfant reçoit un `cid`
   stable via `addChild()` : c'est le seul identifiant fiable, les prénoms pouvant être
   dupliqués ou modifiés par le joueur.
-- **`state.arc` / `state.arcsDone`** — l'arc narratif en cours et ceux déjà joués.
+- **`state.arc` / `state.arcsDone` / `state.arcOutcomes`** — l'arc en cours, ceux joués, et leur issue.
 - **`state.doctrines`** — la voie choisie à chaque tournant d'époque.
 - **`state.parcels`** — le découpage du domaine ; leur somme doit toujours valoir `state.land`.
-- **`state.rival.leader`** — le chef d'en face, son âge et son tempérament.
+- **`state.rival` / `state.rival2`** — les deux maisons rivales, chacune avec son chef.
+- **`state.rivalFeud`** — ce que les deux maisons se portent l'une à l'autre, hors de vous.
 - **`state.factions`** — quatre pouvoirs locaux typés `law` / `trade` / `media` / `community`
   (voir `FACTION_TYPES`). Le type détermine l'effet concret appliqué chaque trimestre.
 
@@ -66,9 +67,16 @@ seuil de la rancune de sang et sa première scène cite la limite que le tribuna
 vous a retirée ; un enfant chassé reparaît des décennies plus tard aux côtés du
 chef rival. Utiliser `arcOutcome(id)` dans une condition ou un texte.
 
-Cinq arcs : un procès de bornage, un enfant parti en ville, une grande
-sécheresse, une rancune de sang avec le rival, et le dernier chapitre d'un vieux
-compagnon. Un arc dont le sujet disparaît en cours de route (le vétéran meurt)
+**Douze arcs.** Cinq intemporels — un procès de bornage, un enfant parti en
+ville, une grande sécheresse, une rancune de sang, le dernier chapitre d'un
+vieux compagnon — et **sept propres à chaque époque** (`ERA_ARCS`) : la grande
+piste de convoyage, l'entrepôt du syndicat, la saisie bancaire, le conflit
+social, le rachat par un groupe, le label, le classement en réserve. Un arc
+d'époque ne se déclenche que dans la sienne ; un seul arc courant à la fois,
+une partie n'en voit jamais la totalité.
+
+Un `goto` hors bornes referme l'arc : c'est ainsi qu'on écrit une sortie
+anticipée. Un arc dont le sujet disparaît en cours de route (le vétéran meurt)
 se referme proprement plutôt que d'interrompre la partie.
 
 ## Tournants d'époque
@@ -78,13 +86,23 @@ Chaque bascule d'époque, sauf la première, propose deux voies structurantes
 cheval, nourrir le comté ou racheter les ruinés, ouvrir au tourisme ou classer
 les terres en réserve. Le choix est mémorisé dans `state.doctrines`.
 
-## La lignée rivale
+## Les deux maisons rivales
 
-En face aussi quelqu'un vieillit. `state.rival.leader` a un nom, un âge et un
-**tempérament** (`RIVAL_TRAITS`) qui oriente la dérive de la relation et de la
-force pendant toute sa vie. À sa mort, un successeur prend la suite : la
-relation est en partie remise à zéro — le nouveau n'a ni les rancunes ni les
-accords de son prédécesseur. `state.rival.lineage` garde la trace de tous.
+En face aussi quelqu'un vieillit. Chaque maison a un chef (`leader`) avec un nom,
+un âge et un **tempérament** (`RIVAL_TRAITS`) qui oriente la dérive de la
+relation et de la force pendant toute sa vie. À sa mort, un successeur prend la
+suite : la relation est en partie remise à zéro — le nouveau n'a ni les rancunes
+ni les accords de son prédécesseur. `lineage` garde la trace de tous.
+
+Il y a **deux maisons** : `state.rival` et `state.rival2`, plus `state.rivalFeud`,
+ce qu'elles se portent l'une à l'autre indépendamment de vous. C'est le cœur du
+triangle : `feudShield()` module la fréquence des raids selon leur querelle —
+deux maisons qui se détestent se surveillent et vous laissent souffler (×0,55),
+deux maisons réconciliées contre vous frappent bien plus (×1,45).
+
+Se rapprocher d'une maison refroidit l'autre. `sowDiscord()` permet de les
+monter l'une contre l'autre : réussi, cela les détourne durablement de vous ;
+éventé, les deux vous en veulent à la fois.
 
 ## La carte du domaine
 
@@ -195,6 +213,11 @@ chargement et à l'import. **Toute nouvelle propriété de `state` doit y être 
   initiale et le code du bloc 3 ne s'exécuterait jamais. Toujours `()=>endTurn()`.
 - Ne jamais identifier un enfant par son prénom : le joueur peut le renommer et deux
   enfants peuvent être homonymes. Utiliser `cid`.
+- ⚠️ **Un événement dont toutes les branches sont conditionnelles peut s'afficher
+  sans aucun bouton** et bloquer la partie. `presentEvent` ajoute désormais une
+  sortie « Laisser passer » en dernier recours, et un test éprouve chaque
+  événement et chaque chapitre d'arc sur un état démuni. Mieux vaut quand même
+  poser une `condition:` sur l'événement lui-même.
 
 ## Équilibrage
 
@@ -290,7 +313,8 @@ sans aucune dépendance :
 # des sauvegardes, coups en douce, faveurs, rythme, illustrations,
 # montants et inflation, sexes et fertilité, chevaux, apport des cow-boys.
 # arcs, rival incarné, tournants d'époque, carte du domaine.
-# variété du catalogue. 262 vérifications, sortie non nulle en cas d'échec.
+# variété du catalogue, arcs d'époque, triangle, absence d'impasse.
+# 288 vérifications, sortie non nulle en cas d'échec.
 node tests/scenarios.js index.html
 
 # Simulation de masse.
@@ -313,5 +337,7 @@ profils : il compare facilement deux versions du fichier
 - Quelques objectifs restent des jalons plus que des défis (`united`, `oldHand`
   sont atteints par ~98 % des parties bien menées)
 
-- Des arcs propres à chaque époque, en plus des cinq arcs intemporels
-- Une deuxième famille rivale, pour que la diplomatie ait un triangle
+- Des objectifs liés au triangle : survivre à une alliance des deux maisons,
+  marier un enfant dans la maison d'en face
+- Faire porter les doctrines d'époque sur les arcs : une famille mécanisée
+  affronte le conflit social autrement
