@@ -1,4 +1,4 @@
-# Ranch Dynasty — V3.3
+# Ranch Dynasty — V3.4
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -81,10 +81,15 @@ se referme proprement plutôt que d'interrompre la partie.
 
 ## Tournants d'époque
 
-Chaque bascule d'époque, sauf la première, propose deux voies structurantes
+Chaque époque propose des voies structurantes
 (`DOCTRINES`) dont l'effet court sur toute l'époque : mécaniser ou rester à
 cheval, nourrir le comté ou racheter les ruinés, ouvrir au tourisme ou classer
 les terres en réserve. Le choix est mémorisé dans `state.doctrines`.
+
+La **Fondation** n'ayant pas de transition qui l'ouvre, son tournant se joue au
+premier tour (`showFoundingChoice`) et décide de la nature même du ranch :
+bâtir sur le bétail, sur les chevaux, ou prendre la terre d'abord. Cette voie-là
+se relit encore un siècle plus tard.
 
 **Les arcs relisent la doctrine** via `doctrine(eraId)`. La même affaire ne se
 joue pas de la même façon selon la ligne tenue : refuser la délégation ouvrière
@@ -94,6 +99,24 @@ machine ne remplacera un homme. Une exploitation restée familiale ne peut pas
 vendre de parts au conglomérat mais peut lui opposer l'indivision. Le comté
 secourt volontiers celui qui l'a nourri pendant la crise, et reste sourd à celui
 qui a racheté les fermes ruinées.
+
+La voie fondatrice porte sur les arcs intemporels : qui a **pris la terre
+d'abord** défend beaucoup moins bien ses titres au procès et n'a pas d'acte
+original à produire, tandis que qui a **bâti sur les chevaux** passe le gué de
+la grande piste bien plus souvent, et qui a **bâti sur le bétail** peut tout
+emmener au convoyage. **Les huit arcs à doctrine sont couplés.**
+
+## La chronique de la saga
+
+Les grands moments sont consignés au fil de la partie dans `state.saga` —
+fondation, tournants d'époque, successions, affaires closes, chapitres du
+secret, changements de chef rival, objectifs accomplis — chacun avec sa date,
+son époque et sa scène. `recordSaga(kind, title, art, detail)` pour en ajouter.
+
+`renderSaga()` les relit dans l'ordre, illustration à l'appui. La chronique est
+accessible depuis le panneau **Chroniques**, et surtout proposée sur l'écran de
+fin de partie : c'est la vraie conclusion de 141 ans de jeu. Une partie complète
+en produit une cinquantaine.
 
 ## Les deux maisons rivales
 
@@ -329,7 +352,8 @@ sans aucune dépendance :
 # arcs, rival incarné, tournants d'époque, carte du domaine.
 # variété du catalogue, arcs d'époque, triangle, absence d'impasse.
 # doctrines couplées aux arcs, siège et mariage rival.
-# 306 vérifications, sortie non nulle en cas d'échec.
+# chronique de la saga, tournant fondateur.
+# 340 vérifications, sortie non nulle en cas d'échec.
 node tests/scenarios.js index.html
 
 # Simulation de masse.
@@ -352,8 +376,7 @@ profils : il compare facilement deux versions du fichier
 - Quelques objectifs restent des jalons plus que des défis (`united`, `oldHand`
   sont atteints par ~98 % des parties bien menées)
 
-- Étendre le couplage doctrine/arc aux deux arcs qui n'en profitent pas encore
-  (la piste de convoyage et le procès)
-- Des tournants d'époque pour la Fondation, qui n'en a pas
-- Un mode « chronique » en fin de partie : relire les grands moments de la saga
-  dans l'ordre, avec leurs illustrations
+- Exporter la chronique de la saga en texte ou en image, pour la partager
+- Des variantes de départ : reprendre un ranch déjà établi, ou repartir de
+  zéro après une faillite, avec l'héritage moral conservé
+- Un second secret de famille, tiré au sort parmi ceux non joués

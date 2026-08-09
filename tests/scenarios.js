@@ -880,6 +880,186 @@ section("Arcs d'époque");
     ST().arc === null && (ST().arcsDone||[]).includes("trailDrive"));
 }
 
+// ------------------------------------------------------- La chronique de la saga
+section("Chronique de la saga");
+{
+  const s = freshGame();
+  check("la fondation est consignée d'emblée", (ST().saga||[]).length >= 1, (ST().saga||[]).length);
+  check("le premier moment est la fondation", ST().saga[0].kind === "founding", ST().saga[0].kind);
+  check("chaque moment porte sa date",
+    ST().saga.every(m => typeof m.year === "number" && typeof m.season === "number"));
+  check("chaque moment porte une scène connue",
+    ST().saga.every(m => !!ev("ART_MOTIFS")[m.art]), ST().saga.map(m=>m.art).join(","));
+  check("chaque genre de moment est répertorié",
+    ST().saga.every(m => !!ev("SAGA_KINDS")[m.kind]));
+
+  // Les grands moments s'enregistrent tout seuls.
+  const kinds = new Set();
+  G.recordSaga("era", "Test d'époque", "city");
+  G.chooseDoctrine("foundation", ev('DOCTRINES.foundation[0].id'));
+  ST().cattle = 250; G.checkAchievements();
+  ST().saga.forEach(m => kinds.add(m.kind));
+  check("le tournant fondateur entre dans la saga", kinds.has("doctrine"));
+  check("un objectif accompli entre dans la saga", kinds.has("goal"));
+
+  // Une succession laisse sa trace.
+  const s2 = freshGame();
+  const a = addAdult(s2, "Héritière", {age:30, sex:"f"});
+  G.designateHeir(a.cid);
+  s2.founder.alive = false;
+  const before = ST().saga.length;
+  G.resolveSuccession();
+  check("une succession entre dans la saga", ST().saga.length > before);
+  check("la succession est bien typée",
+    ST().saga[ST().saga.length-1].kind === "succession", ST().saga[ST().saga.length-1].kind);
+
+  // Un arc mené à son terme aussi.
+  const s3 = permissiveGame();
+  s3.arc = {id:"drought", step:2, due:0, data:{}};
+  const b3 = ST().saga.length;
+  G.finishArc();
+  check("une affaire close entre dans la saga", ST().saga.length > b3);
+
+  // Le rendu tient, y compris sur une saga vide ou énorme.
+  const s4 = freshGame();
+  s4.saga = [];
+  let threw = false;
+  try{ G.renderSaga(); }catch(e){ threw = e.message; }
+  check("une saga vide s'affiche sans erreur", threw === false, threw);
+  check("une saga vide le dit", $el("sagaContent").innerHTML.includes("commence à peine"));
+
+  const s5 = freshGame();
+  for(let i = 0; i < 400; i++) G.recordSaga("arc", "Moment " + i, "ranch", "détail");
+  check("la saga est plafonnée", ST().saga.length <= 240, ST().saga.length);
+  threw = false;
+  try{ G.renderSaga(); }catch(e){ threw = e.message; }
+  check("une longue saga s'affiche sans erreur", threw === false, threw);
+  check("la saga est dessinée avec ses scènes", $el("sagaContent").innerHTML.includes("<svg"));
+  check("la saga n'appelle aucune ressource externe",
+    !/https?:\/\//.test($el("sagaContent").innerHTML));
+
+  // L'écran de fin propose de relire la saga.
+  const s6 = freshGame();
+  G.recordSaga("arc", "Un moment", "ranch");
+  G.showGameOver("Fin de test", "Texte de fin.");
+  const labels = $el("eventChoices").children.map(c => c.textContent);
+  check("la fin de partie propose de relire la saga",
+    labels.some(l => l.indexOf("Relire la saga") >= 0), labels.join(" | "));
+  check("elle propose aussi de recommencer",
+    labels.some(l => l.indexOf("écran de création") >= 0));
+}
+
+// ------------------------------------------------------ Le tournant fondateur
+section("Tournant fondateur");
+{
+  const list = ev("DOCTRINES.foundation");
+  check("la Fondation a ses voies", list.length >= 3, list.length);
+  check("chaque voie fondatrice est décrite",
+    list.every(d => d.id && d.icon && d.name && d.what && d.effect));
+
+  // Il est proposé dès le premier tour.
+  $el("eventModal").classList.add("hidden");
+  const s = freshGame();
+  check("le choix fondateur s'ouvre au démarrage",
+    !$el("eventModal")._classes.has("hidden"));
+  check("il propose toutes les voies",
+    $el("eventChoices").children.length === list.length,
+    $el("eventChoices").children.length);
+
+  // Chaque voie produit un effet mesurable et distinct.
+  function found(id){
+    const s2 = freshGame();
+    ST().doctrines = {};
+    G.chooseDoctrine("foundation", id);
+    const t = ST();
+    return {cattle:t.cattle, horses:t.horses, land:t.land,
+            training:(t.champion&&t.champion.training)||0};
+  }
+  const base = (() => { const s2 = freshGame(); const t = ST();
+    return {cattle:t.cattle, horses:t.horses, land:t.land}; })();
+  const cattleman = found("cattleman"), horseman = found("horseman"), landman = found("landman");
+  check("la voie du bétail étoffe le troupeau", cattleman.cattle > base.cattle,
+    base.cattle + " → " + cattleman.cattle);
+  check("la voie des chevaux fournit l'écurie", horseman.horses > base.horses,
+    base.horses + " → " + horseman.horses);
+  check("elle donne un cheval déjà dressé", horseman.training > 0, horseman.training);
+  check("la voie de la terre agrandit le domaine", landman.land > base.land,
+    base.land + " → " + landman.land);
+  check("la voie de la terre découpe bien les parcelles",
+    ST().parcels.reduce((a,p)=>a+p.ha,0) === ST().land);
+
+  // Une fois choisi, il ne revient pas.
+  const s3 = freshGame();
+  G.chooseDoctrine("foundation", "cattleman");
+  $el("eventModal").classList.add("hidden");
+  G.showFoundingChoice();
+  check("le choix fondateur ne se rejoue pas",
+    $el("eventModal")._classes.has("hidden"));
+}
+{
+  // Le procès et la piste relisent désormais la voie fondatrice.
+  function titleOdds(doctrineId){
+    let won = 0;
+    for(let i = 0; i < 200; i++){
+      const s = permissiveGame();
+      s.doctrines = doctrineId ? {foundation:doctrineId} : {};
+      s.factions.forEach(f => { if(f.type === "law") f.relation = 0; });
+      s.arc = {id:"lawsuit", step:1, data:{fight:false}};
+      ev(`(function(){
+        const c = arcById("lawsuit").steps[1].choices.find(x=>x.label.indexOf("Produire tous")===0);
+        c.apply();
+      })()`);
+      if(ST().arc.data.won) won++;
+    }
+    return won;
+  }
+  const grab = titleOdds("landman"), herd = titleOdds("cattleman");
+  check("des titres pris à la hâte se défendent moins bien", grab < herd,
+    grab + "/200 contre " + herd + "/200");
+
+  const s = permissiveGame();
+  s.doctrines = {foundation:"landman"};
+  s.arc = {id:"lawsuit", step:1, data:{}};
+  const grabChoices = ev(`arcById("lawsuit").steps[1].choices.filter(c=>!c.condition||c.condition()).map(c=>c.label)`);
+  check("l'acte original n'existe pas pour qui a pris la terre",
+    !grabChoices.some(l => l.indexOf("acte original") >= 0), grabChoices.join(" | "));
+
+  const s2 = permissiveGame();
+  s2.doctrines = {foundation:"cattleman"};
+  s2.arc = {id:"lawsuit", step:1, data:{}};
+  const cleanChoices = ev(`arcById("lawsuit").steps[1].choices.filter(c=>!c.condition||c.condition()).map(c=>c.label)`);
+  check("il existe pour qui a bâti sur le bétail",
+    cleanChoices.some(l => l.indexOf("acte original") >= 0), cleanChoices.join(" | "));
+
+  // La traversée du gué profite aux cavaliers.
+  function crossing(doctrineId){
+    let lost = 0;
+    for(let i = 0; i < 150; i++){
+      const s3 = permissiveGame();
+      s3.doctrines = doctrineId ? {foundation:doctrineId} : {};
+      s3.champion = null; s3.horses = 0;
+      s3.arc = {id:"trailDrive", step:1, data:{head:100}};
+      ev(`(function(){
+        const c = arcById("trailDrive").steps[1].choices.find(x=>x.label.indexOf("Forcer")===0);
+        c.apply();
+      })()`);
+      if(ST().arc.data.head < 100) lost++;
+    }
+    return lost;
+  }
+  check("de bons cavaliers passent le gué plus souvent",
+    crossing("horseman") < crossing(null),
+    crossing("horseman") + " pertes contre " + crossing(null));
+
+  // Et la voie du bétail ouvre une option de convoyage massif.
+  const s4 = permissiveGame();
+  s4.doctrines = {foundation:"cattleman"}; s4.cattle = 200;
+  s4.arc = {id:"trailDrive", step:0, data:{}};
+  const driveChoices = ev(`arcById("trailDrive").steps[0].choices.filter(c=>!c.condition||c.condition()).map(c=>c.label)`);
+  check("la voie du bétail permet de tout emmener",
+    driveChoices.some(l => l.indexOf("Tout emmener") >= 0), driveChoices.join(" | "));
+}
+
 // ------------------------------------------- Les doctrines pèsent sur les arcs
 section("Doctrines et arcs");
 {
@@ -1165,7 +1345,7 @@ section("La lignée rivale");
 section("Tournants d'époque");
 {
   const covered = ev("Object.keys(DOCTRINES)");
-  check("la plupart des époques ont un tournant", covered.length >= 5, covered.join(", "));
+  check("toutes les époques ont un tournant", covered.length >= 7, covered.join(", "));
   const thin = ev("Object.keys(DOCTRINES).filter(k=>DOCTRINES[k].length<2)");
   check("chaque tournant offre au moins deux voies", thin.length === 0, thin.join(","));
 
@@ -1194,9 +1374,15 @@ section("Tournants d'époque");
   check("chaque voie annonce son effet",
     $el("eventChoices").children[0].innerHTML.includes("doctrine-effect"));
 
-  // Une époque sans tournant garde son simple « Continuer ».
-  G.showEraTransition(ev("ERAS.find(e=>e.id==='foundation')"));
-  check("une époque sans tournant reste simple", $el("eventChoices").children.length === 1);
+  // Toutes les époques ont désormais leur tournant, Fondation comprise.
+  const eras = ev("ERAS.map(e=>e.id)");
+  const sans = eras.filter(id => !ev(`!!doctrinesFor(${JSON.stringify(id)})`));
+  check("chaque époque a son tournant", sans.length === 0, sans.join(","));
+
+  // Le repli « Continuer » reste en place pour une époque sans doctrine.
+  G.showEraTransition({id:"__inconnue", name:"Époque de test", desc:"Rien de prévu ici."});
+  check("une époque sans tournant garde son simple « Continuer »",
+    $el("eventChoices").children.length === 1, $el("eventChoices").children.length);
 }
 
 // ------------------------------------------------------- Carte du domaine

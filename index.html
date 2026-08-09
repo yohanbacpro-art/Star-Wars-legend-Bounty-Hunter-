@@ -522,6 +522,31 @@
   }
   .parcels small{color:var(--muted)}
 
+  /* ---- La chronique de la saga ---- */
+  .saga{list-style:none;padding:0;margin:0;display:grid;gap:10px;counter-reset:saga}
+  .saga-item{
+    display:grid;
+    grid-template-columns:88px 1fr;
+    gap:12px;
+    align-items:stretch;
+    border:1px solid var(--line);
+    background:var(--card-bg);
+    overflow:hidden;
+  }
+  .saga-art{position:relative;min-height:72px;border-right:1px solid var(--line)}
+  .saga-art svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .saga-body{padding:9px 11px 10px 0;display:grid;gap:3px;align-content:center}
+  .saga-date{
+    font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;
+    color:var(--muted);font-variant-numeric:tabular-nums;
+  }
+  .saga-title{font-weight:700;line-height:1.3}
+  .saga-detail{font-size:.86rem;color:var(--muted);line-height:1.4}
+  @media(max-width:520px){
+    .saga-item{grid-template-columns:64px 1fr}
+    .saga-body{padding-right:10px}
+  }
+
   /* ---- Diplomatie : chaque pouvoir se lit d'un coup d'œil ---- */
   .faction{
     padding:12px 13px;
@@ -1208,8 +1233,12 @@ function resolveSuccession(){
   if(designated){
     state.stats.plannedSuccessions++;
     addLog(`${state.founder.name} ${state.familyName}, héritier désigné de longue date, reprend les rênes du ranch.`, "good");
+    recordSaga("succession", `${state.founder.name} ${state.familyName} reprend le ranch`, "family",
+      `${heirWord(heir).charAt(0).toUpperCase()+heirWord(heir).slice(1)} désigné de longue date, à ${heir.age} ans.`);
   } else {
     addLog(`Faute de successeur désigné, ${state.founder.name} ${state.familyName} reprend le ranch en tant qu'aîné·e.`, "info");
+    recordSaga("succession", `${state.founder.name} ${state.familyName} reprend le ranch`, "family",
+      `Sans désignation, par droit d'aînesse, à ${heir.age} ans.`);
   }
 
   if(challenger && chance(Math.min(.75, contestChance))){
@@ -1222,6 +1251,8 @@ function resolveSuccession(){
       state.land -= acres;
       state.children = state.children.filter(c => c.cid !== challenger.cid);
       addLog(`${challenger.name} conteste la succession et quitte la famille avec ${share} $ et ${acres} hectares.`, "bad");
+      recordSaga("succession", `${challenger.name} conteste et rompt avec la famille`, "night",
+        `${acres} hectares et ${share} $ quittent le domaine.`);
     } else {
       state.reputation = clamp(state.reputation - rand(6,12));
       challenger.resentment = clamp((challenger.resentment||0) + 15);
@@ -1428,7 +1459,12 @@ const ARCS = [
       {
         art:"law",
         title:"Une assignation",
-        text:()=>`Un voisin conteste la limite nord du domaine. Il produit un plan ancien, et un avocat de la ville.`,
+        text:()=>{
+          const d = doctrine("foundation");
+          if(d === "landman") return `Un voisin conteste la limite nord du domaine. Il produit un plan ancien, et un avocat de la ville. Le fondateur avait pris ces terres vite, et sans trop regarder les titres.`;
+          if(d === "cattleman") return `Un voisin conteste la limite nord du domaine. Il produit un plan ancien, et un avocat de la ville. Vos titres sont en règle, mais le troupeau a débordé sur sa pâture plus d'une fois.`;
+          return `Un voisin conteste la limite nord du domaine. Il produit un plan ancien, et un avocat de la ville.`;
+        },
         image:"Un huissier remonte l'allée",
         choices:[
           {label:"Prendre un avocat et se battre",apply:()=>{ state.money-=Math.min(state.money,sc(160)); state.arc.data.fight=true;
@@ -1447,7 +1483,10 @@ const ARCS = [
         choices:[
           {label:"Produire tous les titres du ranch",apply:()=>{
             const law=factionOfType("law");
-            const odds=.5+(state.arc.data.fight?.2:0)+(state.arc.data.ignored?-.25:0)+(law&&law.relation>40?.15:0);
+            // Une fondation bâtie sur des concessions prises à la hâte se paie ici.
+            const d=doctrine("foundation");
+            const titres = d==="landman" ? -.2 : (d==="cattleman" ? .05 : .1);
+            const odds=.5+titres+(state.arc.data.fight?.2:0)+(state.arc.data.ignored?-.25:0)+(law&&law.relation>40?.15:0);
             state.arc.data.won=chance(odds);
             addLog(state.arc.data.won?"Le tribunal penche de votre côté.":"Le tribunal doute de vos titres.",
               state.arc.data.won?"good":"bad"); }},
@@ -1456,6 +1495,13 @@ const ARCS = [
             state.arc.data.won=chance(.55+c.relation/200);
             c.relation=clamp(c.relation-10,-100,100);
             addLog("Le voisinage vient témoigner à la barre.","info"); }},
+          {label:"Produire l'acte original de la concession",condition:()=>doctrine("foundation")!=="landman",apply:()=>{
+            state.arc.data.won=chance(.82);
+            state.reputation=clamp(state.reputation+4);
+            addLog(state.arc.data.won
+              ? "L'acte original est sans appel. Le tribunal tranche vite."
+              : "L'acte est authentique, mais le plan adverse est plus ancien encore.",
+              state.arc.data.won?"good":"bad"); }},
           {label:"Glisser une enveloppe au greffier",apply:()=>{
             state.money-=Math.min(state.money,sc(180)); state.legacy.greed++;
             state.arc.data.won=chance(.72); state.suspicion=clamp(state.suspicion+16);
@@ -1794,12 +1840,21 @@ const ERA_ARCS = [
     canStart:()=>state.cattle >= 40,
     steps:[
       {art:"herd", title:"Mille kilomètres de poussière",
-       text:()=>`Les acheteurs du nord paient le double. Il faut mener le troupeau jusqu'au terminus ferroviaire : trois mois de piste.`,
+       text:()=>{
+         const d = doctrine("foundation");
+         if(d === "horseman") return `Les acheteurs du nord paient le double. Trois mois de piste jusqu'au terminus — et pour une fois, vous avez les chevaux et les cavaliers qu'il faut pour ça.`;
+         if(d === "cattleman") return `Les acheteurs du nord paient le double. Il faut mener le troupeau jusqu'au terminus ferroviaire : trois mois de piste, et vous en avez assez pour que cela vaille le voyage.`;
+         return `Les acheteurs du nord paient le double. Il faut mener le troupeau jusqu'au terminus ferroviaire : trois mois de piste.`;
+       },
        image:"Une colonne de bétail jusqu'à l'horizon",
        choices:[
          {label:"Partir avec la moitié du troupeau",condition:()=>state.cattle>=40,apply:()=>{
            const n=Math.floor(state.cattle*.5);state.arc.data.head=n;state.cattle-=n;
            addLog(`${n} bêtes prennent la piste du nord.`,"info");}},
+         {label:"Tout emmener — le ranch est bâti pour ça",condition:()=>doctrine("foundation")==="cattleman"&&state.cattle>=60,apply:()=>{
+           const n=Math.floor(state.cattle*.8);state.arc.data.head=n;state.cattle-=n;
+           state.arc.data.allIn=true;
+           addLog(`${n} bêtes prennent la piste. Le ranch est presque vide derrière.`,"info");}},
          {label:"N'envoyer qu'un lot d'essai",condition:()=>state.cattle>=20,apply:()=>{
            const n=20;state.arc.data.head=n;state.cattle-=n;state.arc.data.cautious=true;
            addLog("Vingt bêtes partent en éclaireur.","info");}},
@@ -1813,7 +1868,10 @@ const ERA_ARCS = [
        image:"Un troupeau massé au bord d'une eau brune",
        choices:[
          {label:"Forcer la traversée",apply:()=>{
-           if(chance(.55)){addLog("La traversée se fait sans perte notable.","good");}
+           // De bons chevaux et de bons cavaliers font toute la différence au gué.
+           const d = doctrine("foundation");
+           const odds = .55 + (d==="horseman" ? .25 : 0) + Math.min(.12, championForm()/500);
+           if(chance(odds)){addLog("La traversée se fait sans perte notable.","good");}
            else{const l=Math.floor(state.arc.data.head*.25);state.arc.data.head-=l;
              addLog(`${l} bêtes se noient dans le courant.`,"bad");}}},
          {label:"Remonter jusqu'au pont à péage",apply:()=>{
@@ -2338,19 +2396,109 @@ function finishArc(){
   const arc = arcById(state.arc.id);
   if(!state.arcsDone) state.arcsDone = [];
   if(!state.arcOutcomes) state.arcOutcomes = {};
+  if(!Array.isArray(state.saga)) state.saga = [];
   // L'issue est conservée : d'autres arcs et événements la reliront des
   // décennies plus tard. C'est ce qui fait tenir la saga ensemble.
   state.arcOutcomes[state.arc.id] = state.arc.data.outcome || "done";
   state.arcsDone.push(state.arc.id);
-  if(arc) addLog(`— ${arc.title} : l'affaire est close. —`, "info");
+  if(arc){
+    addLog(`— ${arc.title} : l'affaire est close. —`, "info");
+    recordSaga("arc", arc.title, arc.steps[arc.steps.length-1].art || "ranch",
+      "Une affaire menée à son terme.");
+  }
   state.arc = null;
   state.arcCooldown = state.turn + rand(6,12);
+}
+
+// ---- La chronique de la saga ----
+// Les grands moments sont consignés au fil de la partie, avec leur date et leur
+// scène. À l'arrivée, on relit 141 ans dans l'ordre — c'est la seule façon de
+// refermer une partie aussi longue.
+const SAGA_KINDS = {
+  founding:   {label:"Fondation",   icon:"🌅"},
+  doctrine:   {label:"Tournant",    icon:"🧭"},
+  era:        {label:"Époque",      icon:"🕰️"},
+  succession: {label:"Succession",  icon:"👑"},
+  arc:        {label:"Affaire",     icon:"📖"},
+  secret:     {label:"Secret",      icon:"🗝️"},
+  rival:      {label:"Rivaux",      icon:"⚔️"},
+  goal:       {label:"Objectif",    icon:"🎯"},
+  hardship:   {label:"Épreuve",     icon:"🌩️"}
+};
+
+function recordSaga(kind, title, art, detail){
+  if(!state) return;
+  if(!Array.isArray(state.saga)) state.saga = [];
+  state.saga.push({
+    kind, title,
+    art: art || "ranch",
+    detail: detail || "",
+    year: state.year,
+    season: state.season,
+    eraId: state.eraId
+  });
+  // Une saga de 141 ans reste lisible : on plafonne largement au-dessus du
+  // nombre de moments qu'une partie produit réellement.
+  if(state.saga.length > 240) state.saga.shift();
+}
+
+function renderSaga(){
+  const box = $("sagaContent");
+  if(!box) return;
+  const saga = state.saga || [];
+  if(!saga.length){
+    box.innerHTML = "<p><i>La saga commence à peine. Revenez dans quelques décennies.</i></p>";
+    return;
+  }
+  const counts = {};
+  saga.forEach(m => { counts[m.kind] = (counts[m.kind]||0) + 1; });
+  let h = `<p class="modal-intro">${saga.length} moments retenus entre ${saga[0].year} et ${saga[saga.length-1].year}. `
+    + Object.keys(counts).map(k => (SAGA_KINDS[k]||{}).icon + " " + counts[k]).join(" · ")
+    + `</p><ol class="saga">`;
+  saga.forEach(m => {
+    const k = SAGA_KINDS[m.kind] || SAGA_KINDS.arc;
+    const era = ERAS.find(e => e.id === m.eraId);
+    h += `<li class="saga-item">`
+      + `<div class="saga-art">${eventArtSVG(m.art)}</div>`
+      + `<div class="saga-body">`
+      + `<div class="saga-date">${k.icon} ${seasons[m.season]} ${m.year}`
+      + (era ? ` · ${era.name.split(" (")[0]}` : "") + `</div>`
+      + `<div class="saga-title">${m.title}</div>`
+      + (m.detail ? `<div class="saga-detail">${m.detail}</div>` : "")
+      + `</div></li>`;
+  });
+  h += "</ol>";
+  box.innerHTML = h;
 }
 
 // ---- Doctrines : le choix qui ouvre chaque époque ----
 // À chaque bascule, une décision structurante dont l'effet court sur toute
 // l'époque. C'est ce qui donne à une partie sa trajectoire reconnaissable.
 const DOCTRINES = {
+  // La Fondation n'a pas de transition qui l'ouvre : son tournant se joue au
+  // premier tour, et décide de la nature même du ranch.
+  foundation:[
+    {id:"cattleman", icon:"🐂", name:"Bâtir sur le bétail",
+     what:"Un troupeau d'abord, le reste suivra. C'est la viande qui paiera les terres.",
+     effect:"Troupeau de départ étoffé et meilleur prix plancher, pour toute l'époque.",
+     apply:()=>{ state.cattle += 22;
+       state.cattlePriceMin = Math.min(state.cattlePriceMax-4, state.cattlePriceMin + 4);
+       state.cattlePrice = Math.max(state.cattlePrice, state.cattlePriceMin); }},
+    {id:"horseman", icon:"🐎", name:"Bâtir sur les chevaux",
+     what:"De bonnes bêtes sous la selle, et des hommes qui savent les mener.",
+     effect:"Écurie fournie, cheval de tête déjà dressé, et des cavaliers hors pair.",
+     apply:()=>{ state.horses += 4;
+       ensureChampion();
+       if(state.champion){ state.champion.training = clamp(state.champion.training + 30);
+         state.champion.speed = clamp(state.champion.speed + 12); }
+       (state.cowboys||[]).forEach(c => c.ride = clamp(c.ride + 15)); }},
+    {id:"landman", icon:"🗺️", name:"Prendre la terre d'abord",
+     what:"Qui tient le sol tient tout le reste. On verra plus tard ce qu'on y met.",
+     effect:"Domaine nettement plus vaste — mais des titres que d'autres contesteront.",
+     apply:()=>{ state.land += 140; addParcel(140);
+       state.legacy.greed++;
+       const c = factionOfType("community"); if(c) c.relation = clamp(c.relation - 12, -100, 100); }}
+  ],
   prohibition:[
     {id:"dry", icon:"🚱", name:"Tenir le ranch à l'écart de l'alcool",
      what:"Aucune caisse ne traversera vos terres. La loi vous saura gré.",
@@ -2445,6 +2593,29 @@ function doctrine(eraId){
   return (state.doctrines && state.doctrines[eraId]) || null;
 }
 
+// Le choix fondateur, présenté avant le premier trimestre.
+function showFoundingChoice(){
+  const list = doctrinesFor("foundation");
+  if(!list || (state.doctrines && state.doctrines.foundation)) return;
+  $("eventTitle").textContent = "Quelle sorte de ranch ?";
+  $("eventText").textContent =
+    "Le premier piquet n'est pas encore planté. Ce que vous déciderez maintenant "
+    + "orientera la maison pour toute une génération.";
+  $("eventText").style.whiteSpace = "pre-line";
+  setEventArt({art:"ranch", image:"Printemps 1885, la première clôture"});
+  $("eventChoices").innerHTML = "";
+  list.forEach(d => {
+    const btn = document.createElement("button");
+    btn.className = "choice doctrine";
+    btn.innerHTML = `<span class="op-name">${d.icon} ${d.name}</span>`
+      + `<span class="op-what">${d.what}</span>`
+      + `<span class="doctrine-effect">${d.effect}</span>`;
+    btn.onclick = () => chooseDoctrine("foundation", d.id);
+    $("eventChoices").appendChild(btn);
+  });
+  $("eventModal").classList.remove("hidden");
+}
+
 function chooseDoctrine(eraId, id){
   const list = doctrinesFor(eraId);
   if(!list) return;
@@ -2458,12 +2629,14 @@ function chooseDoctrine(eraId, id){
   if(state.arc === undefined) state.arc = null;
   if(!Array.isArray(state.arcsDone)) state.arcsDone = [];
   if(!state.arcOutcomes) state.arcOutcomes = {};
+  if(!Array.isArray(state.saga)) state.saga = [];
   if(typeof state.arcCooldown !== "number") state.arcCooldown = 0;
   // Un arc dont l'identifiant a disparu du code ne doit pas bloquer la partie.
   if(state.arc && !arcById(state.arc.id)) state.arc = null;
   state.doctrines[eraId] = id;
   d.apply();
   addLog(`Tournant de l'époque — ${d.name}. ${d.effect}`, "good");
+  recordSaga("doctrine", d.icon + " " + d.name, "city");
   $("eventModal").classList.add("hidden");
   finishTurn();
 }
@@ -2550,6 +2723,7 @@ function ageRivalLeader(house){
   r.relation = clamp(Math.round(r.relation * .55) + rand(-8,14), -100, 100);
   r.strength = clamp(r.strength + (heir.trait === "brutal" ? rand(4,12) : rand(-8,4)), 10, 100);
   addLog(`${heir.name} ${r.name} prend la suite. ${t.desc}`, heir.trait === "brutal" ? "bad" : "info");
+  recordSaga("rival", `${heir.name} ${r.name} prend la tête du clan`, "rider", t.desc);
 }
 
 function rivalTraitOf(house){
@@ -3147,6 +3321,7 @@ function ensureProgress(){
   if(state.arc === undefined) state.arc = null;
   if(!Array.isArray(state.arcsDone)) state.arcsDone = [];
   if(!state.arcOutcomes) state.arcOutcomes = {};
+  if(!Array.isArray(state.saga)) state.saga = [];
   if(typeof state.arcCooldown !== "number") state.arcCooldown = 0;
   // Un arc dont l'identifiant a disparu du code ne doit pas bloquer la partie.
   if(state.arc && !arcById(state.arc.id)) state.arc = null;
@@ -3204,6 +3379,7 @@ function checkAchievements(){
     if(!unlocked) return;
     state.achievements.push({id:a.id, year:state.year, season:state.season});
     addLog(`Objectif accompli — ${a.title} : ${a.desc}`, "good");
+    recordSaga("goal", a.title, "money", a.desc);
     toast(`${a.icon} Objectif accompli : ${a.title}`);
   });
 }
@@ -3312,7 +3488,11 @@ function maybeShowSecretEvent(){
     choices:data.choices.map(c=>({
       label:c.label,
       condition:c.condition,
-      apply:()=>{ c.apply(); state.secret.stage = nextStage; }
+      apply:()=>{
+        c.apply();
+        state.secret.stage = nextStage;
+        recordSaga("secret", data.title, "night", `Chapitre ${nextStage} sur 3 du secret du fondateur.`);
+      }
     }))
   };
   presentEvent(event);
@@ -3532,6 +3712,7 @@ function baseState() {
     arc:null,
     arcsDone:[],
     arcOutcomes:{},
+    saga:[],
     arcCooldown:0,
     stats:{competitionWins:0, illegalWins:0, plannedSuccessions:0, contestedSuccessions:0,
            siegeQuarters:0, rivalMarriages:0},
@@ -3564,8 +3745,11 @@ function startGame(){
   $("setupScreen").classList.add("hidden");
   $("gameScreen").classList.remove("hidden");
   addLog(`La famille ${state.familyName} prend possession du ${state.ranchName}.`, "good");
+  recordSaga("founding", `${state.founder.name} ${state.familyName} fonde le ${state.ranchName}`, "ranch",
+    "Printemps 1885. Le premier piquet est planté.");
   addLog("Le territoire est rude, mais la terre promet un avenir.", "info");
   render();
+  showFoundingChoice();
 }
 
 function render(){
@@ -4252,6 +4436,7 @@ function showEraTransition(era){
   setEventArt({art:"city", image:"Une nouvelle époque commence"});
   $("eventChoices").innerHTML = "";
   addLog(`Une nouvelle époque commence : ${era.name}.`, "info");
+  recordSaga("era", era.name, ERA_MOTIFS[era.id] || "city", era.desc);
 
   const doctrines = doctrinesFor(era.id);
   if(doctrines){
@@ -6034,6 +6219,20 @@ function showGameOver(title,text){
   $("eventText").style.whiteSpace = "pre-line";
   setEventArt({art:"family", image:"La chronique de la famille s’achève"});
   $("eventChoices").innerHTML = "";
+
+  // Relire la saga est la vraie conclusion : on l'offre avant de recommencer.
+  const saga = document.createElement("button");
+  saga.className = "choice";
+  saga.textContent = `📖 Relire la saga — ${(state.saga||[]).length} moments`;
+  saga.onclick = () => {
+    renderSaga();
+    renderLineage();
+    if(state.chronicles) chronicleContent.innerHTML =
+      state.chronicles.length ? state.chronicles.join("<hr>") : "Aucune chronique annuelle.";
+    chronicleModal.classList.remove("hidden");
+  };
+  $("eventChoices").appendChild(saga);
+
   const btn = document.createElement("button");
   btn.className = "choice";
   btn.textContent = "Revenir à l’écran de création";
@@ -6263,6 +6462,8 @@ document.getElementById("familyBtn").addEventListener("click",()=>{renderFamily(
 <div id="cowboyModal" class="modal hidden"><div class="modal-card"><h2>Cow-boys</h2><div id="cowboyContent"></div><button class="choice" onclick="cowboyModal.classList.add('hidden')">Fermer</button></div></div>
 <div id="chronicleModal" class="modal hidden"><div class="modal-card">
 <h2>Chroniques du ranch</h2>
+<h3 class="section-head">La saga, année après année</h3>
+<div id="sagaContent"></div>
 <h3 class="section-head">Généalogie de la dynastie</h3>
 <div id="lineageContent"></div>
 <h3 class="section-head">Année après année</h3>
@@ -6369,6 +6570,7 @@ function hireCowboy(){
 familyBtn.addEventListener("click",()=>ensureCowboys());
 cowboyBtn.addEventListener("click",()=>{renderCowboys();cowboyModal.classList.remove("hidden");});
 chronicleBtn.addEventListener("click",()=>{ ensureCowboys();
+ renderSaga();
  renderLineage();
  chronicleContent.innerHTML=(state.chronicles.length?state.chronicles.join("<hr>"):"La première année n'est pas encore écoulée.");
  chronicleModal.classList.remove("hidden");
