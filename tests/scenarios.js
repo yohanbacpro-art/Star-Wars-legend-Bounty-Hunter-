@@ -125,11 +125,35 @@ function permissiveVariants(){
             s.claimPressure = 30; s.factions.forEach(f => { if(f.type==="nation") f.relation = -70; });
             const v = G.ventureOfEra(); if(v) s.ventures = {[v.id]:{level:2, since:1972, eraId:v.eraId}};
             return s; },
+    // Les investisseurs n'entrent en scène qu'à partir de 2010, et par paliers
+    // de pression : il leur faut deux états, tiède et brûlant.
+    () => { const s = permissiveGame(); s.year = 2014; s.eraId = "modern"; s.costModifier = 16;
+            s.land = 2200; s.money = 20000000;
+            s.developer = {name:"Meridian Land Partners", what:"un fonds", pressure:20, since:2012, refusals:0};
+            return s; },
+    () => { const s = permissiveGame(); s.year = 2022; s.eraId = "modern"; s.costModifier = 16;
+            s.land = 3000; s.money = 40000000; s.suspicion = 50; s.claimPressure = 25;
+            s.developer = {name:"Caldera Resorts", what:"un groupe hôtelier", pressure:85, since:2011, refusals:2};
+            return s; },
     () => { const s = permissiveGame(); s.year = 1998; s.eraId = "globalization"; s.land = 1400;
             s.claimPressure = 10; s.factions.forEach(f => { if(f.type==="nation") f.relation = -10; });
             const v = G.ventureOfEra(); if(v) s.ventures = {[v.id]:{level:1, since:1995, eraId:v.eraId}};
             return s; }
   ];
+}
+
+// Rejoue les modales ouvertes par un tour jusqu'à ce que la main revienne au
+// joueur. Indispensable depuis le tour annuel : une année enchaîne quatre
+// trimestres, et la chaîne ne reprend qu'une fois la modale refermée.
+function closeModals(limit){
+  let guard = 0;
+  while(!$el("eventModal")._classes.has("hidden") && guard++ < (limit || 60)){
+    if(ST().gameOver){ $el("eventModal").classList.add("hidden"); return; }
+    const ch = $el("eventChoices").children;
+    if(!ch.length) throw new Error("modale sans choix : " + $el("eventTitle").textContent);
+    ch[0].onclick();
+  }
+  if(guard >= (limit || 60)) throw new Error("modales en boucle");
 }
 
 function addAdult(s, name, props){
@@ -970,6 +994,161 @@ section("Chronique de la saga");
     labels.some(l => l.indexOf("Relire la saga") >= 0), labels.join(" | "));
   check("elle propose aussi de recommencer",
     labels.some(l => l.indexOf("écran de création") >= 0));
+}
+
+// ------------------------------------------------- Le tour annuel
+section("Le tour annuel");
+{
+  const s = freshGame();
+  check("avant 1950, un tour est un trimestre", G.annualTurns() === false);
+  check("trois actions par trimestre", G.actionsPerTurn() === 3);
+  check("les lots sont ceux d'un trimestre", G.lot() === 1);
+
+  // Quatre trimestres pour une année avant 1950.
+  const y0 = ST().year;
+  for(let i = 0; i < 4; i++){ G.endTurn(); closeModals(); }
+  check("quatre tours trimestriels font une année", ST().year === y0 + 1, ST().year);
+
+  // Une seule fin de tour pour une année après 1950.
+  const s2 = freshGame();
+  s2.year = 1960; s2.eraId = "industrial"; s2.costModifier = 2.5;
+  s2.money = 500000; s2.feed = 5000;
+  check("à partir de 1950, un tour est une année", G.annualTurns() === true);
+  check("six actions par année", G.actionsPerTurn() === 6);
+  check("les lots sont annuels", G.lot() === 4);
+  const y1 = ST().year, season1 = ST().season;
+  G.endTurn(); closeModals();
+  check("une fin de tour avance d'une année pleine", ST().year === y1 + 1, ST().year);
+  check("la saison revient au même point", ST().season === season1, ST().season);
+  check("la chaîne se referme", ST().autoQuarters === 0, ST().autoQuarters);
+  check("les actions sont rendues", ST().actions === 6, ST().actions);
+
+  // Dix années d'affilée : ni boucle infinie, ni dérive du calendrier.
+  const y2 = ST().year;
+  for(let i = 0; i < 10; i++){ ST().money = 500000; ST().feed = 5000; G.endTurn(); closeModals(); }
+  check("dix tours annuels font dix ans", ST().year === y2 + 10, ST().year);
+
+  // Les lots suivent : un achat annuel porte sur quatre fois plus.
+  const s3 = freshGame();
+  s3.year = 1980; s3.eraId = "corporate"; s3.costModifier = 5; s3.money = 5000000;
+  const cattle0 = s3.cattle;
+  G.doAction("buyCattle");
+  check("un achat annuel porte sur un lot entier", ST().cattle === cattle0 + 20, ST().cattle - cattle0);
+  const land0 = ST().land;
+  G.doAction("buyLand");
+  check("un achat de terres annuel aussi", ST().land === land0 + 80, ST().land - land0);
+  check("les parcelles restent cohérentes",
+    ST().parcels.reduce((a,p)=>a+p.ha,0) === ST().land);
+  const feed0 = ST().feed;
+  G.doAction("buyFeed");
+  check("le fourrage aussi", ST().feed === feed0 + 160, ST().feed - feed0);
+
+  // La traversée de 1950 ne casse rien.
+  const s4 = freshGame();
+  s4.year = 1948; s4.eraId = "industrial"; s4.costModifier = 2.5;
+  s4.money = 500000; s4.feed = 5000;
+  let threw = false;
+  try{
+    for(let i = 0; i < 12; i++){ ST().money = 500000; ST().feed = 5000; G.endTurn(); closeModals(); }
+  }catch(e){ threw = e.message; }
+  check("le passage au tour annuel se fait sans erreur", threw === false, threw);
+  check("l'année a bien avancé au-delà de 1950", ST().year >= 1952, ST().year);
+
+  // Une fin de partie pendant la chaîne l'interrompt.
+  const s5 = freshGame();
+  s5.year = 1970; s5.eraId = "industrial"; s5.costModifier = 2.5;
+  s5.money = -999999;
+  G.endTurn(); closeModals();
+  check("une faillite en cours d'année arrête la chaîne", ST().gameOver === true);
+  check("et ne laisse pas la chaîne en suspens", ST().autoQuarters === 0, ST().autoQuarters);
+
+  // L'interface parle en années.
+  const s6 = freshGame();
+  s6.year = 1990; s6.eraId = "corporate"; s6.costModifier = 5;
+  G.render();
+  check("l'en-tête annonce l'année", /^Année 1990$/.test($el("seasonLabel").textContent), $el("seasonLabel").textContent);
+  check("le bouton parle d'année", /année/i.test($el("endTurnBtn").textContent), $el("endTurnBtn").textContent);
+  s6.year = 1930; s6.eraId = "prohibition";
+  G.render();
+  check("avant 1950, l'en-tête garde les saisons",
+    /Printemps|Été|Automne|Hiver/.test($el("seasonLabel").textContent), $el("seasonLabel").textContent);
+  // Plus aucun libellé ne doit parler de trimestre en tour annuel.
+  s6.year = 2000; s6.eraId = "globalization"; s6.costModifier = 9;
+  G.render();
+  const yearlyLabels = [$el("endTurnBtn").textContent, $el("decisionsTitle").textContent,
+                        $el("turnHint").textContent, $el("seasonLabel").textContent,
+                        $el("journalDate").textContent].join(" | ");
+  check("aucun libellé ne parle de trimestre en tour annuel",
+    !/trimestre/i.test(yearlyLabels), yearlyLabels);
+  G.addLog("Test de date.", "info");
+  check("le journal date à l'année", ST().history[0].stamp === "2000", ST().history[0].stamp);
+  s6.year = 1910; s6.eraId = "foundation"; s6.costModifier = 1;
+  G.addLog("Test de date trimestrielle.", "info");
+  check("avant 1950 il date à la saison", /1910/.test(ST().history[0].stamp)
+    && /Printemps|Été|Automne|Hiver/.test(ST().history[0].stamp), ST().history[0].stamp);
+}
+
+// ------------------------------------------------- Les investisseurs
+section("Les investisseurs immobiliers");
+{
+  const s = freshGame();
+  s.year = 1995; s.eraId = "globalization";
+  check("aucun investisseur avant 2010", G.ensureDeveloper() === null);
+  check("et rien en mémoire", ST().developer === null || ST().developer === undefined);
+
+  s.year = 2012; s.eraId = "modern"; s.costModifier = 16;
+  const dev = G.ensureDeveloper();
+  check("un investisseur entre en scène à partir de 2010", !!dev);
+  check("il a un nom et une nature", !!dev.name && !!dev.what);
+  check("son arrivée entre dans la saga",
+    ST().saga.some(m => m.kind === "developer"), ST().saga.map(m=>m.kind).join(","));
+  const p0 = G.developerPressure();
+  G.addDeveloperPressure(20);
+  check("la pression monte", G.developerPressure() === p0 + 20, G.developerPressure());
+  G.addDeveloperPressure(-999);
+  check("elle ne descend pas sous zéro", G.developerPressure() === 0);
+  G.addDeveloperPressure(999);
+  check("et ne dépasse pas cent", G.developerPressure() === 100);
+
+  // L'offre suit la pression et la surface.
+  s.land = 1000; s.cattle = 200;
+  G.addDeveloperPressure(-999);
+  const calm = G.developerOffer(1).price;
+  G.addDeveloperPressure(80);
+  const hungry = G.developerOffer(1).price;
+  check("plus ils veulent, plus ils paient", hungry > calm, calm + " → " + hungry);
+  check("l'offre porte sur la part demandée",
+    G.developerOffer(.25).ha === 250, G.developerOffer(.25).ha);
+  check("elle dépasse largement la valeur agricole",
+    G.developerOffer(1).price > G.estateValue(), G.developerOffer(1).price + " vs " + G.estateValue());
+
+  // Vendre le ranch termine la partie, autrement qu'une faillite.
+  const s2 = freshGame();
+  s2.year = 2018; s2.eraId = "modern"; s2.costModifier = 16;
+  s2.land = 1500; s2.cattle = 400; s2.money = 1000;
+  G.ensureDeveloper();
+  const before = ST().money;
+  G.sellTheRanch(50000000);
+  check("vendre le ranch verse le prix", ST().money === before + 50000000, ST().money);
+  check("vendre le ranch termine la partie", ST().gameOver === true);
+  check("la fin porte son propre titre",
+    $el("eventTitle").textContent === "Le ranch vendu", $el("eventTitle").textContent);
+  check("elle rappelle le nombre de générations",
+    /génération/.test($el("eventText").textContent));
+  check("la vente entre dans la saga",
+    ST().saga.some(m => m.kind === "developer" && /vendu/.test(m.title)),
+    ST().saga.filter(m=>m.kind==="developer").map(m=>m.title).join(" | "));
+  check("elle laisse un héritage à relever", !!G.loadLegacyRecord());
+
+  // La pression monte d'elle-même au fil des tours.
+  const s3 = freshGame();
+  s3.year = 2012; s3.eraId = "modern"; s3.costModifier = 16;
+  s3.money = 50000000; s3.feed = 20000; s3.land = 2000;
+  G.ensureDeveloper();
+  const start = G.developerPressure();
+  for(let i = 0; i < 8; i++){ ST().money = 50000000; ST().feed = 20000; G.endTurn(); closeModals(); }
+  check("la pression monte au fil des années", G.developerPressure() > start,
+    start + " → " + G.developerPressure());
 }
 
 // ------------------------------------------------- L'économie tardive

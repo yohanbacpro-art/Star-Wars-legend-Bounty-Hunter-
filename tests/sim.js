@@ -325,6 +325,7 @@ for(let run = 0; run < RUNS; run++){
   if(ST().year >= 2026) summary.ends["__2026__"] = (summary.ends["__2026__"]||0)+1;
   summary.maxYear = Math.max(summary.maxYear, ST().year);
   summary.years.push(ST().year);
+  (summary.turnsEnd=summary.turnsEnd||[]).push(turns);
   (summary.landEnd=summary.landEnd||[]).push(ST().land);
   (summary.cattleEnd=summary.cattleEnd||[]).push(ST().cattle);
   summary.gens += (ST().lineage||[]).length;
@@ -352,6 +353,7 @@ console.log("Successions préparées :", summary.planned, "— contestées :", s
 console.log("Droits de succession cumulés (moyenne) :", Math.round((summary.duties||0)/RUNS));
 console.log("Trésorerie finale en $ de 1885 (moyenne) :", Math.round((summary.finalMoney||0)/RUNS));
 const medOf=a=>{const b=a.slice().sort((x,y)=>x-y);return b[Math.floor(b.length/2)];};
+console.log("Tours joués (médiane) :", medOf(summary.turnsEnd||[0]));
 console.log("Terres finales (médiane) :", medOf(summary.landEnd||[0]), "— bétail final (médiane) :", medOf(summary.cattleEnd||[0]));
 console.log("\nFins de partie :");
 Object.entries(summary.ends).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>console.log("  "+v+"×  "+k));

@@ -814,18 +814,18 @@
         <div id="photoCredit" style="text-align:right;font-size:.72rem;color:var(--muted);margin-top:2px;"></div>
 
         <div class="panel">
-          <div class="panel-title">Décisions du trimestre</div>
+          <div class="panel-title" id="decisionsTitle">Décisions du trimestre</div>
           <div class="panel-body">
             <div class="actions-grid">
               <button class="action" data-action="buyCattle">
                 <span class="icon">🐂</span>
-                <strong>Acheter 5 bovins</strong>
+                <strong id="buyCattleLabel">Acheter 5 bovins</strong>
                 <small>Agrandit le troupeau et les revenus futurs.</small>
                 <div class="action-cost" id="buyCattleCost">Coût : 140 $</div>
               </button>
               <button class="action" data-action="sellCattle">
                 <span class="icon">💰</span>
-                <strong>Vendre 5 bovins</strong>
+                <strong id="sellCattleLabel">Vendre 5 bovins</strong>
                 <small>Liquidité immédiate au prix du marché.</small>
                 <div class="action-cost" id="sellValue">Gain : variable</div>
               </button>
@@ -855,15 +855,15 @@
               </button>
               <button class="action" data-action="buyFeed">
                 <span class="icon">🌿</span>
-                <strong>Acheter du fourrage</strong>
-                <small>40 balles de réserve pour passer l’hiver.</small>
+                <strong id="buyFeedLabel">Acheter du fourrage</strong>
+                <small>De la réserve pour passer l’hiver.</small>
                 <div class="action-cost" id="buyFeedCost">Coût : 60 $</div>
               </button>
               <button class="action" data-action="buyLand">
                 <span class="icon">🌾</span>
-                <strong>Acheter 20 hectares</strong>
+                <strong id="buyLandLabel">Acheter 20 hectares</strong>
                 <small>Plus de pâturages, mais plus de charges.</small>
-                <div class="action-cost">Coût : 260 $</div>
+                <div class="action-cost" id="buyLandCost">Coût : 260 $</div>
               </button>
               <button class="action" data-action="bribe">
                 <span class="icon">🤝</span>
@@ -907,8 +907,8 @@
 
         <div class="turn-footer">
           <div>
-            <div class="ap">Actions restantes : <span id="apLabel">3</span>/3</div>
-            <small>Terminez le trimestre pour calculer revenus, dépenses et événements.</small>
+            <div class="ap">Actions restantes : <span id="apLabel">3</span>/<span id="apMax">3</span></div>
+            <small id="turnHint">Terminez le trimestre pour calculer revenus, dépenses et événements.</small>
           </div>
           <button class="end-turn" id="endTurnBtn">Terminer le trimestre</button>
         </div>
@@ -2493,6 +2493,7 @@ const SAGA_KINDS = {
   rival:      {label:"Rivaux",      icon:"⚔️"},
   goal:       {label:"Objectif",    icon:"🎯"},
   venture:    {label:"Affaire",     icon:"🏭"},
+  developer:  {label:"Investisseurs", icon:"🏗️"},
   claim:      {label:"Revendication", icon:"🪶"},
   fisc:       {label:"Fisc",        icon:"🧾"},
   hardship:   {label:"Épreuve",     icon:"🌩️"}
@@ -4055,9 +4056,11 @@ function ensureProgress(){
   if(!state.doctrines) state.doctrines = {};
   if(typeof state.nextParcelId !== "number") state.nextParcelId = 1;
   if(!state.ventures) state.ventures = {};
-  ["claimPressure","mobTies","debt","taxRelief","protectedLand"].forEach(k => {
+  ["claimPressure","mobTies","debt","taxRelief","protectedLand","autoQuarters"].forEach(k => {
     if(typeof state[k] !== "number") state[k] = 0;
   });
+  if(typeof state.chaining !== "boolean") state.chaining = false;
+  if(state.developer === undefined) state.developer = null;
   ensureParcels();
   (state.parcels||[]).forEach(p => { if(typeof p.since !== "number") p.since = 1885; });
   (state.cowboys||[]).forEach(c => { if(c.post === undefined) c.post = null; });
@@ -4532,6 +4535,9 @@ function baseState() {
     ventures:{},
     claimPressure:0,
     mobTies:0,
+    developer:null,
+    autoQuarters:0,
+    chaining:false,
     debt:0,
     taxRelief:0,
     protectedLand:0,
@@ -4746,9 +4752,17 @@ function render(){
       : `Coût : ${moneyFmt.format(ventureNextCost(venture))} $`
         + (lvl ? ` — rapporte ${moneyFmt.format(ventureQuarterly(venture) - ventureUpkeep(venture))} $/trimestre` : "");
   }
-  $("seasonLabel").textContent = `${seasons[state.season]} ${state.year}`;
+  // À partir de 1950 un tour couvre l'année : l'interface cesse de parler en saisons.
+  const yearly = annualTurns();
+  $("seasonLabel").textContent = yearly ? `Année ${state.year}` : `${seasons[state.season]} ${state.year}`;
+  $("endTurnBtn").textContent = yearly ? "Terminer l'année" : "Terminer le trimestre";
+  $("apMax").textContent = actionsPerTurn();
+  $("decisionsTitle").textContent = yearly ? "Décisions de l'année" : "Décisions du trimestre";
+  $("turnHint").textContent = yearly
+    ? "Terminez l'année : les quatre saisons se déroulent d'un coup, avec leurs veaux, leurs récoltes et leurs impôts."
+    : "Terminez le trimestre pour calculer revenus, dépenses et événements.";
   $("turnLabel").textContent = `Tour ${state.turn}`;
-  $("journalDate").textContent = `${seasons[state.season].toUpperCase()} ${state.year}`;
+  $("journalDate").textContent = yearly ? `ANNÉE ${state.year}` : `${seasons[state.season].toUpperCase()} ${state.year}`;
   $("heroTitle").textContent = state.ranchName;
   $("heroText").textContent = getSeasonText();
 
@@ -4765,8 +4779,15 @@ function render(){
   setMeter("sus",state.suspicion);
 
   $("apLabel").textContent = state.actions;
-  $("sellValue").textContent = `Gain estimé : ${state.cattlePrice*5} $`;
-  $("buyCattleCost").textContent = `Coût : ${(state.cattlePrice+6)*5} $`;
+  const head = 5 * lot();
+  $("sellValue").textContent = `Gain estimé : ${moneyFmt.format(state.cattlePrice*head)} $`;
+  $("buyCattleCost").textContent = `Coût : ${moneyFmt.format((state.cattlePrice+6)*head)} $`;
+  $("buyCattleLabel").textContent = `Acheter ${head} bovins`;
+  $("sellCattleLabel").textContent = `Vendre ${head} bovins`;
+  $("buyLandLabel").textContent = `Acheter ${20*lot()} hectares`;
+  $("buyFeedLabel").textContent = `Acheter ${40*lot()} balles de fourrage`;
+  $("buyFeedCost").textContent = `Coût : ${moneyFmt.format(sc(60*lot()))} $`;
+  $("buyLandCost").textContent = `Coût : ${moneyFmt.format(sc(260*lot()))} $`;
   $("buyFeedCost").textContent = `Coût : ${sc(60)} $`;
   $("trainCost").textContent = `Coût : ${sc(40)} $`;
   $("trainDesc").textContent = state.champion
@@ -4815,7 +4836,8 @@ function renderTimeline(era){
   const START = 1885, END = 2026;
   const pct = Math.max(0, Math.min(100, ((state.year - START) / (END - START)) * 100));
   $("timelineFill").style.width = pct + "%";
-  $("timelineYear").textContent = state.year + " · " + seasons[state.season];
+  $("timelineYear").textContent = annualTurns() ? String(state.year)
+                                                 : state.year + " · " + seasons[state.season];
   const marks = $("timelineMarks");
   if(marks.dataset.built !== "1"){
     marks.innerHTML = ERAS.map(e =>
@@ -4909,7 +4931,10 @@ function getSeasonText(){
 }
 
 function addLog(text,type="info"){
-  state.history.unshift({text,type,stamp:`${seasons[state.season]} ${state.year}`});
+  // En tour annuel, dater chaque ligne d'une saison n'a plus de sens : le
+  // joueur a décidé pour l'année entière.
+  state.history.unshift({text,type,
+    stamp: annualTurns() ? String(state.year) : `${seasons[state.season]} ${state.year}`});
   state.history = state.history.slice(0,80);
   $("log").innerHTML = state.history.map(e =>
     `<div class="entry ${e.type}"><strong>${e.stamp}</strong><br>${e.text}</div>`
@@ -4944,18 +4969,20 @@ function doAction(type){
 
   if(type === "buyCattle"){
     // `cattlePrice` est déjà à l'échelle de l'époque : ne pas repasser par spend().
-    const cost = pay((state.cattlePrice+6) * 5);
+    const head = 5 * lot();
+    const cost = pay((state.cattlePrice+6) * head);
     if(cost === false) return;
-    useAction(); state.cattle += 5;
-    addLog(`Achat de 5 bovins pour ${cost} $.`, "good");
+    useAction(); state.cattle += head;
+    addLog(`Achat de ${head} bovins pour ${cost} $.`, "good");
   }
 
   if(type === "sellCattle"){
-    if(state.cattle < 5){ toast("Le troupeau est trop petit."); return; }
+    const head = Math.min(state.cattle, 5 * lot());
+    if(head < 5){ toast("Le troupeau est trop petit."); return; }
     useAction();
-    const gain = state.cattlePrice * 5;
-    state.cattle -= 5; state.money += gain;
-    addLog(`Vente de 5 bovins au marché pour ${gain} $.`, "good");
+    const gain = state.cattlePrice * head;
+    state.cattle -= head; state.money += gain;
+    addLog(`Vente de ${head} bovins au marché pour ${gain} $.`, "good");
   }
 
   if(type === "venture"){ investVenture(); return; }
@@ -5011,19 +5038,21 @@ function doAction(type){
   }
 
   if(type === "buyFeed"){
-    const cost = spend(60);
+    const bales = 40 * lot();
+    const cost = spend(60 * lot());
     if(cost === false) return;
-    useAction(); state.feed += 40;
-    addLog(`40 balles de fourrage sont rentrées à la grange pour ${cost} $.`, "good");
+    useAction(); state.feed += bales;
+    addLog(`${bales} balles de fourrage sont rentrées à la grange pour ${cost} $.`, "good");
   }
 
   if(type === "buyLand"){
-    const cost = spend(260);
+    const ha = 20 * lot();
+    const cost = spend(260 * lot());
     if(cost === false) return;
-    useAction(); state.land += 20;
-    const p = addParcel(20);
+    useAction(); state.land += ha;
+    const p = addParcel(ha);
     const k = PARCEL_KINDS[p.kind];
-    addLog(`Le domaine s’agrandit : ${k.icon} le ${k.label.toLowerCase()} ${p.name}, 20 hectares pour ${cost} $.`, "good");
+    addLog(`Le domaine s’agrandit : ${k.icon} le ${k.label.toLowerCase()} ${p.name}, ${ha} hectares pour ${cost} $.`, "good");
   }
 
   if(type === "bribe"){
@@ -5098,8 +5127,42 @@ function doAction(type){
   render();
 }
 
+// ============================================================================
+// LE TOUR ANNUEL
+// ----------------------------------------------------------------------------
+// 141 ans × 4 saisons = 564 tours : la seconde moitié du siècle se jouait à la
+// petite semaine alors qu'il ne s'y passe plus grand-chose de saisonnier. À
+// partir de 1950, un tour couvre une année entière.
+//
+// L'implémentation ne touche PAS à la simulation : `endTurn()` continue de
+// simuler exactement un trimestre. Une année se joue en enchaînant quatre
+// trimestres, `state.autoQuarters` portant ce qui reste à dérouler. La chaîne
+// reprend dans `finishTurn()`, seul point de convergence après une modale —
+// c'est ce qui permet aux événements de s'intercaler sans rien casser.
+//
+// Conséquence voulue : le joueur décide une fois par an au lieu de quatre, mais
+// les saisons continuent de produire leurs veaux, leurs récoltes et leurs
+// impôts aux mêmes dates, et l'équilibrage mesuré reste comparable.
+// ============================================================================
+const ANNUAL_FROM = 1950;
+function annualTurns(){ return !!state && state.year >= ANNUAL_FROM; }
+function actionsPerTurn(){ return annualTurns() ? 6 : 3; }
+// Une action annuelle porte sur un lot, pas sur une poignée de bêtes : sans
+// cela, passer au tour annuel divisait par deux ce qu'un ranch peut faire dans
+// l'année, et le joueur se sentait affaibli plutôt que soulagé.
+function lot(){ return annualTurns() ? 4 : 1; }
+// Les trimestres intercalaires tirent moins d'événements : sans cela une année
+// en produisait quatre d'affilée, ce qui noyait le joueur sous les modales.
+function insideAnnualChain(){ return (state.autoQuarters || 0) > 0; }
+
 function endTurn(){
   if(state.gameOver) return;
+  // Une année entière se déroule en quatre trimestres enchaînés. `chaining`
+  // distingue « le joueur ouvre une année » de « la chaîne se poursuit » : sans
+  // ce drapeau, le dernier maillon rouvrait une année et bouclait à l'infini.
+  // Reprendre une partie sauvegardée en cours de chaîne la termine simplement.
+  if(annualTurns() && !state.chaining) state.autoQuarters = 3;
+  state.chaining = false;
   $("endTurnBtn").disabled = true;
 
   // Revenus du troupeau
@@ -5275,6 +5338,19 @@ function endTurn(){
     factionEffects.push(`${factionOfType("community").name} vous bat froid (-${strain} unité).`);
   }
 
+  // Les investisseurs, eux, ne dorment jamais : plus le domaine est grand et
+  // bien tenu, plus il vaut la peine d'être racheté.
+  if(state.year >= DEVELOPER_FROM){
+    ensureDeveloper();
+    // Calibré pour qu'un domaine bien tenu voie arriver l'offre totale vers
+    // 2020 : passé 2010 il ne reste que seize ans, l'escalade doit tenir dedans.
+    if(chance(.5)){
+      addDeveloperPressure(1.2 + Math.min(2.4, state.land / 1400)
+        + (state.reputation > 60 ? .5 : 0)
+        + (state.developer.refusals || 0) * .4);
+    }
+  }
+
   // La nation ashkani : la même frontière, deux façons de la défendre selon
   // que les tribunaux lui sont ouverts ou non.
   const nationStance = factionStance("nation");
@@ -5400,7 +5476,7 @@ function endTurn(){
     ageFamily();
   }
   state.turn++;
-  state.actions = 3;
+  state.actions = actionsPerTurn();
 
   // Changement d'époque
   const newEra = getEra(state.year);
@@ -5429,15 +5505,20 @@ function endTurn(){
     return;
   }
 
-  // Une brève à chaque trimestre : le journal n'est jamais vide.
-  showBrief();
+  // Une brève à chaque trimestre : le journal n'est jamais vide. En année
+  // pleine, seule la dernière saison en produit une, sinon le journal se
+  // remplit de quatre brèves d'un coup.
+  if(!insideAnnualChain()) showBrief();
 
   // Un arc en cours prime sur le reste : c'est le fil qu'on veut voir avancer.
   maybeStartArc();
   if(maybeShowArcStep()) return;
 
   // Événement
-  const eventChance = .82 * state.eventModifier;
+  // Sur une année pleine, quatre tirages consécutifs à 82 % noieraient le
+  // joueur : les trimestres intercalaires tirent moins, pour environ deux
+  // événements et demi par année.
+  const eventChance = (insideAnnualChain() ? .52 : .82) * state.eventModifier;
   if(maybeShowSecretEvent()){
     return;
   } else if(chance(eventChance)){
@@ -6946,6 +7027,63 @@ const events = [
 // générations ont pris finit par arriver avec un avocat.
 // ============================================================================
 
+// ---- Les investisseurs, à partir de 2010 ----
+// La dernière époque n'a plus de rival à cheval : elle a des gens qui achètent
+// des vallées entières depuis un bureau. Leur pression monte toute seule, et
+// chaque refus la fait monter plus vite. C'est la seule menace du jeu qui ne
+// vise pas le troupeau mais l'existence même du ranch.
+const DEVELOPERS = [
+  {name:"Meridian Land Partners",  what:"un fonds de pension qui achète des vallées entières"},
+  {name:"Caldera Resorts",         what:"un groupe hôtelier qui veut un golf et deux cents chalets"},
+  {name:"Sagebrush Capital",       what:"une société d'investissement qui revend par lots de dix hectares"},
+  {name:"Aeon Ridge Holdings",     what:"un family office qui place de l'argent dans la terre rare"}
+];
+const DEVELOPER_FROM = 2010;
+
+function ensureDeveloper(){
+  if(!state || state.year < DEVELOPER_FROM) return null;
+  if(!state.developer){
+    const d = DEVELOPERS[rand(0, DEVELOPERS.length-1)];
+    state.developer = {name:d.name, what:d.what, pressure:rand(4,10), since:state.year, refusals:0};
+    addLog(`${d.name} — ${d.what} — vient d'acheter le ranch voisin. On parle de vous ensuite.`, "info");
+    recordSaga("developer", `${d.name} arrive dans la vallée`, "city",
+      "Le premier acheteur qui ne veut pas de bétail.");
+  }
+  return state.developer;
+}
+function developerPressure(){ return state.developer ? state.developer.pressure : 0; }
+function addDeveloperPressure(n){
+  if(!state.developer) return;
+  state.developer.pressure = Math.max(0, Math.min(100, state.developer.pressure + n));
+}
+// Ce qu'ils offrent : bien au-dessus de la valeur agricole, et ça monte avec
+// leur appétit. C'est ce qui rend le refus difficile.
+function developerOffer(shareOfLand){
+  const ha = Math.round(state.land * shareOfLand);
+  const perHa = sc(40) * (1 + developerPressure()/90);
+  return {ha, price: Math.round(ha * perHa)};
+}
+
+// Vendre le ranch : la partie s'arrête là, riche et sans nom. C'est un choix
+// offert, pas un échec — mais il ferme la dynastie pour de bon.
+function sellTheRanch(price){
+  state.money += price;
+  state.gameOver = true;
+  const l = state.legacy || {honor:0, greed:0};
+  recordSaga("developer", `Le ranch est vendu à ${state.developer ? state.developer.name : "un investisseur"}`, "city",
+    `${state.land} hectares, ${state.cattle} têtes et ${(state.lineage||[]).length} générations, contre ${moneyFmt.format(price)} $.`);
+  showGameOver("Le ranch vendu",
+    `En ${state.year}, la famille ${state.familyName} signe.\n\n`
+    + `${moneyFmt.format(price)} $ pour ${state.land} hectares, un troupeau de ${state.cattle} bêtes et le nom sur le portail. `
+    + `Les héritiers seront riches et n'auront plus rien à tenir.\n\n`
+    + `${(state.lineage||[]).length} génération${(state.lineage||[]).length>1?"s auront":" aura"} mené le ${state.ranchName}, `
+    + `de ${(state.lineage&&state.lineage[0]?state.lineage[0].startYear:1885)} à ${state.year}. `
+    + `La dernière a décidé qu'il n'y en aurait pas d'autre.\n\n`
+    + (l.honor > l.greed
+        ? `On dira dans la vallée qu'ils ont tenu aussi longtemps qu'ils ont pu.`
+        : `On dira dans la vallée qu'ils attendaient le bon prix depuis longtemps.`));
+}
+
 // Le tir des hommes décide d'une fusillade. C'est aussi ce qui donne enfin un
 // poids à la carabine de chaque cow-boy en dehors des coups montés.
 function ranchGunStrength(){
@@ -7543,6 +7681,327 @@ events.push(
         addLog(`${ha} ha classés en réserve : l'impôt baisse, et ces terres ne se vendront plus jamais.`,"good");}}
    ]},
 
+  // ==================================================== LES INVESTISSEURS
+  {condition:()=>state.year>=DEVELOPER_FROM&&developerPressure()>=12&&developerPressure()<40,
+   art:"city", title:"La première offre arrive par courrier recommandé",
+   text:()=>{const o=developerOffer(.25);
+     return `${state.developer.name}, ${state.developer.what}, propose ${moneyFmt.format(o.price)} $ pour ${o.ha} hectares `
+       + `de la façade est. C'est quatre fois le prix agricole. La lettre précise qu'elle vaut trente jours.`;},
+   image:"Une enveloppe épaisse posée près du courrier du ranch",
+   choices:[
+     {label:"Vendre la façade est",apply:()=>{
+        const o=developerOffer(.25);
+        state.land=Math.max(80,state.land-o.ha);ensureParcels();
+        state.money+=o.price;addDeveloperPressure(-6);state.legacy.greed++;
+        const c=factionOfType("community");if(c)c.relation=clamp(c.relation-18,-100,100);
+        addLog(`${o.ha} ha vendus ${moneyFmt.format(o.price)} $. Les bulldozers arrivent au printemps.`,"info");
+        recordSaga("developer","La façade est est vendue","city",
+          `${o.ha} ha cédés à ${state.developer.name}.`);}},
+     {label:"Refuser sans négocier",apply:()=>{
+        state.developer.refusals++;addDeveloperPressure(9);
+        state.unity=clamp(state.unity+5);state.legacy.honor++;
+        addLog("La lettre part au feu. Ils reviendront avec un chiffre plus gros.","info");}},
+     {label:"Faire monter et vendre une bande de terrain sans intérêt",apply:()=>{
+        const o=developerOffer(.08);
+        state.land=Math.max(80,state.land-o.ha);ensureParcels();
+        state.money+=Math.round(o.price*1.5);addDeveloperPressure(3);
+        addLog(`${o.ha} ha de caillasse vendus ${moneyFmt.format(Math.round(o.price*1.5))} $. Bien joué — pour cette fois.`,"good");}}
+   ]},
+
+  {condition:()=>state.year>=DEVELOPER_FROM&&developerPressure()>=30,
+   art:"crowd", title:"Ils ont acheté toute la vallée sauf vous",
+   text:()=>`${state.developer.name} a racheté les quatre ranchs voisins en dix-huit mois. `
+     + `Les clôtures qui vous entourent ne sont plus celles d'éleveurs. Le conseil municipal parle déjà de reclasser le secteur.`,
+   image:"Des panneaux « vendu » sur toutes les barrières de la vallée",
+   choices:[
+     {label:"Racheter le dernier voisin avant eux",condition:()=>state.money>=sc(1800),
+      apply:()=>{const c=spend(1800);if(c===false)return;
+        state.land+=Math.round(120*lot()/2);addParcel(Math.round(120*lot()/2));
+        addDeveloperPressure(-10);
+        const cf=factionOfType("community");if(cf)cf.relation=clamp(cf.relation+22,-100,100);
+        addLog(`${moneyFmt.format(c)} $ pour couper l'herbe sous le pied du fonds. La vallée respire.`,"good");}},
+     {label:"Faire front commun avec les éleveurs restants",apply:()=>{
+        const cf=factionOfType("community");if(cf)cf.relation=clamp(cf.relation+30,-100,100);
+        state.reputation=clamp(state.reputation+8);addDeveloperPressure(-4);
+        state.legacy.honor++;
+        addLog("Une association de défense se monte dans la salle des fêtes. Ça ne les arrêtera pas, mais ça les ralentira.","good");}},
+     {label:"Prendre contact et négocier votre propre sortie",apply:()=>{
+        addDeveloperPressure(14);state.legacy.greed++;
+        const g=sc(rand(400,900));state.money+=g;
+        addLog(`Un acompte de ${moneyFmt.format(g)} $ « pour l'exclusivité ». Vous venez de leur dire que vous étiez à vendre.`,"bad");}}
+   ]},
+
+  {condition:()=>state.year>=DEVELOPER_FROM&&developerPressure()>=45,
+   art:"law", title:"Le reclassement en zone constructible",
+   text:()=>`${state.developer.name} a obtenu la révision du plan d'occupation des sols. Vos pâturages deviennent constructibles — `
+     + `donc imposables au prix du terrain à bâtir. La note foncière va tripler.`,
+   image:"Un plan de zonage affiché derrière une vitre",
+   choices:[
+     {label:"Classer le domaine en servitude agricole perpétuelle",apply:()=>{
+        state.protectedLand=(state.protectedLand||0)+Math.round(state.land*.6);
+        state.taxRelief=(state.taxRelief||0)+35;
+        addDeveloperPressure(-25);state.legacy.honor+=2;
+        state.reputation=clamp(state.reputation+12);
+        const cf=factionOfType("community");if(cf)cf.relation=clamp(cf.relation+28,-100,100);
+        addLog("Signé devant notaire : ces terres ne seront jamais bâties. Ni par eux, ni par vos enfants.","good");
+        recordSaga("developer","Le domaine mis hors du marché pour toujours","land",
+          "Une signature qui lie toutes les générations à venir.");}},
+     {label:"Attaquer la révision au tribunal administratif",apply:()=>{
+        const c=Math.min(state.money,sc(rand(400,900)));state.money-=c;
+        if(chance(.45)){addDeveloperPressure(-14);
+          addLog(`${moneyFmt.format(c)} $ d'avocats, et la révision est annulée.`,"good");}
+        else {state.taxRelief=0;addDeveloperPressure(6);
+          addLog(`${moneyFmt.format(c)} $ perdus : le reclassement tient.`,"bad");}}},
+     {label:"En profiter et vendre des lots vous-même",apply:()=>{
+        const o=developerOffer(.3);
+        state.land=Math.max(80,state.land-o.ha);ensureParcels();
+        state.money+=Math.round(o.price*1.3);state.legacy.greed+=2;
+        const cf=factionOfType("community");if(cf)cf.relation=clamp(cf.relation-30,-100,100);
+        state.reputation=clamp(state.reputation-12);
+        addLog(`${o.ha} ha lotis par vos soins : ${moneyFmt.format(Math.round(o.price*1.3))} $. La vallée ne vous le pardonnera pas.`,"info");}}
+   ]},
+
+  {condition:()=>state.year>=DEVELOPER_FROM&&developerPressure()>=55
+     &&state.children.some(c=>c.alive!==false&&c.age>=18),
+   art:"family", title:"Un héritier a signé dans votre dos",
+   text:()=>{const k=state.children.filter(c=>c.alive!==false&&c.age>=18)
+       .sort((a,b)=>(b.resentment||0)-(a.resentment||0))[0];
+     return `${k.name} a rencontré ${state.developer.name} sans vous le dire, et signé une promesse de vente sur sa part future. `
+       + `${k.sex==="f"?"Elle":"Il"} dit qu'${k.sex==="f"?"elle":"il"} n'a jamais voulu de ce ranch, et que personne ne le lui a jamais demandé.`;},
+   image:"Un contrat signé oublié sur une table de cuisine",
+   choices:[
+     {label:"Racheter sa part au prix fort",condition:()=>state.money>=sc(2200),
+      apply:()=>{const c=spend(2200);if(c===false)return;
+        const k=state.children.filter(x=>x.alive!==false&&x.age>=18)
+          .sort((a,b)=>(b.resentment||0)-(a.resentment||0))[0];
+        if(k){k.resentment=Math.max(0,(k.resentment||0)-30);k.bond=clamp((k.bond||50)+10);}
+        addDeveloperPressure(-12);
+        addLog(`${moneyFmt.format(c)} $ pour racheter ce qui n'aurait jamais dû se vendre. ${k?k.name:"L'héritier"} reste.`,"info");}},
+     {label:"Le déshériter et le chasser du ranch",apply:()=>{
+        const k=state.children.filter(x=>x.alive!==false&&x.age>=18)
+          .sort((a,b)=>(b.resentment||0)-(a.resentment||0))[0];
+        if(k){
+          state.children=state.children.filter(c=>c.cid!==k.cid);
+          if(state.heirId===k.cid) state.heirId=null;
+          state.unity=clamp(state.unity-25);
+          recordSaga("hardship",`${k.name} est chassé du ranch`,"family",
+            "Une signature de trop. La porte s'est refermée derrière.");
+          addLog(`${k.name} part le soir même. On ne prononcera plus ce prénom à table.`,"bad");
+        }
+        addDeveloperPressure(4);state.legacy.grudges.push({name:"un enfant renié", year:state.year});}},
+     {label:"Laisser partir sa part et réduire le domaine d'autant",apply:()=>{
+        const o=developerOffer(.2);
+        state.land=Math.max(80,state.land-o.ha);ensureParcels();
+        state.money+=Math.round(o.price*.5);
+        addDeveloperPressure(8);state.unity=clamp(state.unity-8);
+        addLog(`${o.ha} ha partent avec lui. Le ranch en sort amputé, la famille entière.`,"info");}}
+   ]},
+
+  {condition:()=>state.year>=DEVELOPER_FROM&&developerPressure()>=70,
+   art:"city", title:"L'offre qui ferme tout",
+   text:()=>{const o=developerOffer(1);
+     return `${state.developer.name} met sur la table ${moneyFmt.format(o.price)} $ pour la totalité : les ${state.land} hectares, `
+       + `le troupeau, les bâtiments et le nom. Personne dans la famille n'aura plus jamais à travailler. `
+       + `Personne dans la famille n'aura plus jamais de ranch.`;},
+   image:"Un contrat de vente et un stylo posés sur la table",
+   choices:[
+     {label:"Signer et tourner la page",apply:()=>{
+        const o=developerOffer(1);
+        sellTheRanch(o.price);}},
+     {label:"Refuser, et le dire publiquement",apply:()=>{
+        state.developer.refusals++;addDeveloperPressure(-18);
+        state.reputation=clamp(state.reputation+14);state.unity=clamp(state.unity+12);
+        state.legacy.honor+=2;
+        const m=factionOfType("media");if(m)m.relation=clamp(m.relation+25,-100,100);
+        const cf=factionOfType("community");if(cf)cf.relation=clamp(cf.relation+25,-100,100);
+        addLog("Le refus est lu à voix haute devant la presse locale. La vallée applaudit. Le fonds attendra.","good");
+        recordSaga("developer","L'offre totale refusée","ranch",
+          `${moneyFmt.format(developerOffer(1).price)} $ refusés pour que le nom reste sur le portail.`);}},
+     {label:"Vendre la moitié et garder le cœur du domaine",apply:()=>{
+        const o=developerOffer(.5);
+        state.land=Math.max(80,state.land-o.ha);ensureParcels();
+        state.cattle=Math.round(state.cattle*.5);
+        state.money+=o.price;addDeveloperPressure(-8);
+        state.legacy.greed++;state.unity=clamp(state.unity-6);
+        addLog(`${o.ha} ha et la moitié du troupeau contre ${moneyFmt.format(o.price)} $. Le ranch survit, en plus petit.`,"info");}}
+   ]},
+
+  {condition:()=>state.year>=DEVELOPER_FROM&&developerPressure()>=25,
+   art:"night", title:"L'hélicoptère au-dessus des pâtures",
+   text:"Un hélicoptère survole le domaine trois matins de suite, à basse altitude. Les bêtes se dispersent, deux vaches gestantes avortent. Personne ne répond au numéro peint sous la carlingue.",
+   image:"Une ombre de rotor sur l'herbe rase",
+   choices:[
+     {label:"Porter plainte et faire constater",apply:()=>{
+        const f=factionOfType("law");if(f)f.relation=clamp(f.relation+10,-100,100);
+        addDeveloperPressure(-3);
+        addLog("Le constat d'huissier coûte cher mais fait un dossier. Les survols cessent.","good");
+        state.money-=Math.min(state.money,sc(rand(80,180)));}},
+     {label:"Attendre avec une carabine et tirer en l'air",apply:()=>{
+        state.suspicion=clamp(state.suspicion+18);
+        if(chance(.5)){addDeveloperPressure(-8);
+          addLog("L'hélicoptère ne revient pas. L'enquête, si.","info");}
+        else {const c=Math.min(state.money,sc(rand(200,500)));state.money-=c;
+          state.reputation=clamp(state.reputation-8);
+          addLog(`Mise en examen pour mise en danger : ${moneyFmt.format(c)} $ et un article en une.`,"bad");}}},
+     {label:"Ne rien faire",apply:()=>{
+        const l=Math.min(state.cattle,rand(2,6));state.cattle-=l;
+        addDeveloperPressure(3);
+        addLog(`${l} bêtes perdues, et le message est passé : ici, c'est chez eux maintenant.`,"bad");}}
+   ]},
+
+  // ================================================ CHOIX QUI N'ONT PAS DE RETOUR
+  {eraId:"industrial", art:"night", title:"L'homme qu'on n'a jamais revu",
+   condition:()=>state.suspicion>=25&&(state.cowboys||[]).length>=2,
+   text:"Un inspecteur véreux fait chanter le ranch depuis six mois. Ce matin, votre contremaître explique posément qu'il existe une solution, qu'elle ne coûtera rien, et qu'il ne faudra plus jamais en parler.",
+   image:"Deux hommes qui parlent bas près d'un pick-up",
+   choices:[
+     {label:"Dire non, et payer ce qu'il demande",apply:()=>{
+        const c=Math.min(state.money,sc(rand(300,700)));state.money-=c;
+        state.suspicion=clamp(state.suspicion-6);state.legacy.honor++;
+        addLog(`${moneyFmt.format(c)} $ versés. Il reviendra, et on paiera encore.`,"info");}},
+     {label:"Laisser le contremaître régler ça",apply:()=>{
+        state.suspicion=clamp(state.suspicion+25);state.legacy.greed+=2;
+        state.legacy.grudges.push({name:"un inspecteur disparu", year:state.year});
+        (state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty+6));
+        recordSaga("hardship","Un inspecteur disparaît du comté","night",
+          "Personne au ranch n'en a jamais reparlé.");
+        addLog("On ne reverra pas l'inspecteur. Les hommes ne posent aucune question — c'est ce qui inquiète.","bad");}},
+     {label:"Tout déballer soi-même aux autorités",apply:()=>{
+        const c=Math.min(state.money,sc(rand(150,400)));state.money-=c;
+        state.suspicion=clamp(state.suspicion-30);state.reputation=clamp(state.reputation+10);
+        state.legacy.honor+=2;
+        const f=factionOfType("law");if(f)f.relation=clamp(f.relation+25,-100,100);
+        addLog(`Le ranch se dénonce avant d'être dénoncé : ${moneyFmt.format(c)} $ d'amende, et le maître chanteur tombe.`,"good");}}
+   ]},
+
+  {eraId:"corporate", art:"family", title:"L'héritier veut partir",
+   condition:()=>state.children.some(c=>c.alive!==false&&c.age>=18&&c.age<=32),
+   text:()=>{const k=state.children.filter(c=>c.alive!==false&&c.age>=18&&c.age<=32)[0];
+     return `${k.name} a une place en ville, un vrai salaire et personne pour ${k.sex==="f"?"lui dire":"lui dire"} quand se lever. `
+       + `${k.sex==="f"?"Elle":"Il"} demande votre bénédiction, mais ${k.sex==="f"?"elle":"il"} partira sans.`;},
+   image:"Une valise faite au pied du lit",
+   choices:[
+     {label:"Le laisser partir avec sa part",apply:()=>{
+        const k=state.children.filter(c=>c.alive!==false&&c.age>=18&&c.age<=32)[0];
+        const c=Math.min(state.money,sc(rand(400,900)));state.money-=c;
+        if(k){state.children=state.children.filter(x=>x.cid!==k.cid);
+          if(state.heirId===k.cid)state.heirId=null;}
+        state.unity=clamp(state.unity-6);state.legacy.honor++;
+        addLog(`${k?k.name:"L'héritier"} part avec ${moneyFmt.format(c)} $ et la bénédiction de la maison.`,"info");}},
+     {label:"Le retenir en lui donnant les rênes maintenant",apply:()=>{
+        const k=state.children.filter(c=>c.alive!==false&&c.age>=18&&c.age<=32)[0];
+        if(k){designateHeir(k.cid);k.bond=clamp((k.bond||50)+18);k.ambition=clamp((k.ambition||50)+15);}
+        state.unity=clamp(state.unity+8);
+        addLog(`${k?k.name:"L'héritier"} reste, et signe demain. Les autres enfants l'apprendront par la rumeur.`,"good");
+        state.children.forEach(c=>{if(k&&c.cid!==k.cid)c.resentment=clamp((c.resentment||0)+18);});}},
+     {label:"Lui interdire de partir",apply:()=>{
+        const k=state.children.filter(c=>c.alive!==false&&c.age>=18&&c.age<=32)[0];
+        if(k){k.resentment=clamp((k.resentment||0)+35);k.bond=clamp((k.bond||50)-20);}
+        state.unity=clamp(state.unity-14);
+        addLog(`${k?k.name:"L'héritier"} reste. Ce n'est pas la même chose que rester de son plein gré.`,"bad");}}
+   ]},
+
+  {eraId:"globalization", art:"law", title:"Les fédéraux au bout du chemin",
+   condition:()=>state.suspicion>=40||claimStrength()>=18,
+   text:"Deux véhicules fédéraux bloquent l'accès depuis l'aube, pour une histoire de droits de pâturage impayés sur les terres publiques. Trois éleveurs du comté sont déjà arrivés avec leurs fusils, et attendent votre signal.",
+   image:"Des pick-up en travers d'un chemin de terre",
+   choices:[
+     {label:"Renvoyer tout le monde chez soi et payer",apply:()=>{
+        const c=Math.min(state.money,sc(rand(400,1000)));state.money-=c;
+        state.suspicion=clamp(state.suspicion-18);
+        const f=factionOfType("law");if(f)f.relation=clamp(f.relation+18,-100,100);
+        const cf=factionOfType("community");if(cf)cf.relation=clamp(cf.relation-12,-100,100);
+        addLog(`${moneyFmt.format(c)} $ payés, et les fusils remis au râtelier. Certains voisins ne comprendront pas.`,"info");}},
+     {label:"Tenir le blocus",apply:()=>{
+        state.suspicion=clamp(state.suspicion+30);
+        const cf=factionOfType("community");if(cf)cf.relation=clamp(cf.relation+30,-100,100);
+        const f=factionOfType("law");if(f)f.relation=clamp(f.relation-40,-100,100);
+        const m=factionOfType("media");if(m)m.relation=clamp(m.relation+15,-100,100);
+        state.reputation=clamp(state.reputation+6);
+        if(chance(.3)){const n=hurtCowboys(1,true);
+          addLog(`Le face-à-face dure onze jours et finit mal. ${casualtyLine(n)}`,"bad");}
+        else addLog("Les véhicules fédéraux repartent au bout de onze jours. Le comté ne parlera que de ça pendant dix ans.","good");
+        recordSaga("hardship","Onze jours de face-à-face avec les fédéraux","law",
+          "Le ranch a tenu le chemin, fusils au râtelier ou pas.");}},
+     {label:"Livrer les meneurs pour sauver le ranch",apply:()=>{
+        const f=factionOfType("law");if(f)f.relation=clamp(f.relation+30,-100,100);
+        const cf=factionOfType("community");if(cf)cf.relation=clamp(cf.relation-45,-100,100);
+        state.suspicion=clamp(state.suspicion-25);
+        state.legacy.greed++;state.reputation=clamp(state.reputation-10);
+        state.legacy.grudges.push({name:"les éleveurs du comté", year:state.year});
+        addLog("Le ranch est tranquille. Plus personne dans la vallée ne vous serrera la main.","bad");}}
+   ]},
+
+  {eraId:"modern", art:"land", title:"La dernière source de la vallée",
+   text:"L'étiage de cette année met tout le monde à sec sauf vous : la source du haut coule encore, sur vos terres. Le comté demande officiellement l'autorisation d'y puiser pour les bourgs en aval.",
+   image:"Un filet d'eau claire entre deux rochers",
+   choices:[
+     {label:"Ouvrir la source gratuitement",apply:()=>{
+        const cf=factionOfType("community");if(cf)cf.relation=clamp(cf.relation+40,-100,100);
+        state.reputation=clamp(state.reputation+16);state.legacy.honor+=2;
+        state.feed=Math.max(0,state.feed-rand(30,70));
+        addLog("Les camions-citernes viennent remplir chaque matin. Le comté n'oubliera pas.","good");
+        recordSaga("hardship","La source ouverte à toute la vallée","land",
+          "L'année où le ranch a fait boire le comté.");}},
+     {label:"La vendre au prix de l'eau",apply:()=>{
+        const g=sc(rand(500,1200));state.money+=g;state.legacy.greed+=2;
+        const cf=factionOfType("community");if(cf)cf.relation=clamp(cf.relation-35,-100,100);
+        state.reputation=clamp(state.reputation-14);
+        addLog(`${moneyFmt.format(g)} $ pour de l'eau qui tombe du ciel. On vous appellera comme ça longtemps.`,"info");}},
+     {label:"Fermer l'accès et garder tout pour le troupeau",apply:()=>{
+        const cf=factionOfType("community");if(cf)cf.relation=clamp(cf.relation-25,-100,100);
+        state.cattle+=Math.min(20,Math.floor(state.cattle*.04));
+        addDeveloperPressure(4);
+        addLog("Le troupeau passe l'été sans une perte. La vallée, elle, regarde ailleurs quand vous passez.","info");}}
+   ]},
+
+  {eraId:"modern", art:"family", title:"Ce que le testament n'avait pas prévu",
+   condition:()=>state.children.filter(c=>c.alive!==false&&c.age>=18).length>=2,
+   text:"Le notaire est formel : sans acte de partage signé de votre vivant, le domaine sera vendu à la découpe pour payer les droits, et chaque héritier touchera sa part en liquide.",
+   image:"Un notaire et une pile de dossiers",
+   choices:[
+     {label:"Tout donner à un seul, maintenant",apply:()=>{
+        const adults=adultHeirs();
+        const pick=adults.sort((a,b)=>(b.ambition||0)-(a.ambition||0))[0];
+        if(pick){designateHeir(pick.cid);
+          state.children.forEach(c=>{if(c.cid!==pick.cid)c.resentment=clamp((c.resentment||0)+30);});}
+        state.taxRelief=(state.taxRelief||0)+15;
+        state.unity=clamp(state.unity-18);
+        addLog(`Tout ira à ${pick?pick.name:"l'aîné"}, d'un bloc. Les autres l'ont appris chez le notaire.`,"info");
+        recordSaga("fisc","Le domaine légué d'un seul bloc","money",
+          "Un seul héritier, et des frères et sœurs qui ne reviendront plus.");}},
+     {label:"Créer une société familiale à parts égales",apply:()=>{
+        state.unity=clamp(state.unity+14);
+        state.children.forEach(c=>{c.resentment=clamp((c.resentment||0)-12);});
+        state.taxRelief=(state.taxRelief||0)+8;
+        addLog("Chacun sa part, personne aux commandes. Il faudra désormais un vote pour vendre une vache.","info");}},
+     {label:"Ne rien signer et laisser faire",apply:()=>{
+        state.unity=clamp(state.unity-6);
+        addLog("Le notaire range ses dossiers. La note tombera sur la génération suivante.","info");}}
+   ]},
+
+  {eraId:"modern", art:"machine", title:"Le train de nuit vers l'abattoir",
+   condition:()=>state.cattle>=200,
+   text:"L'unique acheteur régional impose ses prix depuis trois ans. Un courtier propose de tout charger en une nuit vers un abattoir hors de l'État — sans traçabilité complète, mais à trente pour cent au-dessus.",
+   image:"Des bétaillères alignées phares allumés",
+   choices:[
+     {label:"Charger",apply:()=>{
+        const n=Math.min(state.cattle,Math.ceil(state.cattle*.35));
+        state.cattle-=n;const g=Math.round(n*state.cattlePrice*1.3);state.money+=g;
+        state.suspicion=clamp(state.suspicion+22);state.legacy.greed++;
+        addLog(`${n} bêtes parties dans la nuit : ${moneyFmt.format(g)} $. Aucun papier ne dit où.`,"good");}},
+     {label:"Refuser et négocier collectivement avec l'acheteur",apply:()=>{
+        const cf=factionOfType("community");if(cf)cf.relation=clamp(cf.relation+20,-100,100);
+        state.cattlePriceMin=Math.min(state.cattlePriceMax-4,state.cattlePriceMin+3);
+        state.legacy.honor++;
+        addLog("Six éleveurs signent ensemble : le prix plancher remonte pour tout le monde.","good");}},
+     {label:"Dénoncer le courtier",apply:()=>{
+        const f=factionOfType("law");if(f)f.relation=clamp(f.relation+22,-100,100);
+        state.reputation=clamp(state.reputation+8);
+        state.legacy.grudges.push({name:"le réseau du courtier", year:state.year});
+        addLog("Le courtier tombe. Ceux qui travaillaient avec lui savent d'où c'est parti.","info");}}
+   ]},
+
   {condition:()=>ventureOfEra()&&ventureLevel(ventureOfEra().id)>0,
    art:"machine", title:"L'affaire réclame sa mise à niveau",
    text:()=>{const v=ventureOfEra();return `${v.name} tourne depuis des années sans un dollar d'entretien lourd. Le matériel vieillit, et un contrôle est annoncé.`;},
@@ -7781,6 +8240,17 @@ function showRandomEvent(){
 function finishTurn(){
   checkGameOver();
   checkAchievements();
+  // Le maillon suivant de l'année en cours. `endTurn` est appelée par son nom
+  // nu à dessein : le bloc 3 l'enveloppe, et une référence capturée figerait
+  // la version initiale (voir « Pièges connus » dans le README).
+  if(!state.gameOver && (state.autoQuarters || 0) > 0){
+    state.autoQuarters--;
+    state.chaining = true;
+    endTurn();
+    return;
+  }
+  state.autoQuarters = 0;
+  state.chaining = false;
   render();
 }
 
@@ -8189,7 +8659,7 @@ document.getElementById("familyBtn").addEventListener("click",()=>{renderFamily(
 <h2>Coups en douce</h2>
 <p class="modal-intro" id="illegalIntro"></p>
 <div id="illegalContent"></div>
-<button class="choice" onclick="illegalModal.classList.add('hidden')">Renoncer pour ce trimestre</button>
+<button class="choice" onclick="illegalModal.classList.add('hidden')">Renoncer pour cette fois</button>
 </div></div>
 
 <div id="squadModal" class="modal hidden"><div class="modal-card">
@@ -8317,7 +8787,7 @@ function openIllegalPanel(){
 function renderIllegalPanel(){
  const ops = illegalOps();
  $("illegalIntro").textContent =
-   "Chaque coup engage une action du trimestre. Les chances tiennent compte de vos armes, "
+   "Chaque coup engage une des actions du tour. Les chances tiennent compte de vos armes, "
    + "de vos hommes, de votre argent, de vos appuis et des soupçons qui pèsent déjà sur le ranch ("
    + state.suspicion + "/100).";
  let h = "";

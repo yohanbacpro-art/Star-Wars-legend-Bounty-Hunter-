@@ -1,4 +1,4 @@
-# Ranch Dynasty — V3.6
+# Ranch Dynasty — V3.7
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -38,6 +38,10 @@ Le CSS est dans un unique `<style>` en tête de fichier.
 - **`state.claimPressure`** — le poids de la revendication foncière ashkani, alimenté
   par chaque hectare pris de force. Voir `claimStrength()`.
 - **`state.mobTies`** — les liens noués avec la pègre sous la Prohibition.
+- **`state.developer`** — l'investisseur immobilier entré en scène après 2010,
+  avec sa `pressure` et le nombre de refus essuyés.
+- **`state.autoQuarters` / `state.chaining`** — le déroulé d'une année en quatre
+  trimestres (voir « Le tour annuel »). Ne jamais les manipuler à la main.
 - **`state.debt`** — dette d'exploitation, servie chaque trimestre par `serviceDebt()`.
 - **`state.protectedLand`** — hectares classés : hors assiette fiscale, et insaisissables.
 - **`state.taxRelief`** — allègement fiscal arraché au comté, qui s'érode chaque année.
@@ -286,6 +290,40 @@ vérifie aussi qu'aucune illustration n'écrase les autres.
 `legacy` tant qu'aucune dynastie n'est tombée, réécrit la note explicative et le
 libellé du bouton de départ.
 
+## Le tour annuel
+
+141 ans × 4 saisons = 564 tours, alors que la seconde moitié du siècle n'a plus
+grand-chose de saisonnier à décider. **À partir de 1950 (`ANNUAL_FROM`), un tour
+couvre une année entière.** Mesuré : une partie complète passe de **564 à 337
+fins de tour**, sans perdre un seul événement.
+
+L'implémentation ne touche pas à la simulation. `endTurn()` continue de simuler
+**exactement un trimestre** ; une année se joue en enchaînant quatre trimestres :
+
+- `endTurn()` pose `state.autoQuarters = 3` quand le joueur ouvre une année ;
+- `finishTurn()` — seul point de convergence après une modale, quel que soit le
+  chemin (événement, arc, brève, doctrine, transition d'époque) — décrémente le
+  compteur et rappelle `endTurn()` ;
+- `state.chaining` distingue « le joueur ouvre une année » de « la chaîne se
+  poursuit ». ⚠️ **Sans ce drapeau, le dernier maillon rouvrait une année et
+  bouclait à l'infini** — c'est le premier bug qu'a produit cette mécanique.
+
+Conséquences voulues :
+
+- les saisons continuent de produire veaux, récoltes et impôts **aux mêmes
+  dates** : l'équilibrage reste comparable (3 322 ha et 1 160 têtes en fin de
+  partie, contre 3 862 et 1 299 en V3.6) ;
+- `actionsPerTurn()` passe de 3 à **6**, et `lot()` de 1 à **4** : une action
+  annuelle porte sur 20 bovins, 80 hectares ou 160 balles. Sans cela, passer à
+  l'année divisait par deux ce qu'un ranch peut faire — le joueur se sentait
+  affaibli plutôt que soulagé ;
+- les trimestres intercalaires tirent moins d'événements (52 % contre 82 %) et
+  ne produisent pas de brève, pour environ **deux événements et demi par
+  année** au lieu de quatre d'affilée ;
+- toute l'interface bascule : « Terminer l'année », « Décisions de l'année »,
+  en-tête et journal datés à l'année. Un test vérifie qu'aucun libellé ne parle
+  encore de trimestre.
+
 ## L'économie tardive
 
 Le défaut mesuré jusqu'en V3.5 : passé 1950, l'argent s'accumulait sans emploi
@@ -358,13 +396,58 @@ une partie bien menée. Chaque époque a désormais ses ennuis à sa mesure — 
 | Époque | Ce qui peut mettre la panade |
 |---|---|
 | Prohibition | L'homme de Chicago, fusillade au portail nord, camion disparu, raid fédéral, adjoint retrouvé mort, alambic clandestin |
+| — | *(183 événements au total, contre 144 en V3.5)* |
 | Après-guerre | Autoroute expropriante, quarantaine pour brucellose, traites du tracteur, retombées d'essai nucléaire, grève aux abattoirs |
 | Années 80 | Taux à vingt pour cent, rachat hostile, scandale des hormones, incendie de la grange |
 | Mondialisation | Embargo vache folle, retour des loups, partage des droits d'eau, promoteur immobilier |
-| Aujourd'hui | Mégafeu, caméra cachée, rançongiciel, sécheresse structurelle |
+| Aujourd'hui | Mégafeu, caméra cachée, rançongiciel, sécheresse structurelle, la dernière source de la vallée, le train de nuit vers l'abattoir, le partage impossible |
 
 `state.mobTies` mesure les liens noués avec la pègre : ils ouvrent des
 événements, et les referment quand on les rompt.
+
+## Les investisseurs, à partir de 2010
+
+La dernière époque n'a plus de rival à cheval : elle a des gens qui achètent des
+vallées entières depuis un bureau. `ensureDeveloper()` en fait entrer un en
+scène dès 2010 (`DEVELOPER_FROM`), et sa `pressure` monte toute seule — d'autant
+plus vite que le domaine est vaste, la maison respectée, et les refus nombreux.
+Elle est calibrée pour que l'escalade complète tienne dans les seize ans qui
+restent.
+
+Chaque palier ouvre son événement :
+
+| Pression | Ce qui arrive |
+|---|---|
+| 12 | La première offre, par courrier recommandé : quatre fois le prix agricole |
+| 25 | L'hélicoptère au-dessus des pâtures, trois matins de suite |
+| 30 | Ils ont racheté toute la vallée sauf vous |
+| 45 | Le reclassement en zone constructible — la note foncière triple |
+| 55 | Un héritier a signé dans votre dos |
+| 70 | **L'offre qui ferme tout** |
+
+`sellTheRanch()` est un vrai bouton de sortie : la partie s'arrête, riche et
+sans nom, avec sa propre fin (« Le ranch vendu ») et son propre verdict selon
+que la lignée était honorable ou avide. Ce n'est pas un échec — c'est un choix,
+et il ferme la dynastie pour de bon. L'héritage moral est enregistré comme pour
+n'importe quelle fin, donc la partie suivante peut relever le nom.
+
+La contre-mesure existe : la **servitude agricole perpétuelle** met le domaine
+hors du marché pour toujours, fait retomber la pression de 25 points et allège
+l'impôt — au prix que ces terres ne se vendront plus jamais, ni par vous ni par
+vos enfants.
+
+## Les choix qui n'ont pas de retour
+
+Quelques événements engagent la maison au-delà du tour, dans l'esprit d'une
+saga plutôt que d'un jeu de gestion : laisser le contremaître « régler » le cas
+d'un inspecteur véreux, déshériter et chasser l'enfant qui a signé derrière
+votre dos, tenir un blocus onze jours face aux fédéraux, livrer les meneurs pour
+sauver le ranch, ouvrir la dernière source de la vallée ou la vendre au prix de
+l'eau, léguer tout à un seul héritier devant ses frères et sœurs.
+
+Ils laissent tous une trace durable — une rancune dans `legacy.grudges`, un
+enfant retiré de `state.children`, une entrée dans la chronique — et aucun n'a
+d'annulation.
 
 ## Les cow-boys comptent enfin
 
@@ -421,24 +504,28 @@ chargement et à l'import. **Toute nouvelle propriété de `state` doit y être 
 
 ## Équilibrage
 
-Courbe mesurée sur 40 parties par profil (`node tests/sim.js index.html 40 <profil>`) :
+Courbe mesurée sur 30 parties par profil (`node tests/sim.js index.html 30 <profil>`) :
 
-| Profil | Description | Fin médiane | Trésorerie finale* | Terres | Troupeau |
-|---|---|---|---|---|---|
-| `passive` | ne fait rien | 1893 | −239 | 185 | 25 |
-| `outlaw` | contrebande à chaque trimestre | 1905 | 27 291 | 320 | 28 |
-| `honest` | concours et élevage | 2026 | 460 463 | 2 269 | 752 |
-| `mixed` | troupeau + crime d'appoint | 2026 | 492 125 | 3 783 | 1 266 |
-| `policy` | conduite complète du ranch | 2026 | 561 756 | 3 862 | 1 299 |
+| Profil | Description | Fin médiane | Tours joués | Trésorerie finale* | Terres | Troupeau |
+|---|---|---|---|---|---|---|
+| `passive` | ne fait rien | 1893 | 35 | −201 | 195 | 33 |
+| `outlaw` | contrebande à chaque tour | 1905 | 83 | 37 272 | 320 | 33 |
+| `honest` | concours et élevage | 2026 | 337 | 374 084 | 1 703 | 582 |
+| `mixed` | troupeau + crime d'appoint | 2026 | 337 | 464 984 | 3 009 | 1 052 |
+| `policy` | conduite complète du ranch | 2026 | 337 | 463 372 | 3 322 | 1 160 |
 
 \* en dollars de 1885, seule façon de comparer d'une époque à l'autre.
 
-**Effet mesuré de l'économie tardive.** À conduite égale, la trésorerie finale
-d'un jeu compétent passe de **1,43 M$ (V3.5) à 0,56 M$ (V3.6)** en dollars
-constants, sans que le domaine ni le troupeau ne reculent (3 862 ha, 1 299
-têtes) : ce n'est pas un appauvrissement du ranch, c'est de l'argent qui a enfin
-un emploi et des prélèvements à sa mesure. Les droits de succession seuls
-reprennent 3,5 à 4,6 M$ par partie.
+**Effet du tour annuel.** Une partie complète tombe de **564 à 337 fins de
+tour** — 40 % de moins — sans perdre un seul événement : la seconde moitié du
+siècle se joue à l'année, la première reste au trimestre. L'équilibrage bouge
+peu (3 322 ha contre 3 862 en V3.6), la différence venant des six actions
+annuelles au lieu de douze.
+
+**Effet de l'économie tardive.** À conduite égale, la trésorerie finale d'un jeu
+compétent est passée de **1,43 M$ (V3.5) à 0,46 M$** en dollars constants, sans
+que le domaine ni le troupeau ne reculent : ce n'est pas un appauvrissement du
+ranch, c'est de l'argent qui a enfin un emploi et des prélèvements à sa mesure.
 
 L'inaction reste sanctionnée, comme le veut le principe du déficit passif ; c'est
 la conduite du ranch qui fait la différence.
@@ -523,7 +610,8 @@ sans aucune dépendance :
 # chronique de la saga, tournant fondateur.
 # export de la chronique, variantes de départ.
 # affaires d'époque, fiscalité, escouade, revendication foncière, pègre.
-# 497 vérifications, sortie non nulle en cas d'échec.
+# tour annuel, investisseurs immobiliers.
+# 541 vérifications, sortie non nulle en cas d'échec.
 node tests/scenarios.js index.html
 
 # Simulation de masse.
@@ -546,12 +634,12 @@ profils : il compare facilement deux versions du fichier
 - Quelques objectifs restent des jalons plus que des défis (`united`, `oldHand`
   sont atteints par ~98 % des parties bien menées)
 
-- **Une partie complète reste très longue** : 141 ans × 4 saisons = 564 tours.
-  Passer au tour annuel après 1950 la diviserait par quatre sans rien retirer
-  au récit — c'est la piste la plus prometteuse pour le rythme
 - **Un jeu compétent atteint encore 2026 dans presque tous les cas.** Les
-  nouveaux ennuis coûtent cher sans jamais tuer : il manque une menace qui
-  puisse réellement emporter une dynastie établie
+  ennuis coûtent cher sans jamais tuer : il manque une menace qui puisse
+  réellement emporter une dynastie établie. La vente aux investisseurs est
+  aujourd'hui la seule vraie sortie de fin de partie, et elle est volontaire
+- **La première moitié reste au trimestre** : 260 tours de 1885 à 1949. Passer
+  au tour annuel dès 1920, ou au semestre, la raccourcirait encore
 - Le départ `established` est nettement plus clément que les deux autres : il
   mériterait sa propre difficulté, ou un handicap compensatoire (dettes du
   prédécesseur, rancune héritée)
