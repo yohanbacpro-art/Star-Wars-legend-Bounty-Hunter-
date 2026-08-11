@@ -1,4 +1,4 @@
-# Ranch Dynasty — V3.7
+# Ranch Dynasty — V3.8
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -42,7 +42,14 @@ Le CSS est dans un unique `<style>` en tête de fichier.
   avec sa `pressure` et le nombre de refus essuyés.
 - **`state.autoQuarters` / `state.chaining`** — le déroulé d'une année en quatre
   trimestres (voir « Le tour annuel »). Ne jamais les manipuler à la main.
-- **`state.debt`** — dette d'exploitation, servie chaque trimestre par `serviceDebt()`.
+- **`state.debt` / `state.missedPayments`** — dette d'exploitation et échéances
+  manquées. Six échéances manquées emportent le domaine.
+- **`state.arrears` / `state.arrearYears`** — impôt impayé et années de retard.
+- **`state.quarantine` / `state.receivership`** — les deux états qui coupent les
+  revenus à la source, en tours restants.
+- **`state.obsolescence`** — mises aux normes repoussées. Ronge les revenus, et
+  se cumule.
+- **`state.nextCall`** — l'année de la prochaine mise aux normes.
 - **`state.protectedLand`** — hectares classés : hors assiette fiscale, et insaisissables.
 - **`state.taxRelief`** — allègement fiscal arraché au comté, qui s'érode chaque année.
 - **`state.startMode`** — variante de départ : `founder` | `established` | `legacy`.
@@ -290,6 +297,64 @@ vérifie aussi qu'aucune illustration n'écrase les autres.
 `legacy` tant qu'aucune dynastie n'est tombée, réécrit la note explicative et le
 libellé du bouton de départ.
 
+## Une dynastie établie peut tomber
+
+Le défaut mesuré jusqu'en V3.7 : les ennuis coûtaient cher, mais une trésorerie
+de plusieurs millions absorbait tout, et **toutes les chutes restaient
+antérieures à 1950**. Pour qu'une chute soit possible sans être injuste, il faut
+des menaces qui (1) s'attaquent à la capacité d'exploiter et non au tas
+d'argent, (2) s'aggravent d'elles-mêmes si on ne fait rien, (3) se voient venir
+des années à l'avance.
+
+### Ce qui pousse un grand domaine à s'endetter
+
+`presentCapitalCall()` — **la mise aux normes**, tous les sept ans à partir de
+1958 (`CALL_FROM`, `CALL_PERIOD`). Ce n'est pas un événement aléatoire : c'est
+un rendez-vous, qui prime sur tout le reste du tour. Le devis vaut
+`sc(400) + land×sc(3) + cattle×sc(4)`, **donc il grandit avec le domaine** — un
+petit ranch paie une misère, un empire paie près de deux années de bénéfice, en
+liquide. Trois issues :
+
+- **payer comptant** — il faut avoir gardé la trésorerie ;
+- **emprunter** (+15 %) — et la traite commence ;
+- **repousser** — `state.obsolescence` monte d'un cran et les revenus tombent à
+  84 %, puis 68 %, puis 52 %… C'est la spirale : chaque report rend le suivant
+  plus difficile à payer.
+
+### Les trois chutes
+
+| | Le compte à rebours | Ce qui l'arrête |
+|---|---|---|
+| **La banque** | La dette réclame une traite fixe (`requiredPayment()`). Trois échéances manquées et elle exécute sa garantie ; **six et le domaine est vendu aux enchères** | Vendre du bétail ou des terres, rééchelonner |
+| **Le comté** | L'impôt impayé devient un arriéré qui court avec pénalités. À deux ans il est cédé à la banque ; **à quatre, le comté exproprie** | Payer, obtenir un échéancier, vendre des terres |
+| **La famille** | Une succession sans héritier désigné dans une maison à moins de 30 d'unité déclenche `partitionEstate()` : le domaine est **divisé entre tous les prétendants** et toutes les parts sauf une quittent la famille | Désigner un héritier, remonter l'unité |
+
+S'y ajoutent deux états contre lesquels aucune trésorerie ne protège, parce
+qu'ils coupent les revenus à la source : la **quarantaine** (aucune vente
+possible, revenus du troupeau au quart) et l'**administration judiciaire**
+(revenus à 45 %, aucune acquisition). Et un plancher : sous 40 hectares, il n'y
+a plus de ranch.
+
+### Rien n'arrive par surprise
+
+`alarms()` alimente un bandeau au-dessus des actions. Chaque menace mortelle y
+figure avec **le nombre de coups qui restent** et **ce qu'il faut faire pour
+l'éviter** : « Banque — 4 échéances manquées sur 6 », « Comté — 2 années
+d'impôt impayé sur 4 », « Succession — aucun héritier désigné, maison divisée ».
+
+### Mesuré
+
+Sur 20 parties d'un même empire de 1960 (3 000 ha, 1 100 têtes, 400 000 $) :
+
+- **le joueur qui repousse systématiquement tout : 20 chutes sur 20**, toutes
+  par faillite ;
+- **le même empire tenu — fourrage, surplus vendu, factures payées : 8 à 10
+  survies sur 10.**
+
+La chute est donc la conséquence de la négligence, pas de la malchance. En
+simulation ordinaire, les chutes postérieures à 1950 représentent 3 à 4 parties
+sur 40 en jeu compétent — possible, pas probable.
+
 ## Le tour annuel
 
 141 ans × 4 saisons = 564 tours, alors que la seconde moitié du siècle n'a plus
@@ -471,6 +536,18 @@ bons tireurs, les armes et les enfants affectés à la sécurité. C'est elle qu
 décide de l'issue des fusillades de la Prohibition. `hurtCowboys()` paie
 l'addition en visages, pas en points de jauge.
 
+Le catalogue compte **36 opérations, quatre à six par époque**. Les quatorze
+ajoutées en V3.8 répondent aux nouveaux systèmes : *faire disparaître un
+certificat vétérinaire* lève une quarantaine, *faire racheter sa propre dette*
+par un prête-nom en efface une part et remet le compteur d'échéances à zéro,
+*faire passer de l'argent par le ranch* met le domaine sous administration
+judiciaire quand ça rate. S'y ajoutent le déplacement de clôture, le
+détournement de ruisseau, le détournement de convoi (l'opération la plus
+dangereuse du jeu), le débit clandestin, la revente de l'aide alimentaire, le
+retrait avant fermeture de la banque, l'achat du syndicat des routiers,
+l'incendie assuré, la fraude aux quotas d'export, le surprélèvement d'eau et la
+fausse certification bio.
+
 ⚠️ `runIllegalOp(id)` sans escouade reste valable et joue sur la moyenne du
 ranch : c'est la voie qu'empruntent les tests et les simulations.
 `chooseIllegalOp(id)` est le point d'entrée de l'interface.
@@ -496,6 +573,10 @@ chargement et à l'import. **Toute nouvelle propriété de `state` doit y être 
   initiale et le code du bloc 3 ne s'exécuterait jamais. Toujours `()=>endTurn()`.
 - Ne jamais identifier un enfant par son prénom : le joueur peut le renommer et deux
   enfants peuvent être homonymes. Utiliser `cid`.
+- ⚠️ **Un libellé de choix peut être une fonction** (pour citer un montant à
+  l'échelle de l'époque). `presentEvent` doit le passer par `evalField` : sans
+  cela le bouton affiche le code source de la fonction. Un test balaie tous les
+  événements pour s'en assurer.
 - ⚠️ **Un événement dont toutes les branches sont conditionnelles peut s'afficher
   sans aucun bouton** et bloquer la partie. `presentEvent` ajoute désormais une
   sortie « Laisser passer » en dernier recours, et un test éprouve chaque
@@ -504,28 +585,27 @@ chargement et à l'import. **Toute nouvelle propriété de `state` doit y être 
 
 ## Équilibrage
 
-Courbe mesurée sur 30 parties par profil (`node tests/sim.js index.html 30 <profil>`) :
+Courbe mesurée sur 40 parties par profil (`node tests/sim.js index.html 40 <profil>`) :
 
-| Profil | Description | Fin médiane | Tours joués | Trésorerie finale* | Terres | Troupeau |
+| Profil | Description | Fin médiane | Tours | Trésorerie finale* | Terres | Troupeau |
 |---|---|---|---|---|---|---|
-| `passive` | ne fait rien | 1893 | 35 | −201 | 195 | 33 |
-| `outlaw` | contrebande à chaque tour | 1905 | 83 | 37 272 | 320 | 33 |
-| `honest` | concours et élevage | 2026 | 337 | 374 084 | 1 703 | 582 |
-| `mixed` | troupeau + crime d'appoint | 2026 | 337 | 464 984 | 3 009 | 1 052 |
-| `policy` | conduite complète du ranch | 2026 | 337 | 463 372 | 3 322 | 1 160 |
+| `passive` | ne fait rien | 1893 | 35 | −246 | 185 | 25 |
+| `outlaw` | contrebande à chaque tour | 1905 | 83 | 10 553 | 320 | 28 |
+| `honest` | concours et élevage | 2026 | 337 | 301 959 | 1 733 | 595 |
+| `mixed` | troupeau + crime d'appoint | 2026 | 337 | 269 430 | 3 110 | 1 087 |
+| `policy` | conduite complète du ranch | 2026 | 337 | 289 163 | 3 125 | 1 086 |
 
 \* en dollars de 1885, seule façon de comparer d'une époque à l'autre.
 
-**Effet du tour annuel.** Une partie complète tombe de **564 à 337 fins de
-tour** — 40 % de moins — sans perdre un seul événement : la seconde moitié du
-siècle se joue à l'année, la première reste au trimestre. L'équilibrage bouge
-peu (3 322 ha contre 3 862 en V3.6), la différence venant des six actions
-annuelles au lieu de douze.
+**Où en est la trésorerie de fin de partie**, en dollars constants, à conduite
+égale : 1,43 M$ en V3.5, 0,56 M$ en V3.6 (impôts et affaires d'époque), 0,46 M$
+en V3.7 (tour annuel), **0,29 M$ en V3.8** (mises aux normes). Le domaine, lui,
+n'a pas reculé : 3 125 ha et 1 086 têtes. L'argent a un emploi et des
+échéances ; il ne s'entasse plus.
 
-**Effet de l'économie tardive.** À conduite égale, la trésorerie finale d'un jeu
-compétent est passée de **1,43 M$ (V3.5) à 0,46 M$** en dollars constants, sans
-que le domaine ni le troupeau ne reculent : ce n'est pas un appauvrissement du
-ranch, c'est de l'argent qui a enfin un emploi et des prélèvements à sa mesure.
+**Chutes postérieures à 1950**, jusque-là inexistantes : 3 parties sur 40 en jeu
+compétent, 11 sur 40 en jeu hors-la-loi — faillites, expropriations fiscales et
+ventes volontaires.
 
 L'inaction reste sanctionnée, comme le veut le principe du déficit passif ; c'est
 la conduite du ranch qui fait la différence.
@@ -611,7 +691,8 @@ sans aucune dépendance :
 # export de la chronique, variantes de départ.
 # affaires d'époque, fiscalité, escouade, revendication foncière, pègre.
 # tour annuel, investisseurs immobiliers.
-# 541 vérifications, sortie non nulle en cas d'échec.
+# chute d'une dynastie établie, quarantaine, partage, alertes, libellés.
+# 618 vérifications, sortie non nulle en cas d'échec.
 node tests/scenarios.js index.html
 
 # Simulation de masse.
@@ -634,10 +715,10 @@ profils : il compare facilement deux versions du fichier
 - Quelques objectifs restent des jalons plus que des défis (`united`, `oldHand`
   sont atteints par ~98 % des parties bien menées)
 
-- **Un jeu compétent atteint encore 2026 dans presque tous les cas.** Les
-  ennuis coûtent cher sans jamais tuer : il manque une menace qui puisse
-  réellement emporter une dynastie établie. La vente aux investisseurs est
-  aujourd'hui la seule vraie sortie de fin de partie, et elle est volontaire
+- **La chute d'une dynastie établie reste rare en jeu compétent** (3 parties sur
+  40 après 1950). C'est voulu — mais elle vient presque toujours de la banque ;
+  le partage successoral et l'expropriation fiscale se déclenchent moins souvent
+  qu'ils ne le devraient
 - **La première moitié reste au trimestre** : 260 tours de 1885 à 1949. Passer
   au tour annuel dès 1920, ou au semestre, la raccourcirait encore
 - Le départ `established` est nettement plus clément que les deux autres : il

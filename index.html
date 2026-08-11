@@ -549,6 +549,18 @@
   .saga-title{font-weight:700;line-height:1.3}
   .saga-detail{font-size:.86rem;color:var(--muted);line-height:1.4}
   /* ---- L'escouade : on choisit qui part, et on le voit ---- */
+  /* ---- Les alertes : une chute doit se voir venir des années à l'avance ---- */
+  .alarms{display:grid;gap:8px;margin-bottom:14px}
+  .alarm{
+    display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start;
+    padding:10px 12px;border:1px solid var(--bad);
+    background:color-mix(in srgb, var(--bad) 12%, var(--surface));
+  }
+  .alarm.warn{border-color:var(--gold);background:color-mix(in srgb, var(--gold) 12%, var(--surface))}
+  .alarm-icon{font-size:1.25rem;line-height:1.2}
+  .alarm b{display:block;margin-bottom:2px}
+  .alarm small{color:var(--muted);line-height:1.4}
+
   .squad-man{cursor:pointer}
   .squad-man.picked{border-color:var(--gold);background:var(--surface-hi)}
   .squad-man .op-icon{color:var(--muted);font-weight:700}
@@ -816,6 +828,7 @@
         <div class="panel">
           <div class="panel-title" id="decisionsTitle">Décisions du trimestre</div>
           <div class="panel-body">
+            <div id="alarms" class="alarms hidden"></div>
             <div class="actions-grid">
               <button class="action" data-action="buyCattle">
                 <span class="icon">🐂</span>
@@ -1309,6 +1322,15 @@ function resolveSuccession(){
       `Sans désignation, par droit d'aînesse, à ${heir.age} ans.`);
   }
 
+  // Le partage : une maison profondément divisée, plusieurs prétendants et
+  // aucun héritier désigné, et le domaine se coupe en parts. C'est la seule
+  // chute qui vienne de l'intérieur — et la plus brutale sur un grand ranch,
+  // parce qu'elle divise ce qu'aucune trésorerie ne peut racheter.
+  if(!designated && contenders.length >= 2 && state.unity < 30 && chance(.55)){
+    partitionEstate(heirs);
+    return;
+  }
+
   if(challenger && chance(Math.min(.75, contestChance))){
     state.stats.contestedSuccessions++;
     state.unity = clamp(state.unity - rand(10,20));
@@ -1331,6 +1353,50 @@ function resolveSuccession(){
     contenders.forEach(c => c.resentment = clamp((c.resentment||0) - 15));
     addLog("La passation se fait sans heurt : la fratrie accepte la décision.", "good");
   }
+}
+
+// Le partage successoral : le domaine est divisé entre les prétendants, et
+// toutes les parts sauf une quittent la famille dans l'année. Un grand ranch
+// peut y perdre les deux tiers de sa surface d'un seul coup.
+function partitionEstate(heirs){
+  const parts = heirs.length;
+  const keep = 1 / parts;
+  const lostLand = Math.round(state.land * (1 - keep));
+  const lostCattle = Math.round(state.cattle * (1 - keep));
+  const lostMoney = Math.round(Math.max(0, state.money) * (1 - keep));
+
+  state.land = Math.max(20, state.land - lostLand);
+  state.cattle = Math.max(0, state.cattle - lostCattle);
+  state.money -= lostMoney;
+  ensureParcels();
+  state.partitioned = (state.partitioned || 0) + 1;
+  state.unity = clamp(state.unity - rand(15,25));
+  state.stats.contestedSuccessions++;
+
+  // Celui qui reste est le moins rancunier : c'est lui qui n'a pas voulu vendre.
+  const stays = heirs.reduce((a,b) => (b.resentment||0) < (a.resentment||0) ? b : a, heirs[0]);
+  const leaving = heirs.filter(h => h.cid !== stays.cid);
+  state.children = state.children.filter(c => !leaving.some(l => l.cid === c.cid));
+  if(state.lineage && state.lineage.length) state.lineage[state.lineage.length-1].endYear = state.year;
+  state.founder = {
+    name: stays.name, sex: stays.sex || "m", age: stays.age,
+    health: stays.health !== undefined ? stays.health : 90, alive: true,
+    traits: [heirWord(stays)]
+  };
+  state.children = state.children.filter(c => c.cid !== stays.cid);
+  state.lineage.push({
+    name: stays.name,
+    role: "Héritier d'un domaine partagé",
+    startYear: state.year, endYear: null
+  });
+  state.heirId = null;
+  if(state.developer) addDeveloperPressure(15);
+
+  addLog(`Faute d'accord, le notaire partage le domaine en ${parts} parts. `
+    + `${leaving.map(l=>l.name).join(", ")} vend${leaving.length>1?"ent":""} la sienne dans l'année. `
+    + `${stays.name} garde ${state.land} ha et ${state.cattle} bêtes.`, "bad");
+  recordSaga("succession", `Le domaine partagé en ${parts}`, "family",
+    `${lostLand} ha et ${lostCattle} bêtes quittent la famille. ${stays.name} reste seul·e à tenir ce qui subsiste.`);
 }
 
 // ---- La carte du domaine ----
@@ -2755,6 +2821,7 @@ const DOCTRINES = {
      apply:()=>{ state.land += 140; addParcel(140);
        state.legacy.greed++;
        addClaimPressure(6);
+       addClaimPressure(6);
        const c = factionOfType("community"); if(c) c.relation = clamp(c.relation - 12, -100, 100); }}
   ],
   prohibition:[
@@ -3273,7 +3340,28 @@ const ILLEGAL_OPS = {
        addClaimPressure(4, "Les terres occupées jouxtent celles que la nation ashkani n'a jamais cessé de revendiquer.");
        addLog("20 hectares passent discrètement sous votre clôture.","good"); },
      onFail:()=>{ const f=Math.min(state.money,sc(rand(90,180))); state.money-=f;
-       addLog(`Un titre de propriété refait surface : ${f} $ de frais de justice.`,"bad"); }}
+       addLog(`Un titre de propriété refait surface : ${f} $ de frais de justice.`,"bad"); }},
+    {id:"fenceLine", icon:"🪤", name:"Déplacer la clôture d'un voisin",
+     what:"Une nuit de travail, cinquante piquets, et la limite du domaine se retrouve un peu plus loin qu'avant.",
+     gain:[0,0], sus:[9,16], base:.58, edge:"shoot", squad:true, danger:.22,
+     reward:"30 hectares pris sur le voisin",
+     needs:()=>({ok:(state.cowboys||[]).length>=2, why:"Il faut au moins deux cow-boys."}),
+     fail:"Le voisin a compté ses piquets, et il est revenu avec le géomètre.",
+     onWin:()=>{ state.land+=30; addParcel(30); addClaimPressure(3);
+       addLog("Trente hectares changent de côté sans qu'aucun acte ne bouge.","good"); },
+     onFail:()=>{ const f=Math.min(state.money,sc(rand(80,200))); state.money-=f;
+       const c=factionOfType("community"); if(c) c.relation=clamp(c.relation-20,-100,100);
+       addLog(`Bornage contradictoire et ${f} $ de frais : la clôture retourne où elle était.`,"bad"); }},
+    {id:"waterHole", icon:"💧", name:"Détourner le ruisseau du voisin",
+     what:"Une digue de pierres en amont, et l'eau prend le chemin de vos pâtures au lieu des siennes.",
+     gain:[0,0], sus:[11,19], base:.55, edge:"money",
+     reward:"des pâtures grasses et du fourrage en plus",
+     fail:"Il remonte le cours d'eau et trouve la digue avant vous.",
+     onWin:()=>{ state.feed+=Math.max(40,Math.floor(state.land/4));
+       addLog("Le ruisseau change de vallée. Les pâtures du bas reverdissent.","good"); },
+     onFail:()=>{ state.rival.relation=clamp(state.rival.relation-25,-100,100);
+       const c=factionOfType("community"); if(c) c.relation=clamp(c.relation-22,-100,100);
+       addLog("La digue est démontée devant témoins. Le comté saura qui l'avait montée.","bad"); }}
   ],
   prohibition:[
     {id:"runBooze", icon:"🥃", name:"Convoyer une cargaison d'alcool",
@@ -3296,7 +3384,25 @@ const ILLEGAL_OPS = {
      onWin:()=>{ const r=rand(25,40); state.suspicion=clamp(state.suspicion-r);
        state.sheriffRelation=clamp(state.sheriffRelation+12,-100,100);
        addLog(`Le dossier est classé : ${r} points de soupçons effacés.`,"good"); },
-     onFail:()=>{ addLog("Le juge transmet votre offre au procureur du district.","bad"); }}
+     onFail:()=>{ addLog("Le juge transmet votre offre au procureur du district.","bad"); }},
+    {id:"hijack", icon:"🚚", name:"Détourner un convoi concurrent",
+     what:"Un chargement qui ne vous appartient pas change de route à la sortie du canyon.",
+     cost:60, gain:[561,990], sus:[18,28], base:.48, edge:"shoot", squad:true, danger:.4,
+     needs:()=>({ok:(state.cowboys||[]).length>=3, why:"Il faut au moins trois cow-boys."}),
+     fail:"Ils étaient trois voitures, pas une, et ils tiraient les premiers.",
+     onWin:()=>{ addMobTies(1); state.rival.relation=clamp(state.rival.relation-15,-100,100);
+       addLog("Le chargement finit dans votre grange. Quelqu'un, ailleurs, compte ses pertes.","good"); },
+     onFail:()=>{ addMobTies(2); state.rival.strength=clamp(state.rival.strength+8,10,100);
+       addLog("L'embuscade était attendue. On vous doit désormais des explications, et de l'argent.","bad"); }},
+    {id:"speakeasy", icon:"🎷", name:"Tenir un débit clandestin à la grange",
+     what:"Un orchestre, deux tables de jeu et de quoi boire, à trois kilomètres de la route.",
+     cost:90, gain:[363,660], sus:[16,26], base:.56, edge:"relation",
+     fail:"Une descente un samedi soir, avec quarante clients à l'intérieur.",
+     onWin:()=>{ const m=factionOfType("media"); if(m) m.relation=clamp(m.relation+10,-100,100);
+       addLog("La grange ne désemplit pas. Personne n'a jamais rien vu.","good"); },
+     onFail:()=>{ state.reputation=clamp(state.reputation-rand(8,15));
+       const f=factionOfType("law"); if(f) f.relation=clamp(f.relation-30,-100,100);
+       addLog("Quarante noms au procès-verbal, dont le vôtre en tête.","bad"); }}
   ],
   depression:[
     {id:"blackBeef", icon:"🥩", name:"Vendre de la viande au marché noir",
@@ -3316,7 +3422,23 @@ const ILLEGAL_OPS = {
      gain:[297,561], sus:[10,18], base:.60, edge:"money",
      fail:"Le guichetier compare avec sa copie du contrat.",
      onFail:()=>{ const f=factionOfType("trade"); if(f) f.relation=clamp(f.relation-25,-100,100);
-       addLog("La banque du comté ferme le crédit du ranch.","bad"); }}
+       addLog("La banque du comté ferme le crédit du ranch.","bad"); }},
+    {id:"grainSwap", icon:"🌾", name:"Revendre l'aide alimentaire fédérale",
+     what:"Les sacs marqués du sceau de l'État repartent la nuit vers un négociant de l'autre comté.",
+     cost:40, gain:[297,528], sus:[15,24], base:.55, edge:"money",
+     fail:"Les sacs sont numérotés, et un inspecteur sait lire un numéro.",
+     onWin:()=>{ addLog("Le grain de l'aide se revend deux fois son prix officiel.","good"); },
+     onFail:()=>{ state.reputation=clamp(state.reputation-rand(10,18));
+       const c=factionOfType("community"); if(c) c.relation=clamp(c.relation-30,-100,100);
+       addLog("Voler l'aide aux affamés : le comté ne connaît pas pire.","bad"); }},
+    {id:"bankRun", icon:"🏦", name:"Vider le compte avant la fermeture",
+     what:"Vous savez avant tout le monde que la banque ferme lundi. Vous passez samedi.",
+     gain:[396,726], sus:[10,17], base:.60, edge:"relation",
+     fail:"Le directeur a bloqué les retraits une heure avant votre arrivée.",
+     onWin:()=>{ const t=factionOfType("trade"); if(t) t.relation=clamp(t.relation-15,-100,100);
+       addLog("L'argent est sorti à temps. Les voisins, eux, ont tout perdu lundi.","good"); },
+     onFail:()=>{ state.debt=(state.debt||0)+sc(rand(120,300));
+       addLog("Le compte est gelé, et ce qui restait dessus devient une créance sur vous.","bad"); }}
   ],
   industrial:[
     {id:"weights", icon:"⚖️", name:"Truquer les balances à l'abattoir",
@@ -3339,7 +3461,27 @@ const ILLEGAL_OPS = {
      gain:[363,627], sus:[13,21], base:.57, edge:"shoot",
      fail:"Les bons de livraison ne correspondent pas aux cuves.",
      onFail:()=>{ const f=Math.min(state.money,sc(rand(120,220))); state.money-=f;
-       addLog(`Le détournement est facturé au ranch : ${f} $.`,"bad"); }}
+       addLog(`Le détournement est facturé au ranch : ${f} $.`,"bad"); }},
+    {id:"vetPapers", icon:"📋", name:"Faire disparaître un certificat vétérinaire",
+     what:"Un dossier sanitaire embarrassant sort du classeur du service, et n'y revient pas.",
+     cost:120, gain:[0,0], sus:[16,26], base:.52, edge:"relation",
+     reward:"une quarantaine levée ou évitée",
+     fail:"Le double du certificat était au bureau régional.",
+     onWin:()=>{ if(state.quarantine>0){ state.quarantine=0;
+         addLog("La quarantaine est levée du jour au lendemain, sans explication.","good"); }
+       else { state.suspicion=clamp(state.suspicion-8);
+         addLog("Le dossier disparaît avant d'avoir servi à quoi que ce soit.","good"); } },
+     onFail:()=>{ setQuarantine(rand(3,6),"Le faux en écriture publique double la consigne.");
+       state.reputation=clamp(state.reputation-rand(8,14)); }},
+    {id:"payoffTeamster", icon:"🛻", name:"Acheter le syndicat des routiers",
+     what:"Une enveloppe au délégué, et vos bêtes partent les premières quand les autres attendent.",
+     cost:140, gain:[330,594], sus:[12,20], base:.58, edge:"money",
+     fail:"Le délégué remplace l'enveloppe par un enregistrement.",
+     onWin:()=>{ const c=factionOfType("community"); if(c) c.relation=clamp(c.relation+18,-100,100);
+       addLog("Vos camions passent devant tout le monde au quai de chargement.","good"); },
+     onFail:()=>{ const c=factionOfType("community"); if(c) c.relation=clamp(c.relation-30,-100,100);
+       state.suspicion=clamp(state.suspicion+15);
+       addLog("L'enregistrement circule dans tous les dépôts de l'État.","bad"); }}
   ],
   corporate:[
     {id:"books", icon:"📚", name:"Maquiller les comptes du ranch",
@@ -3363,7 +3505,29 @@ const ILLEGAL_OPS = {
      reward:"40 hectares bien placés",
      fail:"L'information était fausse — ou le piège était pour vous.",
      onWin:()=>{ state.land+=40; addLog("40 hectares reclassés tombent dans votre escarcelle.","good"); },
-     onFail:()=>{ addLog("Le tuyau était éventé. L'argent est perdu.","bad"); }}
+     onFail:()=>{ addLog("Le tuyau était éventé. L'argent est perdu.","bad"); }},
+    {id:"insuranceFire", icon:"🔥", name:"Un incendie bien placé",
+     what:"Le vieux hangar ne servait plus à rien, et il était assuré pour bien plus qu'il ne valait.",
+     gain:[726,1287], sus:[22,34], base:.46, edge:"weapons",
+     fail:"L'expert incendie repère l'accélérant en vingt minutes.",
+     onWin:()=>{ state.legacy.greed++;
+       addLog("L'expert conclut à un défaut électrique. Le chèque arrive en six semaines.","good"); },
+     onFail:()=>{ state.suspicion=clamp(state.suspicion+25);
+       const f=factionOfType("law"); if(f) f.relation=clamp(f.relation-30,-100,100);
+       state.debt=(state.debt||0)+sc(rand(200,500));
+       addLog("Fraude à l'assurance : la compagnie se retourne et réclame les indemnités passées.","bad"); }},
+    {id:"strawBuyer", icon:"🤝", name:"Faire racheter sa propre dette",
+     what:"Un intermédiaire complaisant rachète votre créance à la banque, à trente cents le dollar.",
+     cost:180, gain:[0,0], sus:[14,22], base:.54, edge:"money",
+     reward:"une bonne part de la dette effacée",
+     needs:()=>({ok:(state.debt||0)>0, why:"Il faut avoir une dette à racheter."}),
+     fail:"La banque comprend le montage et dénonce le prêt.",
+     onWin:()=>{ const cut=Math.round((state.debt||0)*rand(35,60)/100);
+       state.debt=Math.max(0,(state.debt||0)-cut); state.missedPayments=0;
+       addLog(`${moneyFmt.format(cut)} $ de dette rachetés pour une bouchée de pain.`,"good"); },
+     onFail:()=>{ state.debt=Math.round((state.debt||0)*1.25);
+       state.missedPayments=(state.missedPayments||0)+1;
+       addLog("Le prêt est dénoncé : tout devient exigible, et la dette gonfle.","bad"); }}
   ],
   globalization:[
     {id:"offshore", icon:"🏝️", name:"Loger les bénéfices à l'étranger",
@@ -3384,7 +3548,25 @@ const ILLEGAL_OPS = {
      cost:180, gain:[330,627], sus:[10,18], base:.63, edge:"relation",
      fail:"Le fonctionnaire est muté la veille de la signature.",
      onFail:()=>{ const l=factionOfType("law"); if(l) l.relation=clamp(l.relation-20,-100,100);
-       addLog("Le dossier repart au fond de la pile, et on se souvient de vous.","bad"); }}
+       addLog("Le dossier repart au fond de la pile, et on se souvient de vous.","bad"); }},
+    {id:"quotaFraud", icon:"🌐", name:"Vendre sous un quota qui n'est pas le vôtre",
+     what:"Le numéro d'agrément d'un éleveur qui a cessé son activité vous ouvre un marché fermé.",
+     cost:150, gain:[594,1056], sus:[16,26], base:.55, edge:"money",
+     fail:"Le douanier du port croise les numéros d'agrément.",
+     onWin:()=>{ addLog("Le lot part à l'export sous un agrément qui n'existe plus.","good"); },
+     onFail:()=>{ const f=Math.min(state.money,sc(rand(300,700))); state.money-=f;
+       state.cattlePriceMax=Math.max(state.cattlePriceMin+6,state.cattlePriceMax-4);
+       addLog(`Fraude aux quotas : ${moneyFmt.format(f)} $ d'amende et un agrément suspendu.`,"bad"); }},
+    {id:"waterRights", icon:"🚰", name:"Pomper au-delà de votre droit",
+     what:"Le compteur est trafiqué depuis deux ans, et la nappe ne s'en est pas encore aperçue.",
+     gain:[0,0], sus:[13,22], base:.60, edge:"money",
+     reward:"des réserves de fourrage qu'aucune sécheresse n'entame",
+     fail:"Le relevé contradictoire tombe en pleine restriction.",
+     onWin:()=>{ state.feed+=Math.max(80,Math.floor(state.land/2));
+       addLog("Les prairies tiennent tout l'été pendant que la vallée grille.","good"); },
+     onFail:()=>{ const c=factionOfType("community"); if(c) c.relation=clamp(c.relation-35,-100,100);
+       const f=Math.min(state.money,sc(rand(250,600))); state.money-=f;
+       addLog(`Surprélèvement en période de restriction : ${moneyFmt.format(f)} $ et la vallée au courant.`,"bad"); }}
   ],
   modern:[
     {id:"shell", icon:"🏢", name:"Racheter la terre par société-écran",
@@ -3411,7 +3593,26 @@ const ILLEGAL_OPS = {
      onWin:()=>{ state.rival.strength=clamp(state.rival.strength-rand(8,16),10,100);
        addLog("Les dossiers du rival vous donnent une longueur d'avance.","good"); },
      onFail:()=>{ state.rival.relation=clamp(state.rival.relation-20,-100,100);
-       addLog("L'achat de dossiers était un piège tendu par le rival.","bad"); }}
+       addLog("L'achat de dossiers était un piège tendu par le rival.","bad"); }},
+    {id:"organicLabel", icon:"🥬", name:"Certifier bio ce qui ne l'est pas",
+     what:"Deux lignes changées dans le registre d'élevage, et tout le troupeau devient éligible au label.",
+     cost:200, gain:[792,1386], sus:[15,25], base:.56, edge:"money",
+     fail:"L'audit surprise compare le registre aux factures du vétérinaire.",
+     onWin:()=>{ state.cattlePriceMin=Math.min(state.cattlePriceMax-4,state.cattlePriceMin+3);
+       addLog("Le label triple la marge sur chaque bête. Personne n'est venu voir.","good"); },
+     onFail:()=>{ state.reputation=clamp(state.reputation-rand(12,20));
+       state.cattlePriceMin=Math.max(8,state.cattlePriceMin-3);
+       const t=factionOfType("trade"); if(t) t.relation=clamp(t.relation-30,-100,100);
+       addLog("Certification retirée et publiée : le ranch est sur la liste noire des acheteurs.","bad"); }},
+    {id:"pipeline", icon:"💰", name:"Faire passer de l'argent par le ranch",
+     what:"Des ventes de bétail qui n'ont jamais eu lieu, payées par virement depuis trois pays.",
+     cost:260, gain:[1188,2079], sus:[22,34], base:.50, edge:"relation",
+     fail:"La cellule anti-blanchiment gèle les comptes du ranch.",
+     onWin:()=>{ state.legacy.greed+=2;
+       addLog("Les virements passent, la comptabilité est impeccable, et personne n'a vu une seule bête.","good"); },
+     onFail:()=>{ setReceivership(rand(3,6),"Les comptes du ranch sont gelés le temps de l'enquête.");
+       state.suspicion=clamp(state.suspicion+30);
+       addLog("Comptes gelés et administrateur nommé : le ranch ne s'appartient plus.","bad"); }}
   ]
 };
 
@@ -3482,7 +3683,7 @@ function squadMinimum(op){
 function chooseIllegalOp(id){
   const op = illegalOps().find(o => o.id === id);
   if(!op) return;
-  if(state.actions <= 0 || state.gameOver){ toast("Plus d'action disponible ce trimestre."); return; }
+  if(state.actions <= 0 || state.gameOver){ toast("Plus d'action disponible ce tour."); return; }
   const need = op.needs ? op.needs() : {ok:true};
   if(!need.ok){ toast(need.why); return; }
   if(op.cost && state.money < sc(op.cost)){ toast("Vous n'avez pas assez d'argent."); return; }
@@ -3865,25 +4066,308 @@ function propertyRate(){
 
 // Une dette contractée en 1955 se rappelle à toutes les générations suivantes :
 // elle court chaque trimestre, et se rembourse dès que la caisse le permet.
-function serviceDebt(){
-  if(!state.debt || state.debt <= 0){ state.debt = 0; return; }
-  const rate = state.eraId === "corporate" ? .045 : .028;
-  const interest = Math.round(state.debt * rate);
-  state.debt += interest;
-  // On rembourse ce qu'on peut sans mettre le ranch à sec.
-  const spare = Math.max(0, state.money - sc(400));
-  const repay = Math.min(state.debt, Math.round(spare * .25));
-  if(repay > 0){
-    state.money -= repay;
-    state.debt -= repay;
+// ============================================================================
+// LES TROIS FAÇONS DE PERDRE UN GRAND RANCH
+// ----------------------------------------------------------------------------
+// Défaut mesuré jusqu'en V3.7 : une dynastie établie ne tombait plus. Les
+// ennuis coûtaient cher, mais une trésorerie de plusieurs millions absorbait
+// tout. Pour qu'une chute soit possible sans être injuste, il faut des menaces
+// qui : (1) s'attaquent à la capacité d'exploiter, pas au tas d'argent ;
+// (2) s'aggravent d'elles-mêmes si on ne fait rien ; (3) se voient venir des
+// années à l'avance, avec des leviers pour s'en sortir.
+//
+//   LA BANQUE — la dette réclame une traite fixe chaque trimestre. Trois
+//     échéances manquées et elle saisit ; six et elle prend tout.
+//   LE COMTÉ — l'impôt impayé devient un arriéré qui court, puis une saisie,
+//     puis l'expropriation.
+//   LA FAMILLE — une succession contestée dans une maison divisée partage le
+//     domaine entre les héritiers, et une branche revend aussitôt.
+//
+// À quoi s'ajoutent deux états qui coupent les revenus à la source, là où la
+// trésorerie ne protège de rien : la QUARANTAINE (interdiction de vendre) et
+// l'ADMINISTRATION JUDICIAIRE (le ranch ne s'appartient plus).
+// ============================================================================
+
+// ---- L'appel de fonds ----
+// Ce qui manquait pour qu'un grand domaine puisse tomber : une obligation
+// périodique, en liquide, proportionnelle à sa taille. Un ranch riche en terres
+// et en bêtes mais à court de trésorerie doit emprunter — et c'est l'emprunt,
+// pas la mauvaise année, qui emporte les grandes maisons.
+//
+// Elle tombe tous les sept ans à partir de 1958, et se voit venir : le panneau
+// d'alerte l'annonce l'année d'avant. Trois issues, toutes acceptables sur le
+// moment, mais une seule qui ne coûte rien plus tard.
+const CALL_FROM = 1958;
+const CALL_PERIOD = 7;
+
+function capitalCallAmount(){
+  return Math.round(sc(400) + state.land * sc(3) + state.cattle * sc(4));
+}
+// L'obsolescence : ce qu'on paie pour avoir sauté un appel de fonds. Elle
+// s'accumule, et c'est cette accumulation qui fait la spirale.
+function obsolescenceFactor(){
+  return Math.max(.4, 1 - (state.obsolescence || 0) * .16);
+}
+
+function capitalCallDue(){
+  return state.year >= CALL_FROM && state.year >= (state.nextCall || CALL_FROM);
+}
+
+function presentCapitalCall(){
+  const amount = capitalCallAmount();
+  state.nextCall = state.year + CALL_PERIOD;
+  const era = ERAS.find(e => e.id === state.eraId) || getEra(state.year);
+  presentEvent({
+    art:"machine",
+    title:"Mise aux normes du domaine",
+    text:()=>`Clôtures, abreuvoirs, matériel de contention, mise en conformité sanitaire : `
+      + `l'exploitation ne peut plus tourner sans une remise à niveau complète. `
+      + `Le devis porte sur ${moneyFmt.format(amount)} $ — il grandit avec le domaine, `
+      + `et le domaine a grandi.`,
+    image:"Un devis de plusieurs pages sur le capot d'un pick-up",
+    choices:[
+      {label:()=>`Payer comptant (${moneyFmt.format(amount)} $)`,
+       condition:()=>state.money >= amount,
+       apply:()=>{
+         state.money -= amount;
+         state.obsolescence = Math.max(0, (state.obsolescence || 0) - 1);
+         addLog(`Mise aux normes réglée comptant : ${moneyFmt.format(amount)} $. Le matériel est neuf pour sept ans.`, "good");
+       }},
+      {label:()=>`Emprunter à la banque (${moneyFmt.format(Math.round(amount*1.15))} $ de dette)`,
+       apply:()=>{
+         state.debt = (state.debt || 0) + Math.round(amount * 1.15);
+         state.obsolescence = Math.max(0, (state.obsolescence || 0) - 1);
+         addLog(`Le chantier est financé à crédit : la dette passe à ${moneyFmt.format(state.debt)} $, `
+           + `avec une traite de ${moneyFmt.format(requiredPayment())} $ par tour.`, "info");
+       }},
+      {label:"Repousser encore",
+       apply:()=>{
+         state.obsolescence = (state.obsolescence || 0) + 1;
+         state.reputation = clamp(state.reputation - 3);
+         addLog(`Rien n'est fait. Le matériel vieillit : les revenus du ranch tombent à `
+           + `${Math.round(obsolescenceFactor()*100)} % de ce qu'ils devraient être.`, "bad");
+         if((state.obsolescence || 0) >= 3){
+           recordSaga("hardship", "Le domaine se dégrade faute d'entretien", "machine",
+             "Trois mises aux normes repoussées : l'exploitation ne suit plus.");
+         }
+       }}
+    ]
+  });
+}
+
+// Le tableau de bord des ennuis. Une dynastie doit pouvoir tomber, mais jamais
+// par surprise : chaque menace mortelle s'affiche ici, avec le nombre de coups
+// qui restent avant la chute et ce qu'il faut faire pour l'éviter.
+function alarms(){
+  const list = [];
+  const missed = state.missedPayments || 0;
+  if(missed > 0){
+    list.push({
+      level: missed >= 4 ? "bad" : "warn", icon:"🏦",
+      title: `Banque — ${missed} échéance${missed>1?"s":""} manquée${missed>1?"s":""} sur 6`,
+      what: `Traite de ${moneyFmt.format(requiredPayment())} $ par tour sur une dette de `
+        + `${moneyFmt.format(state.debt)} $. À la sixième, le domaine est vendu aux enchères. `
+        + `Vendre du bétail ou des terres remet le compteur à zéro.`
+    });
+  } else if((state.debt || 0) > 0){
+    list.push({level:"warn", icon:"🏦", title:`Dette de ${moneyFmt.format(state.debt)} $`,
+      what:`Traite de ${moneyFmt.format(requiredPayment())} $ par tour. Elle se prélève avant tout le reste.`});
   }
+  const nextCall = Math.max(state.nextCall || CALL_FROM, CALL_FROM);
+  if(state.year >= CALL_FROM - 2 && nextCall - state.year <= 2){
+    list.push({
+      level: nextCall <= state.year ? "bad" : "warn", icon:"🔧",
+      title: nextCall <= state.year ? "Mise aux normes exigible" : `Mise aux normes en ${nextCall}`,
+      what:`Environ ${moneyFmt.format(capitalCallAmount())} $, en liquide. Le devis grandit avec le domaine. `
+        + `À défaut, il faudra emprunter — ou laisser le matériel vieillir.`
+    });
+  }
+  if((state.obsolescence || 0) > 0){
+    list.push({
+      level: state.obsolescence >= 2 ? "bad" : "warn", icon:"⚙️",
+      title:`Matériel hors d'âge — ${state.obsolescence} mise${state.obsolescence>1?"s":""} aux normes repoussée${state.obsolescence>1?"s":""}`,
+      what:`Les revenus du ranch sont réduits à ${Math.round(obsolescenceFactor()*100)} %. `
+        + `Chaque report suivant enfonce un peu plus.`
+    });
+  }
+  const ay = state.arrearYears || 0;
+  if(ay > 0){
+    list.push({
+      level: ay >= 3 ? "bad" : "warn", icon:"🧾",
+      title:`Comté — ${ay} année${ay>1?"s":""} d'impôt impayé sur 4`,
+      what:`${moneyFmt.format(state.arrears||0)} $ d'arriérés. À deux ans, le comté cède la créance à la banque ; `
+        + `à quatre, il exproprie.`
+    });
+  }
+  if(underQuarantine()){
+    list.push({level:"bad", icon:"🚧", title:`Quarantaine — ${state.quarantine} tour${state.quarantine>1?"s":""} restant${state.quarantine>1?"s":""}`,
+      what:"Aucune bête ne peut être vendue et les revenus du troupeau sont réduits des trois quarts."});
+  }
+  if(inReceivership()){
+    list.push({level:"bad", icon:"⚖️", title:`Administration judiciaire — ${state.receivership} tour${state.receivership>1?"s":""}`,
+      what:"L'administrateur prélève l'essentiel des recettes et bloque toute acquisition de terres."});
+  }
+  if(adultHeirs().length >= 2 && state.unity < 30 && !heirChild()){
+    list.push({level:"bad", icon:"👥", title:"Succession — aucun héritier désigné, maison divisée",
+      what:"À la prochaine succession, le notaire partagera le domaine entre les prétendants et "
+        + "toutes les parts sauf une quitteront la famille. Désigner un héritier écarte ce risque."});
+  }
+  if(state.land < 120){
+    list.push({level:"bad", icon:"🗺️", title:`Domaine réduit à ${state.land} ha`,
+      what:"Sous 40 hectares, il n'y a plus de ranch à tenir."});
+  }
+  if(claimStrength() >= 22 && nationHasCourt()){
+    list.push({level:"warn", icon:"🪶", title:`Revendication foncière — ${claimStrength()} points`,
+      what:"Un jugement défavorable peut emporter une part importante du domaine. "
+        + "Un accord à l'amiable coûte bien moins cher."});
+  }
+  if(developerPressure() >= 55){
+    list.push({level:"warn", icon:"🏗️", title:`Investisseurs — pression ${Math.round(developerPressure())}/100`,
+      what:"Ils visent désormais la totalité. La servitude agricole perpétuelle est la seule chose "
+        + "qui les arrête pour de bon."});
+  }
+  return list;
+}
+
+function renderAlarms(){
+  const box = $("alarms");
+  if(!box) return;
+  const list = alarms();
+  box.classList.toggle("hidden", list.length === 0);
+  box.innerHTML = list.map(a =>
+    `<div class="alarm ${a.level}"><span class="alarm-icon">${a.icon}</span>`
+    + `<span><b>${a.title}</b><small>${a.what}</small></span></div>`
+  ).join("");
+}
+
+// La traite du trimestre : des intérêts, plus une part du capital. C'est ce
+// montant fixe, indépendant de la trésorerie, qui rend la dette dangereuse.
+function debtRate(){ return state.eraId === "corporate" ? .045 : .028; }
+function requiredPayment(){
+  if(!state.debt || state.debt <= 0) return 0;
+  return Math.max(1, Math.round(state.debt * (debtRate() + .04)));
+}
+
+function serviceDebt(){
+  if(!state.debt || state.debt <= 0){
+    state.debt = 0; state.missedPayments = 0; return;
+  }
+  const interest = Math.round(state.debt * debtRate());
+  state.debt += interest;
+  const due = requiredPayment();
+
+  if(state.money >= due){
+    state.money -= due;
+    state.debt = Math.max(0, state.debt - due);
+    // La traite est un minimum, pas un maximum : une caisse pleine solde vite.
+    const spare = Math.max(0, state.money - sc(600));
+    const extra = Math.min(state.debt, Math.round(spare * .35));
+    if(extra > 0){ state.money -= extra; state.debt -= extra; }
+    if(state.missedPayments > 0){
+      state.missedPayments = 0;
+      addLog("La traite est payée à l'heure. Le dossier repart de zéro à la banque.", "good");
+    }
+  } else {
+    // On verse ce qu'on peut, et l'échéance compte pour manquée.
+    const partial = Math.max(0, state.money);
+    state.money -= partial;
+    state.debt = Math.max(0, state.debt - partial);
+    state.missedPayments = (state.missedPayments || 0) + 1;
+    state.debt += Math.round(due * .12);
+    addLog(`Échéance manquée (${state.missedPayments}) : ${moneyFmt.format(due)} $ étaient dus, `
+      + `${moneyFmt.format(partial)} $ versés. Des pénalités s'ajoutent à la dette.`, "bad");
+
+    // Trois échéances manquées : la banque se sert. Six : elle prend tout.
+    if(state.missedPayments === 3){
+      const seized = bankSeizure();
+      addLog(`La banque exécute sa garantie : ${seized}. Il reste trois échéances avant la saisie totale.`, "bad");
+      recordSaga("hardship", "La banque exécute sa garantie", "money", seized);
+    } else if(state.missedPayments === 5){
+      addLog("Commandement de payer signifié par huissier. Une échéance encore et le domaine est vendu aux enchères.", "bad");
+    }
+  }
+
   if(state.debt <= 0){
-    state.debt = 0;
+    state.debt = 0; state.missedPayments = 0;
     addLog("La dernière traite est payée. Le ranch ne doit plus rien à personne.", "good");
   } else if(state.turn % 4 === 0){
-    addLog(`Dette en cours : ${moneyFmt.format(state.debt)} $ — ${moneyFmt.format(interest)} $ d'intérêts ce trimestre.`,
-      repay > 0 ? "info" : "bad");
+    addLog(`Dette : ${moneyFmt.format(state.debt)} $ — traite de ${moneyFmt.format(requiredPayment())} $ par trimestre.`,
+      state.missedPayments ? "bad" : "info");
   }
+}
+
+// La banque prend des bêtes, puis des hectares — jamais sous le plancher des
+// terres classées, qui sont précisément là pour ça.
+function bankSeizure(){
+  const target = Math.round(state.debt * .3);
+  let got = 0;
+  const heads = Math.min(state.cattle, Math.ceil(target / Math.max(1, state.cattlePrice)));
+  state.cattle -= heads;
+  got += heads * state.cattlePrice;
+  const floorLand = Math.max(40, state.protectedLand || 0);
+  let ha = 0;
+  if(got < target && state.land > floorLand){
+    ha = Math.min(state.land - floorLand, Math.ceil((target - got) / Math.max(1, sc(5))));
+    state.land -= ha;
+    ensureParcels();
+    got += ha * sc(5);
+  }
+  state.debt = Math.max(0, state.debt - got);
+  state.reputation = clamp(state.reputation - 6);
+  const bits = [];
+  if(heads) bits.push(`${heads} bête${heads>1?"s":""}`);
+  if(ha) bits.push(`${ha} ha`);
+  return bits.length ? bits.join(" et ") + " saisis" : "rien à saisir";
+}
+
+// ---- Les arriérés d'impôt ----
+// Le comté ne saisit plus au premier impayé : il laisse courir, avec pénalités.
+// C'est ce délai qui rend la menace lisible et évitable.
+function accrueArrears(amount){
+  state.arrears = (state.arrears || 0) + amount;
+  state.arrearYears = (state.arrearYears || 0) + 1;
+}
+function settleArrears(){
+  if(!state.arrears || state.arrears <= 0){ state.arrears = 0; state.arrearYears = 0; return; }
+  // Pénalité de retard, puis on paie ce qu'on peut.
+  state.arrears = Math.round(state.arrears * 1.12);
+  const paid = Math.min(Math.max(0, state.money), state.arrears);
+  state.money -= paid;
+  state.arrears -= paid;
+  if(state.arrears <= 0){
+    state.arrears = 0; state.arrearYears = 0;
+    addLog("Les arriérés d'impôt sont soldés. Le comté classe le dossier.", "good");
+    return;
+  }
+  if(state.arrearYears >= 2){
+    // Le comté hypothèque : l'arriéré bascule en dette bancaire, garantie sur
+    // le domaine. Les deux menaces convergent.
+    const moved = state.arrears;
+    state.debt = (state.debt || 0) + moved;
+    state.arrears = 0;
+    addLog(`Le comté cède sa créance de ${moneyFmt.format(moved)} $ à la banque, garantie sur le domaine.`, "bad");
+    recordSaga("fisc", "Le comté vend sa créance à la banque", "money",
+      `${moneyFmt.format(moved)} $ d'arriérés deviennent une dette hypothécaire.`);
+  } else {
+    addLog(`Arriéré d'impôt : ${moneyFmt.format(state.arrears)} $ reportés, avec pénalité de retard.`, "bad");
+  }
+}
+
+// ---- Quarantaine et administration judiciaire ----
+// Deux états qui coupent les revenus à la source. Une trésorerie n'y peut rien :
+// c'est exactement ce qui manquait pour qu'un grand ranch puisse tomber.
+function underQuarantine(){ return (state.quarantine || 0) > 0; }
+function inReceivership(){ return (state.receivership || 0) > 0; }
+function setQuarantine(turns, why){
+  state.quarantine = Math.max(state.quarantine || 0, turns);
+  addLog(`Quarantaine sanitaire : plus une bête ne sort du domaine pendant ${turns} tour${turns>1?"s":""}. ${why||""}`, "bad");
+  recordSaga("hardship", "Le domaine placé sous quarantaine", "herd", why || "Plus rien ne se vend.");
+}
+function setReceivership(turns, why){
+  state.receivership = Math.max(state.receivership || 0, turns);
+  addLog(`Le domaine passe sous administration judiciaire pour ${turns} tour${turns>1?"s":""}. ${why||""}`, "bad");
+  recordSaga("hardship", "Le ranch placé sous administration judiciaire", "law",
+    why || "La famille n'a plus la main sur son propre domaine.");
 }
 
 function annualLevy(){
@@ -3904,22 +4388,15 @@ function annualLevy(){
     addLog(`Impôt foncier de l'année : ${moneyFmt.format(due)} $ sur un domaine évalué à ${moneyFmt.format(estateValue())} $.`, "info");
     return;
   }
-  // Faute de trésorerie, on paie en bêtes puis en terres. Le fisc se sert.
-  const missing = due - Math.max(0, state.money);
-  state.money = Math.max(0, state.money - due);
-  const headsSold = Math.min(state.cattle, Math.ceil(missing / Math.max(1, state.cattlePrice)));
-  state.cattle -= headsSold;
-  const stillMissing = missing - headsSold * state.cattlePrice;
-  const floorLand = Math.max(80, state.protectedLand || 0);
-  if(stillMissing > 0 && state.land > floorLand){
-    const ha = Math.min(state.land - floorLand, Math.ceil(stillMissing / Math.max(1, sc(5))));
-    state.land -= ha;
-    ensureParcels();
-    addLog(`Impôt impayé : ${headsSold} bête${headsSold>1?"s":""} et ${ha} ha saisis par le comté.`, "bad");
-  } else {
-    addLog(`Impôt impayé : ${headsSold} bête${headsSold>1?"s":""} vendues d'office pour solder la note.`, "bad");
-  }
+  // Faute de trésorerie, la note n'est plus saisie sur-le-champ : elle devient
+  // un arriéré qui court. Le joueur a deux ans pour trouver l'argent — après
+  // quoi le comté cède sa créance à la banque et les deux menaces se rejoignent.
+  const paid = Math.max(0, state.money);
+  state.money -= paid;
+  accrueArrears(due - paid);
   state.reputation = clamp(state.reputation - 3);
+  addLog(`Impôt foncier impayé : ${moneyFmt.format(due - paid)} $ reportés en arriéré `
+    + `(${state.arrearYears} année${state.arrearYears>1?"s":""} de retard).`, "bad");
 }
 
 // Les droits de succession frappent tout, trésorerie comprise. C'est le seul
@@ -4056,7 +4533,9 @@ function ensureProgress(){
   if(!state.doctrines) state.doctrines = {};
   if(typeof state.nextParcelId !== "number") state.nextParcelId = 1;
   if(!state.ventures) state.ventures = {};
-  ["claimPressure","mobTies","debt","taxRelief","protectedLand","autoQuarters"].forEach(k => {
+  ["claimPressure","mobTies","debt","taxRelief","protectedLand","autoQuarters",
+   "missedPayments","arrears","arrearYears","quarantine","receivership","partitioned",
+   "obsolescence","nextCall"].forEach(k => {
     if(typeof state[k] !== "number") state[k] = 0;
   });
   if(typeof state.chaining !== "boolean") state.chaining = false;
@@ -4536,6 +5015,14 @@ function baseState() {
     claimPressure:0,
     mobTies:0,
     developer:null,
+    missedPayments:0,
+    arrears:0,
+    arrearYears:0,
+    quarantine:0,
+    receivership:0,
+    obsolescence:0,
+    nextCall:0,
+    partitioned:0,
     autoQuarters:0,
     chaining:false,
     debt:0,
@@ -4758,6 +5245,7 @@ function render(){
   $("endTurnBtn").textContent = yearly ? "Terminer l'année" : "Terminer le trimestre";
   $("apMax").textContent = actionsPerTurn();
   $("decisionsTitle").textContent = yearly ? "Décisions de l'année" : "Décisions du trimestre";
+  renderAlarms();
   $("turnHint").textContent = yearly
     ? "Terminez l'année : les quatre saisons se déroulent d'un coup, avec leurs veaux, leurs récoltes et leurs impôts."
     : "Terminez le trimestre pour calculer revenus, dépenses et événements.";
@@ -4977,6 +5465,10 @@ function doAction(type){
   }
 
   if(type === "sellCattle"){
+    if(underQuarantine()){
+      toast("Quarantaine sanitaire : aucune bête ne peut quitter le domaine.");
+      return;
+    }
     const head = Math.min(state.cattle, 5 * lot());
     if(head < 5){ toast("Le troupeau est trop petit."); return; }
     useAction();
@@ -5046,6 +5538,7 @@ function doAction(type){
   }
 
   if(type === "buyLand"){
+    if(inReceivership()){ toast("L'administrateur judiciaire bloque toute acquisition."); return; }
     const ha = 20 * lot();
     const cost = spend(260 * lot());
     if(cost === false) return;
@@ -5221,6 +5714,21 @@ function endTurn(){
 
   // Les affaires montées au fil des époques rapportent à part du troupeau —
   // et vieillissent : une rente de 1925 ne pèse plus grand-chose en 1975.
+  // Sous quarantaine, rien ne sort du domaine ; sous administration, la
+  // famille ne décide plus de rien. Une trésorerie ne protège d'aucun des deux.
+  if((state.obsolescence || 0) > 0){
+    ranchIncome = Math.round(ranchIncome * obsolescenceFactor());
+    factionEffects.push(`Matériel hors d'âge : ${Math.round((1-obsolescenceFactor())*100)} % de revenus en moins.`);
+  }
+  if(underQuarantine()){
+    ranchIncome = Math.round(ranchIncome * .25);
+    factionEffects.push("Quarantaine : rien ne sort du domaine, les revenus s'effondrent.");
+  }
+  if(inReceivership()){
+    ranchIncome = Math.round(ranchIncome * .45);
+    factionEffects.push("Administration judiciaire : l'essentiel des recettes passe par l'administrateur.");
+  }
+
   const vNet = ventureNet();
   if(vNet !== 0){
     state.money += vNet;
@@ -5467,7 +5975,18 @@ function endTurn(){
 
   // L'impôt foncier tombe en hiver, avant le passage à l'année suivante :
   // c'est le rendez-vous annuel qui rappelle qu'un grand domaine se paie.
-  if(state.season === 3) annualLevy();
+  // Les arriérés des années précédentes passent en premier.
+  if(state.season === 3){ settleArrears(); annualLevy(); }
+
+  // Les états qui coupent les revenus s'épuisent d'eux-mêmes.
+  if(state.quarantine > 0){
+    state.quarantine--;
+    if(state.quarantine === 0) addLog("La quarantaine est levée. Les bêtes peuvent repartir au marché.", "good");
+  }
+  if(state.receivership > 0){
+    state.receivership--;
+    if(state.receivership === 0) addLog("L'administrateur judiciaire rend les clés. Le ranch s'appartient de nouveau.", "good");
+  }
 
   state.season++;
   if(state.season > 3){
@@ -5509,6 +6028,12 @@ function endTurn(){
   // pleine, seule la dernière saison en produit une, sinon le journal se
   // remplit de quatre brèves d'un coup.
   if(!insideAnnualChain()) showBrief();
+
+  // La mise aux normes prime sur tout : c'est un rendez-vous, pas un hasard.
+  if(capitalCallDue() && !insideAnnualChain()){
+    presentCapitalCall();
+    return;
+  }
 
   // Un arc en cours prime sur le reste : c'est le fil qu'on veut voir avancer.
   maybeStartArc();
@@ -8002,6 +8527,130 @@ events.push(
         addLog("Le courtier tombe. Ceux qui travaillaient avec lui savent d'où c'est parti.","info");}}
    ]},
 
+  // ================================== CE QUI FAIT TOMBER UNE GRANDE MAISON
+  {condition:()=>state.year>=1946&&state.cattle>=150&&!underQuarantine(),
+   art:"herd", title:"Fièvre aphteuse : le comté ferme les routes",
+   text:"Un foyer est confirmé à deux vallées d'ici. Le service vétérinaire consigne tout le bétail du secteur : plus une bête ne sort, plus une bête n'entre, et personne ne sait pour combien de temps.",
+   image:"Un cordon sanitaire en travers d'une route",
+   choices:[
+     {label:"Se soumettre et attendre",apply:()=>{
+        setQuarantine(rand(4,8), "Le ranch respecte la consigne à la lettre.");
+        state.reputation=clamp(state.reputation+6);
+        const f=factionOfType("law");if(f)f.relation=clamp(f.relation+15,-100,100);}},
+     {label:()=>`Financer la campagne de vaccination du comté (${moneyFmt.format(sc(700))} $)`,
+      condition:()=>state.money>=sc(700),
+      apply:()=>{state.money-=sc(700);
+        setQuarantine(rand(1,3), "L'argent du ranch a raccourci la consigne pour tout le monde.");
+        state.reputation=clamp(state.reputation+14);state.legacy.honor++;
+        const cf=factionOfType("community");if(cf)cf.relation=clamp(cf.relation+30,-100,100);
+        addLog("La campagne est bouclée en six semaines grâce au ranch. Le comté s'en souviendra.","good");}},
+     {label:"Sortir le troupeau la nuit avant la fermeture",apply:()=>{
+        if(chance(.5)){
+          const n=Math.min(state.cattle,Math.ceil(state.cattle*.3));
+          state.cattle-=n;state.money+=n*state.cattlePrice;
+          state.legacy.greed++;state.suspicion=clamp(state.suspicion+18);
+          addLog(`${n} bêtes passées avant le cordon : ${moneyFmt.format(n*state.cattlePrice)} $ sauvés.`,"good");
+        } else {
+          setQuarantine(rand(8,14), "Le convoi a été intercepté : la consigne est doublée en représailles.");
+          state.suspicion=clamp(state.suspicion+30);state.reputation=clamp(state.reputation-15);
+          const f=factionOfType("law");if(f)f.relation=clamp(f.relation-35,-100,100);
+        }}}
+   ]},
+
+  {condition:()=>state.suspicion>=70&&state.year>=1946,
+   art:"law", title:"Le dossier est transmis au procureur",
+   text:"Des années de rapports s'empilent : soupçons de fraude, comptes invérifiables, deux plaintes classées. Le procureur ouvre une information judiciaire et demande le placement du domaine sous administration.",
+   image:"Un dossier scellé qui change de mains",
+   choices:[
+     {label:()=>`Prendre le meilleur avocat de l'État (${moneyFmt.format(sc(1200))} $)`,
+      condition:()=>state.money>=sc(1200),
+      apply:()=>{state.money-=sc(1200);
+        if(chance(.6)){state.suspicion=clamp(state.suspicion-40);
+          addLog("Le juge refuse l'administration. Il aura fallu une fortune en honoraires.","good");}
+        else {setReceivership(rand(3,6),"L'avocat n'a obtenu qu'un délai.");
+          state.suspicion=clamp(state.suspicion-20);}}},
+     {label:"Ouvrir tous les livres et coopérer",apply:()=>{
+        state.suspicion=clamp(state.suspicion-45);
+        const fine=Math.min(state.money,sc(rand(400,900)));state.money-=fine;
+        state.reputation=clamp(state.reputation+8);state.legacy.honor++;
+        addLog(`Coopération totale : ${moneyFmt.format(fine)} $ d'amende, et l'information est classée.`,"info");}},
+     {label:"Ne rien céder",apply:()=>{
+        setReceivership(rand(6,10),"Le juge nomme un administrateur dès le lendemain.");
+        state.suspicion=clamp(state.suspicion-10);
+        state.reputation=clamp(state.reputation-12);}}
+   ]},
+
+  {condition:()=>(state.debt||0)>0&&(state.missedPayments||0)>=2,
+   art:"money", title:"Le directeur d'agence passe au ranch",
+   text:()=>`Il n'est pas venu pour boire un café. ${moneyFmt.format(state.debt)} $ de dette, `
+     + `${state.missedPayments} échéances manquées, et une garantie sur le domaine. `
+     + `Il propose une dernière restructuration, et précise que c'est la dernière.`,
+   image:"Un costume de ville au milieu d'une cour de ferme",
+   choices:[
+     {label:"Vendre du bétail pour se remettre à jour",condition:()=>state.cattle>=40&&!underQuarantine(),
+      apply:()=>{const n=Math.min(state.cattle,Math.ceil(state.cattle*.4));
+        state.cattle-=n;const g=n*state.cattlePrice;state.money+=g;
+        state.debt=Math.max(0,state.debt-g);state.missedPayments=0;
+        addLog(`${n} bêtes vendues, ${moneyFmt.format(g)} $ portés à la dette. Le compteur repart de zéro.`,"info");}},
+     {label:"Rééchelonner sur vingt ans",apply:()=>{
+        state.debt=Math.round(state.debt*1.35);state.missedPayments=0;
+        addLog(`La dette passe à ${moneyFmt.format(state.debt)} $, mais la traite redevient tenable.`,"info");}},
+     {label:"Le mettre dehors",apply:()=>{
+        state.missedPayments=(state.missedPayments||0)+1;
+        state.reputation=clamp(state.reputation-4);
+        const t=factionOfType("trade");if(t)t.relation=clamp(t.relation-25,-100,100);
+        addLog("Il remonte en voiture sans un mot. Le dossier part au contentieux.","bad");}}
+   ]},
+
+  {condition:()=>(state.arrearYears||0)>=2,
+   art:"law", title:"Avis de vente pour dette fiscale",
+   text:()=>`Le placard est affiché à la porte du tribunal : ${moneyFmt.format(state.arrears||state.debt)} $ d'arriérés, `
+     + `et une vente aux enchères programmée si rien n'est payé avant deux ans.`,
+   image:"Un avis officiel cloué sur une porte",
+   choices:[
+     {label:"Vendre des terres pour solder",apply:()=>{
+        const ha=Math.min(Math.max(0,state.land-80),rand(80,200));
+        state.land-=ha;ensureParcels();
+        const g=sc(ha*7);state.money+=g;
+        const paid=Math.min(g,state.arrears||0);
+        state.arrears=Math.max(0,(state.arrears||0)-paid);
+        if(state.arrears===0)state.arrearYears=0;
+        addLog(`${ha} ha vendus ${moneyFmt.format(g)} $ pour éteindre l'arriéré.`,"info");}},
+     {label:"Demander un échéancier au comté",apply:()=>{
+        if(factionStance("law")>0||chance(.4)){
+          state.arrearYears=Math.max(0,(state.arrearYears||0)-2);
+          addLog("Le comté accorde deux années de plus. Il faudra les mettre à profit.","good");}
+        else {state.arrears=Math.round((state.arrears||0)*1.1);
+          addLog("Demande rejetée. L'arriéré continue de courir.","bad");}}},
+     {label:"Ignorer l'avis",apply:()=>{
+        state.arrearYears=(state.arrearYears||0)+1;
+        addLog("Le placard reste affiché. Tout le comté le lit en passant.","bad");}}
+   ]},
+
+  {condition:()=>state.unity<40&&adultHeirs().length>=2,
+   art:"family", title:"La maison ne se parle plus",
+   text:()=>{const a=adultHeirs();return `${a[0].name} et ${a[1].name} ne s'adressent plus la parole depuis six mois. `
+     + `Chacun a son avocat, et chacun a compris qu'à la mort du chef, le notaire devra partager.`;},
+   image:"Deux couverts mis aux deux bouts d'une table",
+   choices:[
+     {label:"Trancher maintenant et désigner un héritier",apply:()=>{
+        const a=adultHeirs();
+        const pick=a.sort((x,y)=>(y.ambition||0)-(x.ambition||0))[0];
+        if(pick){designateHeir(pick.cid);
+          state.children.forEach(c=>{if(c.cid!==pick.cid)c.resentment=clamp((c.resentment||0)+20);});}
+        state.unity=clamp(state.unity+10);
+        addLog(`${pick?pick.name:"L'aîné"} est désigné devant témoins. Au moins, personne n'ignore plus la règle.`,"info");}},
+     {label:"Réunir toute la famille et refaire les comptes ensemble",apply:()=>{
+        const c=Math.min(state.money,sc(rand(150,400)));state.money-=c;
+        state.unity=clamp(state.unity+22);
+        state.children.forEach(k=>k.resentment=clamp((k.resentment||0)-15));
+        addLog(`Trois jours de discussions et ${moneyFmt.format(c)} $ de notaire. La maison tient encore.`,"good");}},
+     {label:"Laisser faire",apply:()=>{
+        state.unity=clamp(state.unity-10);
+        state.children.forEach(k=>{if(k.age>=18)k.resentment=clamp((k.resentment||0)+12);});
+        addLog("On ne parle de rien. Le notaire, lui, en parlera pour tout le monde.","bad");}}
+   ]},
+
   {condition:()=>ventureOfEra()&&ventureLevel(ventureOfEra().id)>0,
    art:"machine", title:"L'affaire réclame sa mise à niveau",
    text:()=>{const v=ventureOfEra();return `${v.name} tourne depuis des années sans un dollar d'entretien lourd. Le matériel vieillit, et un contrôle est annoncé.`;},
@@ -8202,7 +8851,9 @@ function presentEvent(event){
     offered++;
     const btn = document.createElement("button");
     btn.className = "choice";
-    btn.textContent = choice.label;
+    // Un libellé peut être une fonction : c'est ainsi qu'il cite un montant à
+    // l'échelle de l'époque. Sans `evalField`, le bouton affichait le code source.
+    btn.textContent = evalField(choice.label, "Décider");
     btn.onclick = () => {
       choice.apply();
       $("eventModal").classList.add("hidden");
@@ -8272,6 +8923,53 @@ function checkGameOver(){
     state.gameOver = true;
     addLog("Sans troupeau ni argent, le ranch est abandonné.", "bad");
     showGameOver("Le dernier troupeau", "La famille ne peut plus maintenir le domaine.");
+    return;
+  }
+
+  // ---- Les trois chutes d'un grand domaine ----
+  // Six échéances manquées : la banque met le domaine aux enchères. C'est la
+  // fin qu'un empire peut connaître alors même qu'il vaut des millions.
+  if((state.missedPayments || 0) >= 6){
+    state.gameOver = true;
+    addLog("Le domaine est adjugé sur les marches du tribunal.", "bad");
+    showGameOver("Vendu aux enchères",
+      `Six échéances manquées. En ${state.year}, le ${state.ranchName} est adjugé au plus offrant `
+      + `pour solder une dette de ${moneyFmt.format(state.debt)} $.\n\n`
+      + `Le domaine valait ${moneyFmt.format(estateValue())} $ : il n'a jamais manqué de terres ni de bêtes, `
+      + `seulement de liquidités le jour où la banque les réclamait.\n\n`
+      + `${(state.lineage||[]).length} génération(s) l'auront tenu. La dernière n'a pas vu venir la traite.`);
+    return;
+  }
+
+  // Quatre années d'arriérés : le comté exproprie pour dette fiscale.
+  if((state.arrearYears || 0) >= 4){
+    state.gameOver = true;
+    addLog("Le comté exproprie le domaine pour dette fiscale.", "bad");
+    showGameOver("Saisi pour dette fiscale",
+      `Quatre années d'impôts impayés. Le comté prononce l'expropriation du ${state.ranchName} `
+      + `et met les terres en adjudication.\n\n`
+      + `La famille ${state.familyName} quitte la vallée avec ce qu'elle peut charger.`);
+    return;
+  }
+
+  // Un domaine trop petit ne nourrit plus personne : il n'y a plus de ranch.
+  if(state.land < 40){
+    state.gameOver = true;
+    addLog("Il ne reste plus assez de terre pour faire vivre un troupeau.", "bad");
+    showGameOver("Il ne reste rien à tenir",
+      `${state.land} hectares. Ce n'est plus un ranch, c'est un jardin.\n\n`
+      + `Ce qui restait du ${state.ranchName} a été vendu par morceaux, année après année, `
+      + `jusqu'à ce qu'il n'y ait plus de quoi faire paître dix bêtes.`);
+    return;
+  }
+
+  // La maison partagée entre héritiers hostiles ne s'en relève pas toujours.
+  if(state.partitioned && state.unity <= 12 && state.land < 200){
+    state.gameOver = true;
+    showGameOver("Le domaine dispersé",
+      `Après le partage, chaque branche a vendu la sienne. Il ne reste du ${state.ranchName} `
+      + `qu'un nom sur de vieux actes et ${state.land} hectares que personne ne veut.\n\n`
+      + `La famille ${state.familyName} ne s'est jamais reparlé.`);
     return;
   }
 

@@ -315,6 +315,7 @@ for(let run = 0; run < RUNS; run++){
 
   const title = $el("eventTitle").textContent;
   summary.ends[title] = (summary.ends[title]||0)+1;
+  if(ST().year < 2026) (summary.failYears = summary.failYears || []).push(ST().year + " " + title);
   if(process.env.DIAG && title === "Fin de la lignée"){
     const t = ST();
     console.log(`  éteinte en ${t.year} | chef ${t.founder.name} ${t.founder.age} ans (vivant:${t.founder.alive})`
@@ -355,6 +356,11 @@ console.log("Trésorerie finale en $ de 1885 (moyenne) :", Math.round((summary.f
 const medOf=a=>{const b=a.slice().sort((x,y)=>x-y);return b[Math.floor(b.length/2)];};
 console.log("Tours joués (médiane) :", medOf(summary.turnsEnd||[0]));
 console.log("Terres finales (médiane) :", medOf(summary.landEnd||[0]), "— bétail final (médiane) :", medOf(summary.cattleEnd||[0]));
+if(summary.failYears && summary.failYears.length){
+  const late = summary.failYears.filter(f => Number(f.split(" ")[0]) >= 1950);
+  console.log("Chutes après 1950 :", late.length + "/" + summary.failYears.length,
+              late.length ? "— " + late.slice(0,6).join(", ") : "");
+}
 console.log("\nFins de partie :");
 Object.entries(summary.ends).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>console.log("  "+v+"×  "+k));
 console.log("Générations (lignée) moyenne :", (summary.gens/RUNS).toFixed(2));

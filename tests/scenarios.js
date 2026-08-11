@@ -125,6 +125,11 @@ function permissiveVariants(){
             s.claimPressure = 30; s.factions.forEach(f => { if(f.type==="nation") f.relation = -70; });
             const v = G.ventureOfEra(); if(v) s.ventures = {[v.id]:{level:2, since:1972, eraId:v.eraId}};
             return s; },
+    // Une maison au bord de la chute : dette, arriérés, soupçons et division.
+    () => { const s = permissiveGame(); s.year = 1968; s.eraId = "industrial"; s.costModifier = 2.5;
+            s.debt = 40000; s.missedPayments = 3; s.arrears = 9000; s.arrearYears = 2;
+            s.suspicion = 85; s.unity = 22; s.money = 500;
+            return s; },
     // Les investisseurs n'entrent en scène qu'à partir de 2010, et par paliers
     // de pression : il leur faut deux états, tiède et brûlant.
     () => { const s = permissiveGame(); s.year = 2014; s.eraId = "modern"; s.costModifier = 16;
@@ -996,6 +1001,214 @@ section("Chronique de la saga");
     labels.some(l => l.indexOf("écran de création") >= 0));
 }
 
+// ------------------------------------------------- La chute d'une grande maison
+section("Une dynastie établie peut tomber");
+{
+  // Le domaine de référence : riche, vaste, et parfaitement sain au départ.
+  function empire(){
+    const s = freshGame();
+    s.year = 1960; s.eraId = "industrial"; s.costModifier = 2.5;
+    s.land = 3000; s.cattle = 1100; s.money = 400000; s.feed = 20000;
+    s.reputation = 80; s.unity = 70; s.suspicion = 0;
+    ensureBigParcels(s);
+    return s;
+  }
+  function ensureBigParcels(s){ s.parcels = []; G.ensureParcels(); }
+
+  // 1. L'appel de fonds : un rendez-vous, pas un hasard.
+  const s = empire();
+  check("la mise aux normes commence en 1958", ev("CALL_FROM") === 1958);
+  check("elle revient tous les sept ans", ev("CALL_PERIOD") === 7);
+  check("le devis grandit avec le domaine", G.capitalCallAmount() > 0, G.capitalCallAmount());
+  const smallCall = (function(){ const t = empire(); t.land = 200; t.cattle = 60; return G.capitalCallAmount(); })();
+  const bigCall = (function(){ const t = empire(); t.land = 4000; t.cattle = 1500; return G.capitalCallAmount(); })();
+  check("un grand domaine paie beaucoup plus qu'un petit", bigCall > smallCall * 5,
+    smallCall + " vs " + bigCall);
+
+  const s2 = empire();
+  s2.nextCall = 1960;
+  check("l'appel est exigible", G.capitalCallDue() === true);
+  G.presentCapitalCall();
+  check("il ouvre une modale", !$el("eventModal")._classes.has("hidden"));
+  check("il propose trois issues", $el("eventChoices").children.length === 3,
+    $el("eventChoices").children.length);
+  check("il replanifie le suivant à sept ans", ST().nextCall === 1967, ST().nextCall);
+  const money0 = ST().money;
+  $el("eventChoices").children[0].onclick();   // payer comptant
+  check("payer comptant coûte le devis", ST().money < money0, money0 - ST().money);
+  check("et ne laisse aucune obsolescence", (ST().obsolescence||0) === 0);
+
+  // Emprunter crée une dette et sa traite.
+  const s3 = empire();
+  s3.nextCall = 1960;
+  G.presentCapitalCall();
+  $el("eventChoices").children[1].onclick();   // emprunter
+  check("emprunter crée une dette", ST().debt > 0, ST().debt);
+  check("la dette a sa traite", G.requiredPayment() > 0, G.requiredPayment());
+
+  // Repousser ronge les revenus, et se cumule.
+  const s4 = empire();
+  check("un domaine à jour produit à plein", G.obsolescenceFactor() === 1);
+  s4.obsolescence = 1;
+  const one = G.obsolescenceFactor();
+  s4.obsolescence = 3;
+  const three = G.obsolescenceFactor();
+  check("repousser réduit les revenus", one < 1, one);
+  check("repousser plusieurs fois enfonce", three < one, one.toFixed(2) + " → " + three.toFixed(2));
+  s4.obsolescence = 20;
+  check("la dégradation reste bornée", G.obsolescenceFactor() >= .4, G.obsolescenceFactor());
+
+  // 2. La preuve : un empire qui repousse tout finit par tomber.
+  let fallen = 0, survived = 0;
+  const causes = {};
+  for(let run = 0; run < 20; run++){
+    const e = empire();
+    let guard = 0;
+    while(!ST().gameOver && ST().year < 2026 && guard++ < 400){
+      // Le joueur négligent : il ne fait rien, et repousse tout ce qu'on lui demande.
+      G.endTurn();
+      let m = 0;
+      while(!$el("eventModal")._classes.has("hidden") && m++ < 40){
+        if(ST().gameOver) break;
+        const ch = $el("eventChoices").children;
+        if(!ch.length) throw new Error("modale sans choix : " + $el("eventTitle").textContent);
+        // Toujours la dernière issue : « repousser », « ne rien faire », « ignorer ».
+        ch[ch.length - 1].onclick();
+      }
+    }
+    if(ST().gameOver && ST().year < 2026){
+      fallen++;
+      const t = $el("eventTitle").textContent;
+      causes[t] = (causes[t] || 0) + 1;
+    } else survived++;
+  }
+  console.log("       chutes d'un empire négligent : " + fallen + "/20 — " + JSON.stringify(causes));
+  check("un empire laissé à l'abandon finit par tomber", fallen >= 8, fallen + "/20");
+
+  // 3. …mais le même empire bien tenu survit.
+  let held = 0;
+  const heldCauses = {};
+  for(let run = 0; run < 10; run++){
+    const e = empire();
+    let guard = 0;
+    while(!ST().gameOver && ST().year < 2026 && guard++ < 400){
+      const st = ST();
+      // Le joueur attentif : il garde du fourrage, vend son surplus et paie.
+      if(st.feed < 400) G.doAction("buyFeed");
+      const capacity = Math.max(20, Math.floor(st.land/3));
+      if(st.cattle > capacity) G.doAction("sellCattle");
+      G.endTurn();
+      let m = 0;
+      while(!$el("eventModal")._classes.has("hidden") && m++ < 40){
+        if(ST().gameOver) break;
+        const ch = $el("eventChoices").children;
+        if(!ch.length) throw new Error("modale sans choix");
+        ch[0].onclick();   // la première issue : payer, se soumettre, régler
+      }
+    }
+    // Vendre le ranch n'est pas une chute : c'est une sortie volontaire, et le
+    // pilote « attentif » prend systématiquement la première issue proposée.
+    const ending = $el("eventTitle").textContent;
+    if(!ST().gameOver || ST().year >= 2026 || ending === "Le ranch vendu") held++;
+    else (heldCauses[ending] = (heldCauses[ending]||0)+1);
+  }
+  if(Object.keys(heldCauses).length) console.log("       chutes malgré la tenue : " + JSON.stringify(heldCauses));
+  check("le même empire bien tenu passe le siècle", held >= 7, held + "/10");
+}
+
+section("Quarantaine, administration et partage");
+{
+  // La quarantaine coupe la vente, pas la trésorerie.
+  const s = freshGame();
+  s.year = 1970; s.eraId = "industrial"; s.costModifier = 2.5;
+  s.cattle = 400; s.money = 200000;
+  check("aucune quarantaine au départ", G.underQuarantine() === false);
+  G.setQuarantine(4, "Test.");
+  check("la quarantaine s'installe", G.underQuarantine() === true);
+  check("elle entre dans la saga", ST().saga.some(m => /quarantaine/i.test(m.title)));
+  const cattle0 = ST().cattle;
+  G.doAction("sellCattle");
+  check("on ne peut plus vendre de bétail", ST().cattle === cattle0, ST().cattle);
+  const money0 = ST().money;
+  G.endTurn(); closeModals();
+  check("elle s'épuise d'elle-même", ST().quarantine < 4, ST().quarantine);
+
+  // L'administration judiciaire bloque les acquisitions.
+  const s2 = freshGame();
+  s2.year = 1975; s2.eraId = "corporate"; s2.costModifier = 5; s2.money = 5000000;
+  G.setReceivership(5, "Test.");
+  check("l'administration s'installe", G.inReceivership() === true);
+  const land0 = ST().land;
+  G.doAction("buyLand");
+  check("acheter des terres est bloqué", ST().land === land0, ST().land);
+  for(let i = 0; i < 6; i++){ ST().money = 5000000; ST().feed = 9000; G.endTurn(); closeModals(); }
+  check("elle finit par être levée", G.inReceivership() === false, ST().receivership);
+
+  // Le partage successoral d'une maison divisée.
+  const s3 = freshGame();
+  s3.year = 1930; s3.land = 2400; s3.cattle = 800; s3.money = 100000;
+  s3.unity = 20; s3.heirId = null;
+  addAdult(s3, "Aînée", {age:40, sex:"f", resentment:70});
+  addAdult(s3, "Cadet", {age:36, resentment:20});
+  addAdult(s3, "Benjamin", {age:30, resentment:50});
+  s3.founder.alive = false;
+  const land0b = ST().land, cattle0b = ST().cattle;
+  G.partitionEstate(G.adultHeirs());
+  check("le partage ampute le domaine", ST().land < land0b * .5, ST().land + " sur " + land0b);
+  check("il ampute aussi le troupeau", ST().cattle < cattle0b * .5, ST().cattle);
+  check("un seul héritier reste à la tête", ST().founder.name === "Cadet", ST().founder.name);
+  check("les autres quittent la famille", ST().children.length === 0, ST().children.length);
+  check("les parcelles suivent",
+    ST().parcels.reduce((a,p)=>a+p.ha,0) === ST().land);
+  check("le partage est consigné", ST().saga.some(m => /partagé/.test(m.title)));
+  check("il est compté", ST().partitioned === 1);
+
+  // Une maison unie et préparée n'est jamais partagée.
+  let partitions = 0;
+  for(let i = 0; i < 30; i++){
+    const t = freshGame();
+    t.unity = 80;
+    const a = addAdult(t, "Aîné", {age:40});
+    addAdult(t, "Cadet", {age:35});
+    G.designateHeir(a.cid);
+    t.founder.alive = false;
+    G.resolveSuccession();
+    if(ST().partitioned) partitions++;
+  }
+  check("une maison unie avec héritier désigné n'est jamais partagée", partitions === 0, partitions + "/30");
+}
+
+section("Le tableau des alertes");
+{
+  const s = freshGame();
+  check("un ranch sain n'affiche aucune alerte", G.alarms().length === 0,
+    G.alarms().map(a=>a.title).join(" | "));
+  G.render();
+  check("le bandeau reste caché", $el("alarms")._classes.has("hidden"));
+
+  s.debt = 30000; s.missedPayments = 4;
+  const list = G.alarms();
+  check("une échéance manquée s'affiche", list.some(a => /Banque/.test(a.title)), list.map(a=>a.title).join(" | "));
+  check("elle annonce le compte à rebours",
+    list.some(a => /sur 6/.test(a.title)), list.map(a=>a.title).join(" | "));
+  check("elle dit quoi faire", list.some(a => /remet le compteur/.test(a.what)));
+
+  s.arrearYears = 3; s.arrears = 9000;
+  check("les arriérés s'affichent aussi", G.alarms().some(a => /Comté/.test(a.title)));
+  s.quarantine = 3;
+  check("la quarantaine s'affiche", G.alarms().some(a => /Quarantaine/.test(a.title)));
+  s.obsolescence = 2;
+  check("le matériel hors d'âge s'affiche", G.alarms().some(a => /hors d'âge/.test(a.title)));
+  s.unity = 20; s.heirId = null;
+  addAdult(s, "A", {age:40}); addAdult(s, "B", {age:38});
+  check("le risque de partage s'affiche", G.alarms().some(a => /Succession/.test(a.title)));
+
+  G.render();
+  check("le bandeau apparaît", !$el("alarms")._classes.has("hidden"));
+  check("il est rendu en HTML", /alarm-icon/.test($el("alarms").innerHTML));
+  check("il n'appelle aucune ressource externe", !/https?:\/\//.test($el("alarms").innerHTML));
+}
+
 // ------------------------------------------------- Le tour annuel
 section("Le tour annuel");
 {
@@ -1230,12 +1443,31 @@ section("Impôts et droits de succession");
   G.annualLevy();
   check("l'impôt foncier est prélevé", ST().money < beforeTax, beforeTax - ST().money);
 
-  // Sans trésorerie, le fisc se sert sur le troupeau puis sur les terres.
+  // Sans trésorerie, la note devient un arriéré qui court — et non plus une
+  // saisie immédiate : le joueur a deux ans pour trouver l'argent.
   const s3 = freshGame();
   s3.eraId = "modern"; s3.costModifier = 16; s3.year = 2015;
   s3.land = 3000; s3.cattle = 400; s3.money = 0;
   G.annualLevy();
-  check("faute d'argent, le fisc saisit du bétail", ST().cattle < 400, ST().cattle);
+  check("faute d'argent, l'impôt devient un arriéré", ST().arrears > 0, ST().arrears);
+  check("le troupeau n'est pas saisi tout de suite", ST().cattle === 400, ST().cattle);
+  check("l'année de retard est comptée", ST().arrearYears === 1, ST().arrearYears);
+
+  const arrears1 = ST().arrears;
+  G.settleArrears();
+  check("un arriéré non soldé grossit avec la pénalité", ST().arrears > arrears1, ST().arrears);
+  G.annualLevy();
+  G.settleArrears();
+  check("au bout de deux ans, le comté cède la créance à la banque",
+    ST().debt > 0 && ST().arrears === 0, "dette " + ST().debt + " / arriéré " + ST().arrears);
+
+  // Payer solde l'arriéré et referme le dossier.
+  const s3b = freshGame();
+  s3b.eraId = "modern"; s3b.costModifier = 16; s3b.year = 2015;
+  s3b.arrears = 5000; s3b.arrearYears = 1; s3b.money = 500000;
+  G.settleArrears();
+  check("un arriéré payé referme le dossier",
+    ST().arrears === 0 && ST().arrearYears === 0, ST().arrears + "/" + ST().arrearYears);
 
   // Les terres classées échappent à la saisie.
   const s4 = freshGame();
@@ -1260,15 +1492,43 @@ section("Impôts et droits de succession");
   check("une succession préparée coûte moins cher",
     planned.rate < unplanned.rate, planned.rate + " vs " + unplanned.rate);
 
-  // La dette court et se rembourse.
+  // La dette réclame une traite fixe : c'est elle qui rend la chute possible.
   const s7 = freshGame();
-  s7.debt = 1000; s7.money = 100;
+  s7.debt = 1000; s7.money = 0;
+  const due = G.requiredPayment();
+  check("la traite est un montant fixe, indépendant de la caisse", due > 0, due);
   G.serviceDebt();
-  check("une dette non remboursée grossit", ST().debt > 1000, ST().debt);
-  s7.money = 100000;
-  for(let i = 0; i < 40; i++){ ST().turn++; G.serviceDebt(); }
-  check("une dette se rembourse quand la caisse suit", ST().debt === 0, ST().debt);
-  check("le remboursement a coûté de l'argent", ST().money < 100000);
+  check("une traite manquée est comptée", ST().missedPayments === 1, ST().missedPayments);
+  check("et alourdit la dette", ST().debt > 1000, ST().debt);
+
+  // Trois échéances manquées : la banque exécute sa garantie.
+  const s8 = freshGame();
+  s8.debt = 20000; s8.money = 0; s8.cattle = 300; s8.land = 900;
+  for(let i = 0; i < 3; i++) G.serviceDebt();
+  check("trois échéances manquées déclenchent la saisie",
+    ST().cattle < 300 || ST().land < 900, ST().cattle + " têtes / " + ST().land + " ha");
+  check("la saisie ne descend pas sous le plancher", ST().land >= 40, ST().land);
+
+  // Six échéances : le domaine est vendu aux enchères.
+  const s9 = freshGame();
+  s9.debt = 20000; s9.money = 0; s9.cattle = 300; s9.land = 900;
+  for(let i = 0; i < 6; i++) G.serviceDebt();
+  G.checkGameOver();
+  check("six échéances manquées emportent le domaine", ST().gameOver === true, ST().missedPayments);
+  check("la fin porte son propre titre",
+    $el("eventTitle").textContent === "Vendu aux enchères", $el("eventTitle").textContent);
+
+  // Payer à l'heure remet le compteur à zéro.
+  const s10 = freshGame();
+  s10.debt = 5000; s10.money = 0;
+  G.serviceDebt();
+  check("le compteur d'échéances monte", ST().missedPayments === 1);
+  ST().money = 500000;
+  G.serviceDebt();
+  check("payer remet le compteur à zéro", ST().missedPayments === 0);
+  check("une caisse pleine solde vite", ST().debt < 5000 * .8, ST().debt);
+  for(let i = 0; i < 12; i++){ ST().money = 500000; ST().turn++; G.serviceDebt(); }
+  check("et finit par éteindre la dette", ST().debt === 0, ST().debt);
 }
 
 // ------------------------------------------------- L'escouade
@@ -2421,6 +2681,75 @@ section("Coups en douce");
 }
 
 // ------------------------------------------------------------- Équilibrage
+section("Le catalogue des coups en douce");
+{
+  const all = ev("ILLEGAL_OPS");
+  const total = Object.values(all).reduce((n,a)=>n+a.length, 0);
+  check("le catalogue est fourni", total >= 36, total);
+  check("chaque époque en propose au moins quatre",
+    Object.keys(all).every(k => all[k].length >= 4),
+    Object.keys(all).map(k => k + ":" + all[k].length).join(" "));
+  const ids = Object.values(all).flat().map(o => o.id);
+  check("les identifiants sont uniques", new Set(ids).size === ids.length,
+    ids.filter((x,i)=>ids.indexOf(x)!==i).join(","));
+  check("chaque opération est décrite et chiffrée",
+    Object.values(all).flat().every(o => o.name && o.what && o.fail && o.base > 0 && Array.isArray(o.sus)));
+
+  // Les nouveaux coups touchent bien les nouveaux systèmes.
+  const s = permissiveGame();
+  s.eraId = "industrial"; s.costModifier = 2.5; s.year = 1960; s.money = 200000;
+  G.setQuarantine(6, "Test.");
+  const vet = ev("illegalOps()").find(o => o.id === "vetPapers");
+  check("faire disparaître un certificat peut lever une quarantaine", !!vet);
+  vet.onWin();
+  check("et le fait vraiment", ST().quarantine === 0, ST().quarantine);
+
+  const s2 = permissiveGame();
+  s2.eraId = "corporate"; s2.costModifier = 5; s2.year = 1982;
+  s2.debt = 50000; s2.missedPayments = 2;
+  const straw = ev("illegalOps()").find(o => o.id === "strawBuyer");
+  check("racheter sa dette exige d'en avoir une", straw.needs().ok === true);
+  straw.onWin();
+  check("un rachat réussi efface une part de la dette", ST().debt < 50000, ST().debt);
+  check("et remet le compteur d'échéances à zéro", ST().missedPayments === 0);
+  s2.debt = 0;
+  check("sans dette, l'opération est refusée", straw.needs().ok === false);
+
+  const s3 = permissiveGame();
+  s3.eraId = "modern"; s3.costModifier = 16; s3.year = 2015;
+  const pipe = ev("illegalOps()").find(o => o.id === "pipeline");
+  pipe.onFail();
+  check("un blanchiment découvert met le ranch sous administration",
+    G.inReceivership() === true, ST().receivership);
+
+  // Les coups qui engagent des hommes passent par l'escouade.
+  const s4 = permissiveGame();
+  s4.eraId = "prohibition"; s4.costModifier = 1.4; s4.year = 1926;
+  const hijack = ev("illegalOps()").find(o => o.id === "hijack");
+  check("détourner un convoi réclame une escouade", G.needsSquad(hijack) === true);
+  check("et au moins trois hommes", G.squadMinimum(hijack) === 3, G.squadMinimum(hijack));
+  check("c'est l'opération la plus dangereuse du catalogue",
+    hijack.danger >= .4, hijack.danger);
+
+  // Toutes les nouvelles opérations s'exécutent sans erreur, dans les deux sens.
+  const added = ["fenceLine","waterHole","hijack","speakeasy","grainSwap","bankRun",
+                 "vetPapers","payoffTeamster","insuranceFire","strawBuyer",
+                 "quotaFraud","waterRights","organicLabel","pipeline"];
+  const errs = [];
+  added.forEach(id => {
+    ["onWin","onFail"].forEach(hook => {
+      const t = permissiveGame();
+      t.money = 500000; t.debt = 20000;
+      const op = Object.values(ev("ILLEGAL_OPS")).flat().find(o => o.id === id);
+      if(!op){ errs.push(id + " introuvable"); return; }
+      if(!op[hook]) return;
+      try{ op[hook](); }catch(e){ errs.push(id + "/" + hook + " : " + e.message); }
+    });
+  });
+  check("les quatorze nouvelles opérations s'exécutent sans erreur",
+    errs.length === 0, errs.slice(0,3).join(" | "));
+}
+
 section("Équilibrage");
 {
   // La reproduction ne doit jamais dépasser la capacité des pâturages :
@@ -2714,6 +3043,40 @@ section("Montants et inflation");
 }
 
 // ------------------------------------------------ Aucune impasse possible
+section("Libellés des choix");
+{
+  // Un libellé écrit comme fonction — pour citer un montant à l'échelle de
+  // l'époque — s'affichait tel quel, code source compris. Plus jamais.
+  const bad = [];
+  const variants = permissiveVariants();
+  ev("events").forEach((e, i) => {
+    const st = variants[i % variants.length]();
+    st.money = 5000000;
+    const rendered = ev(`(function(){
+      const e = events[${i}];
+      if(e.condition && !e.condition()) return [];
+      presentEvent(e);
+      return Array.prototype.map.call(eventChoices.children, b => b.textContent);
+    })()`);
+    rendered.forEach(t => {
+      if(/^\s*(\(\s*\)|function)\s*=?>?/.test(t) || t.indexOf("${") >= 0 || t.indexOf("=>") >= 0){
+        bad.push(ev("(function(){const t=events["+i+"].title;return typeof t==='function'?t():t;})()") + " → " + t.slice(0,60));
+      }
+    });
+  });
+  check("aucun libellé de choix n'affiche son code source", bad.length === 0, bad.slice(0,3).join(" | "));
+
+  // Idem pour la mise aux normes, dont les deux premiers libellés sont calculés.
+  const s = freshGame();
+  s.year = 1975; s.eraId = "corporate"; s.costModifier = 5;
+  s.land = 2000; s.cattle = 700; s.money = 50000000; s.nextCall = 1975;
+  G.presentCapitalCall();
+  const labels = Array.prototype.map.call($el("eventChoices").children, b => b.textContent);
+  check("la mise aux normes affiche ses trois issues en clair",
+    labels.length === 3 && labels.every(l => l.indexOf("=>") < 0), labels.join(" | "));
+  check("elle chiffre le devis dans le bouton", /\d/.test(labels[0]), labels[0]);
+}
+
 section("Impasses");
 {
   // Un événement dont toutes les branches sont verrouillées afficherait une
