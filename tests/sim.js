@@ -209,7 +209,12 @@ for(let run = 0; run < RUNS; run++){
         const sc = n => Math.round(n * s2.costModifier);
         const cap = Math.max(20, Math.floor(s2.land/3));
         const buyCost = (s2.cattlePrice+6)*5;
-        if(s2.feed < 25 && s2.money > sc(60)*2) G.doAction("buyFeed");
+        // Placer l'argent dans l'affaire de l'époque, comme le ferait un
+        // joueur attentif : c'est le seul emploi utile d'une grosse caisse.
+        const ven = G.ventureOfEra ? G.ventureOfEra() : null;
+        const venCost = ven ? G.ventureNextCost(ven) : 0;
+        if(ven && G.ventureLevel(ven.id) < ven.max && s2.money > venCost * 2.5) G.doAction("venture");
+        else if(s2.feed < 25 && s2.money > sc(60)*2) G.doAction("buyFeed");
         else if(s2.cattle > cap) G.doAction("sellCattle");
         else if(s2.money < sc(400) && s2.suspicion < 35){
           const ops = ev("illegalOps()").filter(o => o.gain[1] && (!o.cost || s2.money > s2.costModifier*o.cost*3));
@@ -235,7 +240,12 @@ for(let run = 0; run < RUNS; run++){
         const sc = n => Math.round(n * s2.costModifier);
         const cap = Math.max(20, Math.floor(s2.land/3));
         const buyCost = (s2.cattlePrice+6)*5*s2.costModifier;
-        if(s2.feed < 25 && s2.money > sc(60)*2) G.doAction("buyFeed");
+        // Placer l'argent dans l'affaire de l'époque, comme le ferait un
+        // joueur attentif : c'est le seul emploi utile d'une grosse caisse.
+        const ven = G.ventureOfEra ? G.ventureOfEra() : null;
+        const venCost = ven ? G.ventureNextCost(ven) : 0;
+        if(ven && G.ventureLevel(ven.id) < ven.max && s2.money > venCost * 2.5) G.doAction("venture");
+        else if(s2.feed < 25 && s2.money > sc(60)*2) G.doAction("buyFeed");
         else if(s2.cattle > cap) G.doAction("sellCattle");
         else if(s2.money < sc(200) && s2.cattle > 32) G.doAction("sellCattle");
         else if(s2.money > sc(1200) && s2.cattle >= cap-6) G.doAction("buyLand");
@@ -315,6 +325,8 @@ for(let run = 0; run < RUNS; run++){
   if(ST().year >= 2026) summary.ends["__2026__"] = (summary.ends["__2026__"]||0)+1;
   summary.maxYear = Math.max(summary.maxYear, ST().year);
   summary.years.push(ST().year);
+  (summary.landEnd=summary.landEnd||[]).push(ST().land);
+  (summary.cattleEnd=summary.cattleEnd||[]).push(ST().cattle);
   summary.gens += (ST().lineage||[]).length;
   {
     const t = ST();
@@ -324,6 +336,8 @@ for(let run = 0; run < RUNS; run++){
   }
   summary.planned += (ST().stats||{}).plannedSuccessions||0;
   summary.contested += (ST().stats||{}).contestedSuccessions||0;
+  summary.duties = (summary.duties||0) + ((ST().stats||{}).dutiesPaid||0);
+  summary.finalMoney = (summary.finalMoney||0) + ST().money/( (ST().year>=2010)?16:((ST().year>=1990)?9:1) );
   (ST().achievements||[]).forEach(a => {
     summary.achievements[a.id] = (summary.achievements[a.id]||0)+1;
   });
@@ -335,6 +349,10 @@ const ys=summary.years.slice().sort((a,b)=>a-b);
 console.log("Année de fin — médiane :", ys[Math.floor(ys.length/2)], "max :", summary.maxYear);
 console.log("Successions préparées :", summary.planned, "— contestées :", summary.contested,
             "— désignations :", summary.designations);
+console.log("Droits de succession cumulés (moyenne) :", Math.round((summary.duties||0)/RUNS));
+console.log("Trésorerie finale en $ de 1885 (moyenne) :", Math.round((summary.finalMoney||0)/RUNS));
+const medOf=a=>{const b=a.slice().sort((x,y)=>x-y);return b[Math.floor(b.length/2)];};
+console.log("Terres finales (médiane) :", medOf(summary.landEnd||[0]), "— bétail final (médiane) :", medOf(summary.cattleEnd||[0]));
 console.log("\nFins de partie :");
 Object.entries(summary.ends).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>console.log("  "+v+"×  "+k));
 console.log("Générations (lignée) moyenne :", (summary.gens/RUNS).toFixed(2));

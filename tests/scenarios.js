@@ -114,7 +114,21 @@ function permissiveVariants(){
   return [
     () => permissiveGame(),
     () => { const s = permissiveGame(); s.champion.training = 5; return s; },
-    () => { const s = permissiveGame(); s.cowboys = s.cowboys.slice(0,1); s.cattle = 300; return s; }
+    () => { const s = permissiveGame(); s.cowboys = s.cowboys.slice(0,1); s.cattle = 300; return s; },
+    // Les liens avec la pègre, l'époque et le contentieux foncier ouvrent des
+    // familles d'événements entières : il leur faut leurs propres états.
+    () => { const s = permissiveGame(); s.mobTies = 3; s.eraId = "prohibition"; s.year = 1926; return s; },
+    () => { const s = permissiveGame(); s.year = 1930; s.eraId = "prohibition";
+            s.claimPressure = 20; s.factions.forEach(f => { if(f.type==="nation") f.relation = -60; });
+            return s; },
+    () => { const s = permissiveGame(); s.year = 1975; s.eraId = "corporate"; s.land = 900;
+            s.claimPressure = 30; s.factions.forEach(f => { if(f.type==="nation") f.relation = -70; });
+            const v = G.ventureOfEra(); if(v) s.ventures = {[v.id]:{level:2, since:1972, eraId:v.eraId}};
+            return s; },
+    () => { const s = permissiveGame(); s.year = 1998; s.eraId = "globalization"; s.land = 1400;
+            s.claimPressure = 10; s.factions.forEach(f => { if(f.type==="nation") f.relation = -10; });
+            const v = G.ventureOfEra(); if(v) s.ventures = {[v.id]:{level:1, since:1995, eraId:v.eraId}};
+            return s; }
   ];
 }
 
@@ -286,16 +300,20 @@ section("Succession : montée des tensions");
 section("Factions : structure et effets");
 {
   const s = freshGame();
-  check("quatre pouvoirs par époque", s.factions.length === 4, s.factions.length);
+  const ALL_TYPES = "community,law,media,nation,trade";
+  check("cinq pouvoirs par époque", s.factions.length === 5, s.factions.length);
   const types = s.factions.map(f=>f.type).sort().join(",");
-  check("les quatre types sont présents", types === "community,law,media,trade", types);
+  check("les cinq types sont présents", types === ALL_TYPES, types);
 
   ev("ERAS").forEach(era => {
-    check("l'époque " + era.id + " définit ses quatre factions",
-      era.factionDefs && era.factionDefs.length === 4);
+    check("l'époque " + era.id + " définit ses cinq factions",
+      era.factionDefs && era.factionDefs.length === 5, era.factionDefs && era.factionDefs.length);
     const t = era.factionDefs.map(d=>d.type).sort().join(",");
-    check("l'époque " + era.id + " couvre les quatre types", t === "community,law,media,trade", t);
+    check("l'époque " + era.id + " couvre les cinq types", t === ALL_TYPES, t);
   });
+  check("chaque type a sa faveur",
+    ev("Object.keys(FACTION_TYPES)").every(t => !!ev("FACTION_FAVOURS")[t]),
+    ev("Object.keys(FACTION_TYPES)").filter(t => !ev("FACTION_FAVOURS")[t]).join(","));
 
   s.factions.forEach(f => f.relation = 0);
   check("neutre = aucun effet", ev("factionStance('law')") === 0);
@@ -395,9 +413,9 @@ section("Sauvegardes antérieures");
   check("nextCid au-delà des cid existants",
     l.children.every(c => c.cid < l.nextCid), l.nextCid);
   check("factions retypées", l.factions.every(f => !!f.type));
-  check("quatrième faction ajoutée", l.factions.length === 4, l.factions.length);
+  check("les factions manquantes sont ajoutées", l.factions.length === 5, l.factions.length);
   check("types complets après migration",
-    new Set(l.factions.map(f=>f.type)).size === 4);
+    new Set(l.factions.map(f=>f.type)).size === 5);
   check("les relations d'origine sont préservées",
     l.factions.find(f=>f.name==="la Coopérative des Éleveurs").relation === 20);
 
@@ -952,6 +970,323 @@ section("Chronique de la saga");
     labels.some(l => l.indexOf("Relire la saga") >= 0), labels.join(" | "));
   check("elle propose aussi de recommencer",
     labels.some(l => l.indexOf("écran de création") >= 0));
+}
+
+// ------------------------------------------------- L'économie tardive
+section("Les affaires d'époque");
+{
+  const eras = ev("ERAS").map(e => e.id);
+  check("chaque époque a son affaire",
+    eras.every(id => !!ev("ERA_VENTURES")[id]),
+    eras.filter(id => !ev("ERA_VENTURES")[id]).join(","));
+  check("chaque affaire est décrite",
+    Object.values(ev("ERA_VENTURES")).every(v => v.name && v.what && v.gain && v.cost > 0 && v.income > 0 && v.max >= 3));
+  check("chaque affaire porte l'époque qui l'ouvre",
+    Object.keys(ev("ERA_VENTURES")).every(k => ev("ERA_VENTURES")[k].eraId === k));
+
+  const s = freshGame();
+  s.money = 200000;
+  const v = G.ventureOfEra();
+  check("l'affaire de 1885 est la piste de convoyage", v.id === "drive", v.id);
+  check("sans investissement, elle ne rapporte rien", G.ventureQuarterly(v) === 0);
+  const before = s.money, acts = s.actions;
+  G.investVenture();
+  check("monter l'affaire coûte de l'argent", ST().money < before);
+  check("monter l'affaire consomme une action", ST().actions === acts - 1, ST().actions);
+  check("le palier est enregistré", G.ventureLevel(v.id) === 1, G.ventureLevel(v.id));
+  check("elle rapporte dès le premier palier", G.ventureQuarterly(v) > 0, G.ventureQuarterly(v));
+  check("elle rapporte plus qu'elle ne coûte", G.ventureQuarterly(v) > G.ventureUpkeep(v));
+  check("le lancement entre dans la saga",
+    ST().saga.some(m => m.kind === "venture"));
+
+  const lvl1 = G.ventureQuarterly(v);
+  const cost1 = G.ventureNextCost(v);
+  ST().actions = 3; G.investVenture();
+  check("le palier suivant rapporte davantage", G.ventureQuarterly(v) > lvl1);
+  check("le palier suivant coûte davantage", G.ventureNextCost(v) > cost1);
+
+  for(let i = 0; i < 8; i++){ ST().actions = 3; G.investVenture(); }
+  check("le palier maximum est respecté", G.ventureLevel(v.id) === v.max, G.ventureLevel(v.id));
+
+  // Une affaire se démode : le même palier rapporte bien moins une époque plus tard.
+  const atFoundation = G.ventureQuarterly(v);
+  ST().eraId = "prohibition"; ST().costModifier = 1.4;
+  const atProhibition = G.ventureQuarterly(v);
+  check("une affaire se démode d'une époque à l'autre",
+    atProhibition < atFoundation * 1.4, atProhibition + " vs " + Math.round(atFoundation*1.4));
+  ST().eraId = "modern"; ST().costModifier = 16;
+  check("elle ne rapporte presque plus trois époques plus tard",
+    G.ventureQuarterly(v) < atFoundation * 16 * .2, G.ventureQuarterly(v));
+
+  check("le patrimoine compte les affaires", G.ventureValue() > 0);
+  ST().eraId = "foundation"; ST().costModifier = 1;
+  const withVenture = G.estateValue();
+  ST().ventures = {};
+  check("sans affaire, le patrimoine est moindre", G.estateValue() < withVenture);
+}
+
+section("Impôts et droits de succession");
+{
+  const s = freshGame();
+  check("la Fondation ne prélève pas de foncier", ev("FISCAL").foundation.property === 0);
+  check("chaque époque a son régime fiscal",
+    ev("ERAS").every(e => !!ev("FISCAL")[e.id]));
+  check("les taux montent avec le siècle",
+    ev("ERAS").every((e,i,a) => i === 0 || ev("FISCAL")[e.id].property >= ev("FISCAL")[a[i-1].id].property));
+
+  s.money = 50000; s.land = 300;
+  const m0 = s.money;
+  G.annualLevy();
+  check("aucun impôt foncier en 1885", ST().money === m0, ST().money);
+
+  // Un grand domaine paie plus qu'un petit, à époque égale.
+  const s2 = freshGame();
+  s2.eraId = "modern"; s2.costModifier = 16; s2.year = 2015;
+  s2.land = 300; s2.money = 5000000; s2.cattle = 200;
+  const small = G.propertyRate();
+  s2.land = 3000;
+  const big = G.propertyRate();
+  check("l'impôt foncier est progressif", big > small, small + " vs " + big);
+  const beforeTax = ST().money;
+  G.annualLevy();
+  check("l'impôt foncier est prélevé", ST().money < beforeTax, beforeTax - ST().money);
+
+  // Sans trésorerie, le fisc se sert sur le troupeau puis sur les terres.
+  const s3 = freshGame();
+  s3.eraId = "modern"; s3.costModifier = 16; s3.year = 2015;
+  s3.land = 3000; s3.cattle = 400; s3.money = 0;
+  G.annualLevy();
+  check("faute d'argent, le fisc saisit du bétail", ST().cattle < 400, ST().cattle);
+
+  // Les terres classées échappent à la saisie.
+  const s4 = freshGame();
+  s4.eraId = "modern"; s4.costModifier = 16; s4.year = 2015;
+  s4.land = 900; s4.protectedLand = 880; s4.cattle = 0; s4.money = 0;
+  G.annualLevy();
+  check("les terres classées ne sont pas saisies", ST().land >= 880, ST().land);
+
+  // Droits de succession
+  const s5 = freshGame();
+  check("aucun droit de succession en 1885", G.inheritanceDuty(true) === null);
+  s5.eraId = "modern"; s5.costModifier = 16; s5.year = 2015;
+  s5.money = 1000000; s5.land = 2000; s5.cattle = 500;
+  const planned = G.inheritanceDuty(true);
+  check("les droits de succession frappent la trésorerie", ST().money < 1000000, ST().money);
+  check("le taux reste borné", planned.rate > 0 && planned.rate <= .6, planned.rate);
+
+  const s6 = freshGame();
+  s6.eraId = "modern"; s6.costModifier = 16; s6.year = 2015;
+  s6.money = 1000000; s6.land = 2000; s6.cattle = 500; s6.unity = 80;
+  const unplanned = G.inheritanceDuty(false);
+  check("une succession préparée coûte moins cher",
+    planned.rate < unplanned.rate, planned.rate + " vs " + unplanned.rate);
+
+  // La dette court et se rembourse.
+  const s7 = freshGame();
+  s7.debt = 1000; s7.money = 100;
+  G.serviceDebt();
+  check("une dette non remboursée grossit", ST().debt > 1000, ST().debt);
+  s7.money = 100000;
+  for(let i = 0; i < 40; i++){ ST().turn++; G.serviceDebt(); }
+  check("une dette se rembourse quand la caisse suit", ST().debt === 0, ST().debt);
+  check("le remboursement a coûté de l'argent", ST().money < 100000);
+}
+
+// ------------------------------------------------- L'escouade
+section("L'escouade sur les coups en douce");
+{
+  const s = permissiveGame();
+  s.eraId = "foundation"; s.costModifier = 1; s.year = 1890;
+  const ops = ev("illegalOps()");
+  const shootOp = ops.find(o => o.edge === "shoot");
+  const otherOp = ops.find(o => o.edge !== "shoot");
+  check("un coup de main réclame une escouade", G.needsSquad(shootOp) === true, shootOp.id);
+  check("un coup sans hommes n'en réclame pas", G.needsSquad(otherOp) === false, otherOp.id);
+
+  // Les chances suivent la compétence, pas seulement le nombre.
+  s.cowboys = [
+    {name:"Bon tireur", loyalty:80, shoot:95, ride:90, salary:10, years:3, trait:"Vétéran"},
+    {name:"Moyen",      loyalty:70, shoot:50, ride:50, salary:10, years:1, trait:"Fidèle"},
+    {name:"Mauvais",    loyalty:70, shoot:15, ride:20, salary:10, years:1, trait:"Novice"}
+  ];
+  const solo = G.squadOdds(shootOp, [0]);
+  const weak = G.squadOdds(shootOp, [2]);
+  check("un bon tireur vaut mieux qu'un mauvais", solo > weak, solo.toFixed(2) + " vs " + weak.toFixed(2));
+  // Le nombre aide, mais la moyenne compte : ajouter un manœuvre à un tireur
+  // d'élite dégrade les chances, ajouter son égal les améliore.
+  const withWeak = G.squadOdds(shootOp, [0,2]);
+  check("adjoindre un incapable à un tireur d'élite dessert",
+    withWeak < solo, withWeak.toFixed(2) + " vs " + solo.toFixed(2));
+  s.cowboys.push({name:"Second tireur", loyalty:80, shoot:95, ride:90, salary:10, years:3, trait:"Vétéran"});
+  const twoAces = G.squadOdds(shootOp, [0,3]);
+  check("deux tireurs de même valeur valent mieux qu'un",
+    twoAces > solo, twoAces.toFixed(2) + " vs " + solo.toFixed(2));
+  check("aucune escouade dégrade fortement les chances",
+    G.squadOdds(shootOp, []) < solo - .1, G.squadOdds(shootOp, []).toFixed(2));
+
+  // Au-delà de cinq, la troupe se remarque.
+  s.cowboys = [];
+  for(let i = 0; i < 9; i++) s.cowboys.push({name:"H"+i, loyalty:80, shoot:70, ride:70, salary:8, years:1, trait:"Fidèle"});
+  const five = G.squadOdds(shootOp, [0,1,2,3,4]);
+  const nine = G.squadOdds(shootOp, [0,1,2,3,4,5,6,7,8]);
+  check("une troupe trop nombreuse se fait repérer", nine < five, five.toFixed(2) + " vs " + nine.toFixed(2));
+  check("les chances restent bornées", nine > 0 && five < 1);
+
+  // Le panneau
+  G.openSquadPanel(shootOp.id);
+  check("le panneau de l'escouade s'ouvre", !$el("squadModal")._classes.has("hidden"));
+  check("il liste tous les hommes",
+    ($el("squadList").innerHTML.match(/toggleSquad\(/g) || []).length === 9);
+  check("il annonce un pourcentage", /\d+ % de réussite/.test($el("squadOdds").textContent), $el("squadOdds").textContent);
+  check("il présélectionne des hommes", /% de réussite/.test($el("squadOdds").textContent)
+    && !/^0 homme/.test($el("squadOdds").textContent), $el("squadOdds").textContent);
+
+  // Une réussite attache les hommes, un échec les coûte.
+  const s2 = permissiveGame();
+  s2.eraId = "foundation"; s2.costModifier = 1; s2.year = 1890; s2.money = 20000;
+  s2.cowboys = [];
+  for(let i = 0; i < 6; i++) s2.cowboys.push({name:"M"+i, loyalty:60, shoot:70, ride:70, salary:8, years:4, trait:"Fidèle"});
+  const squad = [0,1,2];
+  const loyBefore = s2.cowboys[0].loyalty;
+  G.squadReward(G.squadMembers(squad), shootOp);
+  check("une réussite renforce la loyauté", ST().cowboys[0].loyalty > loyBefore);
+  check("elle compte les coups au compteur", ST().cowboys[0].raids === 1);
+
+  let lost = 0, hurt = 0;
+  for(let run = 0; run < 60; run++){
+    const s3 = permissiveGame();
+    s3.cowboys = [];
+    for(let i = 0; i < 4; i++) s3.cowboys.push({name:"C"+i, loyalty:60, shoot:70, ride:70, salary:8, years:2, trait:"Fidèle"});
+    const before = s3.cowboys.length;
+    const shootBefore = s3.cowboys.reduce((a,c)=>a+c.shoot,0);
+    G.squadCasualties(G.squadMembers([0,1,2,3]), shootOp);
+    if(ST().cowboys.length < before) lost++;
+    if(ST().cowboys.reduce((a,c)=>a+c.shoot,0) < shootBefore) hurt++;
+  }
+  check("un échec fait parfois perdre des hommes", lost > 0, lost + "/60");
+  check("un échec en blesse aussi", hurt > 0, hurt + "/60");
+  check("il n'en perd pas systématiquement", lost < 60, lost + "/60");
+
+  // Aucune escouade : l'opération se joue comme avant.
+  const s4 = permissiveGame();
+  s4.money = 20000;
+  let threw = false;
+  try{ G.runIllegalOp(shootOp.id); }catch(e){ threw = e.message; }
+  check("un coup sans escouade s'exécute encore", threw === false, threw);
+  threw = false;
+  try{ G.squadCasualties([], shootOp); G.hurtCowboys(3, true); }catch(e){ threw = e.message; }
+  check("aucune victime possible ne fait pas planter", threw === false, threw);
+}
+
+// ------------------------------------------------- La nation et la terre
+section("La revendication foncière");
+{
+  const s = freshGame();
+  check("la nation est présente dès 1885",
+    s.factions.some(f => f.type === "nation"), s.factions.map(f=>f.type).join(","));
+  check("elle est présente à toutes les époques",
+    ev("ERAS").every(e => e.factionDefs.some(d => d.type === "nation")));
+
+  s.year = 1900;
+  check("aucun recours judiciaire avant 1946", G.nationHasCourt() === false);
+  s.year = 1946;
+  check("le recours s'ouvre en 1946", G.nationHasCourt() === true);
+
+  const s2 = freshGame();
+  s2.claimPressure = 0; s2.legacy.greed = 0;
+  s2.factions.forEach(f => { if(f.type === "nation") f.relation = 0; });
+  check("sans passif, la revendication est nulle", G.claimStrength() === 0, G.claimStrength());
+  G.addClaimPressure(10);
+  check("prendre des terres nourrit la revendication", G.claimStrength() >= 10, G.claimStrength());
+  s2.legacy.greed = 3;
+  check("la cupidité de la lignée y ajoute", G.claimStrength() >= 16, G.claimStrength());
+  s2.factions.forEach(f => { if(f.type === "nation") f.relation = -80; });
+  check("l'hostilité aussi", G.claimStrength() >= 36, G.claimStrength());
+
+  // La doctrine « prendre la terre » se paie plus tard.
+  const s3 = freshGame();
+  const p0 = s3.claimPressure;
+  G.chooseDoctrine("foundation", "landman");
+  check("prendre la terre d'abord alourdit la revendication", ST().claimPressure > p0, ST().claimPressure);
+
+  // Le règlement se sert d'abord sur l'argent, puis sur les terres.
+  const s4 = freshGame();
+  s4.eraId = "modern"; s4.costModifier = 16; s4.year = 2015;
+  s4.land = 2000; s4.cattle = 300; s4.money = 10000000; s4.claimPressure = 30;
+  const landBefore = s4.land;
+  const r1 = G.settleClaim(.12, false);
+  check("un accord se paie en argent", r1.paid > 0 && ST().land === landBefore, r1.paid);
+  check("il fait retomber la revendication", ST().claimPressure < 30, ST().claimPressure);
+
+  const s5 = freshGame();
+  s5.eraId = "modern"; s5.costModifier = 16; s5.year = 2015;
+  s5.land = 2000; s5.cattle = 0; s5.money = 0; s5.claimPressure = 40;
+  const r2 = G.settleClaim(.22, null);
+  check("faute d'argent, un procès perdu coûte des hectares", ST().land < 2000, ST().land);
+  check("il reste toujours de quoi vivre", ST().land >= 80, ST().land);
+  check("les parcelles suivent la perte",
+    ST().parcels.reduce((a,p)=>a+p.ha,0) === ST().land,
+    ST().parcels.reduce((a,p)=>a+p.ha,0) + " vs " + ST().land);
+
+  // La faveur diplomatique éteint le litige.
+  const s6 = freshGame();
+  s6.claimPressure = 25; s6.money = 100000;
+  s6.factions.forEach(f => { if(f.type === "nation") f.relation = 70; });
+  s6.favourCooldown.nation = 0;
+  check("la nation a sa faveur", !!ev("FACTION_FAVOURS").nation);
+  G.useFavour("nation");
+  check("régler le litige fait retomber la revendication", ST().claimPressure < 25, ST().claimPressure);
+  check("et compte comme un acte d'honneur", ST().legacy.honor > 0);
+}
+
+// ------------------------------------------------- La pègre et les fusillades
+section("La pègre et les fusillades");
+{
+  const s = freshGame();
+  check("aucun lien avec la pègre au départ", G.mobTies() === 0);
+  G.addMobTies(2);
+  check("les liens se comptent", G.mobTies() === 2);
+  G.addMobTies(-5);
+  check("ils ne descendent pas sous zéro", G.mobTies() === 0, G.mobTies());
+
+  // La force de feu du ranch dépend des hommes et des armes.
+  s.cowboys = []; s.weapons = 0;
+  const bare = G.ranchGunStrength();
+  s.weapons = 4;
+  check("les armes comptent", G.ranchGunStrength() > bare);
+  s.cowboys = [{name:"A",loyalty:70,shoot:90,ride:60,salary:10,years:2,trait:"Vétéran"},
+               {name:"B",loyalty:70,shoot:85,ride:60,salary:10,years:2,trait:"Vétéran"}];
+  const armed = G.ranchGunStrength();
+  check("les bons tireurs comptent davantage", armed > bare + 20, armed);
+  s.cowboys.forEach(c => c.shoot = 10);
+  check("des hommes qui ne savent pas tirer ne valent pas des tireurs",
+    G.ranchGunStrength() < armed, G.ranchGunStrength());
+
+  // Une fusillade se paie en visages, pas en jauges.
+  const s2 = freshGame();
+  s2.cowboys = [];
+  for(let i = 0; i < 5; i++) s2.cowboys.push({name:"F"+i,loyalty:70,shoot:70,ride:70,salary:8,years:3,trait:"Fidèle"});
+  const names = G.hurtCowboys(3, true);
+  check("une fusillade touche des hommes nommés",
+    names.hurt.length + names.dead.length === 3, JSON.stringify(names));
+  check("le récit nomme les victimes",
+    names.dead.length ? /est tué|sont tués/.test(G.casualtyLine(names)) : /blessé/.test(G.casualtyLine(names)),
+    G.casualtyLine(names));
+  check("sans victime, le récit le dit",
+    G.casualtyLine({hurt:[],dead:[]}) === "Personne n'est touché.");
+
+  // Les événements de la Prohibition existent bien et sont jouables.
+  const mobEvents = ev("events").filter(e => e.eraId === "prohibition");
+  check("la Prohibition a de quoi faire", mobEvents.length >= 10, mobEvents.length);
+  const gunfight = ev("events").find(e => (typeof e.title === "function" ? e.title() : e.title) === "Fusillade au portail nord");
+  check("la fusillade au portail existe", !!gunfight);
+  let threw = false;
+  try{
+    const s3 = permissiveGame();
+    s3.eraId = "prohibition"; s3.costModifier = 1.4; s3.year = 1926; s3.mobTies = 2;
+    gunfight.choices.forEach(c => { if(!c.condition || c.condition()) c.apply(); });
+  }catch(e){ threw = e.message; }
+  check("toutes ses issues s'appliquent sans erreur", threw === false, threw);
 }
 
 // ------------------------------------------------- Exporter la chronique
@@ -1916,7 +2251,14 @@ section("Équilibrage");
   s.land = 300; s.money = 50000; s.feed = 100000; s.rival.relation = 0;
   s.cattle = 100;
   const capacity = Math.floor(s.land/3);
-  for(let y = 0; y < 60; y++) G.endTurn();
+  // Les deux maisons dérivent d'elles-mêmes vers l'hostilité et finissent par
+  // razzier : sur quinze ans elles pouvaient emporter la moitié du troupeau et
+  // faire échouer une mesure qui ne porte pas sur elles. On les tient à l'écart.
+  for(let y = 0; y < 60; y++){
+    ST().rival.relation = 0;
+    if(ST().rival2) ST().rival2.relation = 0;
+    G.endTurn();
+  }
   check("le troupeau se stabilise sous la capacité",
     ST().cattle <= Math.floor(capacity*1.05)+2, ST().cattle + " pour " + capacity + " places");
   check("le troupeau croît quand même jusqu'à la capacité",
@@ -2410,6 +2752,12 @@ section("Partie menée jusqu'en 2026");
           if(c.post == null && (s.parcels||[]).length > i) c.post = s.parcels[i].id;
         });
         // Un joueur actif : il investit, concourt, s'allie et fraude.
+        // Il place aussi son argent dans l'affaire de l'époque et règle ses
+        // litiges fonciers — deux réflexes sans lesquels la fin de partie
+        // n'est qu'une trésorerie qui gonfle.
+        const ven = G.ventureOfEra();
+        if(ven && G.ventureLevel(ven.id) < ven.max) G.doAction("venture");
+        if(G.claimStrength() >= 20 && G.favourReady("nation")) G.useFavour("nation");
         if(s.land < 900) G.doAction("buyLand");
         G.doAction("competition");
         if(Math.random() < .5) G.doAction("illegal");

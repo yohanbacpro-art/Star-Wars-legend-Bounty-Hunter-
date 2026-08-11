@@ -1,4 +1,4 @@
-# Ranch Dynasty — V3.5
+# Ranch Dynasty — V3.6
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -34,6 +34,13 @@ Le CSS est dans un unique `<style>` en tête de fichier.
   premier, 1912 / 1968 / 2019 pour le second). Le second est tiré parmi les types
   **non joués** par le premier, donc deux parties ne racontent jamais la même
   histoire cachée. `activeSecrets()` les parcourt tous les deux.
+- **`state.ventures`** — les affaires d'époque montées, `{id:{level, since, eraId}}`.
+- **`state.claimPressure`** — le poids de la revendication foncière ashkani, alimenté
+  par chaque hectare pris de force. Voir `claimStrength()`.
+- **`state.mobTies`** — les liens noués avec la pègre sous la Prohibition.
+- **`state.debt`** — dette d'exploitation, servie chaque trimestre par `serviceDebt()`.
+- **`state.protectedLand`** — hectares classés : hors assiette fiscale, et insaisissables.
+- **`state.taxRelief`** — allègement fiscal arraché au comté, qui s'érode chaque année.
 - **`state.startMode`** — variante de départ : `founder` | `established` | `legacy`.
 - **`state.plus`** — nombre de dynasties tombées avant celle-ci (mode `legacy`).
 - **`state.achievements`** — objectifs accomplis, `[{id, year, season}]`. Voir `ACHIEVEMENTS`
@@ -279,6 +286,112 @@ vérifie aussi qu'aucune illustration n'écrase les autres.
 `legacy` tant qu'aucune dynastie n'est tombée, réécrit la note explicative et le
 libellé du bouton de départ.
 
+## L'économie tardive
+
+Le défaut mesuré jusqu'en V3.5 : passé 1950, l'argent s'accumulait sans emploi
+(743 $ en 1885 → 22,8 M$ en 2013, troupeau plafonné à ~1 200 têtes). Le jeu
+devenait une lecture. Trois systèmes se répondent.
+
+### Où placer l'argent : les affaires d'époque
+
+`ERA_VENTURES` définit **une affaire par époque**, et une seule : la piste de
+convoyage en 1885, les abattoirs sous la Prohibition, les programmes fédéraux
+dans les années 30, le forage pétrolier d'après-guerre, le ranch touristique des
+années 80, la certification export, puis le parc solaire. Le choix n'est pas
+laquelle monter, mais **jusqu'où la pousser** (5 paliers, coût ×2,6 par palier)
+et **quand lâcher l'ancienne pour la nouvelle**.
+
+Car une affaire se démode : `ventureDecay()` divise son rendement par ~1,8 à
+chaque époque franchie. Une rente montée en 1925 ne pèse plus rien en 1975.
+C'est ce qui empêche d'empiler des rentes et oblige à remettre au pot — le
+contraire d'un revenu passif acquis.
+
+Le bouton **Monter une affaire** change d'icône, de titre et de coût à chaque
+époque ; `render()` s'en charge.
+
+### Ce qui reprend : impôts et droits de succession
+
+`FISCAL` donne, par époque, un taux d'impôt foncier et un taux de droits de
+succession, tous deux croissants avec le siècle (0 % / 0 % sous la Fondation,
+3,4 % / 45 % à l'époque moderne).
+
+- `annualLevy()` tombe chaque hiver sur `estateValue()` (terres hors classement,
+  troupeau, chevaux, affaires). `propertyRate()` est **progressif** : au-delà de
+  600 ha, chaque tranche de 700 ha alourdit le taux de 45 %. Faute de
+  trésorerie, le comté se sert sur le troupeau puis sur les terres.
+- `inheritanceDuty(planned)` frappe à **chaque succession**, sur tout le
+  patrimoine, trésorerie comprise. C'est le seul prélèvement à l'échelle des
+  fortunes de fin de partie. Un héritier désigné de longue main (`×0,78`), un
+  enfant aux comptes, une autorité acquise l'allègent ; une maison divisée
+  l'aggrave. Mesuré : **3,5 à 4,6 M$ prélevés par partie** en jeu compétent.
+- `serviceDebt()` fait courir les dettes contractées en événement, à 2,8 %
+  par trimestre (4,5 % dans les années 80), et rembourse dès que la caisse suit.
+
+### Ce que la terre n'a pas oublié
+
+Le ranch est bâti sur des terres cédées sous contrainte, et le droit finit par
+le rappeler. La **nation ashkani** est un cinquième type de faction
+(`FACTION_TYPES.nation`), présent aux sept époques — et le seul dont la nature
+change avec le siècle :
+
+- **avant 1946** (`nationHasCourt()`), aucun recours judiciaire : le litige se
+  règle sur le terrain, clôtures couchées et bêtes rabattues ;
+- **après 1946**, il se règle au prétoire, et coûte infiniment plus cher.
+
+`state.claimPressure` monte à chaque hectare pris de force — l'opération
+« occuper une concession », la doctrine « prendre la terre d'abord », le forage
+pétrolier — et `claimStrength()` y ajoute l'hostilité de la nation et la
+cupidité cumulée de la lignée. Passé un seuil, la revendication est déposée :
+`settleClaim()` prend d'abord l'argent, puis les hectares. La faveur
+diplomatique `nation` permet de solder à l'amiable, bien moins cher, à condition
+de s'y être pris tôt.
+
+> Le nom « ashkani » est inventé. Mettre des mots dans la bouche d'une nation
+> réelle serait déplacé ; la situation, elle, ne l'est pas.
+
+## Les années calmes n'existent plus
+
+Deuxième défaut mesuré : passé la Fondation, plus rien ne pouvait vraiment tuer
+une partie bien menée. Chaque époque a désormais ses ennuis à sa mesure — 171
+événements contre 144 en V3.5 :
+
+| Époque | Ce qui peut mettre la panade |
+|---|---|
+| Prohibition | L'homme de Chicago, fusillade au portail nord, camion disparu, raid fédéral, adjoint retrouvé mort, alambic clandestin |
+| Après-guerre | Autoroute expropriante, quarantaine pour brucellose, traites du tracteur, retombées d'essai nucléaire, grève aux abattoirs |
+| Années 80 | Taux à vingt pour cent, rachat hostile, scandale des hormones, incendie de la grange |
+| Mondialisation | Embargo vache folle, retour des loups, partage des droits d'eau, promoteur immobilier |
+| Aujourd'hui | Mégafeu, caméra cachée, rançongiciel, sécheresse structurelle |
+
+`state.mobTies` mesure les liens noués avec la pègre : ils ouvrent des
+événements, et les referment quand on les rompt.
+
+## Les cow-boys comptent enfin
+
+Deux mécaniques leur donnent un poids réel hors du rendement du troupeau.
+
+**L'escouade.** Tout coup en douce dont l'avantage est le tir (`edge:"shoot"`,
+voir `needsSquad()`) passe désormais par `openSquadPanel()` : on choisit
+nommément qui part, avec les chances recalculées à chaque clic.
+`squadOdds()` pèse la **moyenne** de tir et d'équitation des hommes choisis,
+plus un bonus de nombre — mais au-delà de cinq, la troupe se fait repérer.
+Adjoindre un manœuvre à un tireur d'élite **dégrade** les chances : la qualité
+prime sur le nombre.
+
+En cas d'échec, `squadCasualties()` expose chaque homme séparément — blessé
+(tir en baisse), arrêté (il parle, les soupçons montent) ou tué, avec son nom
+dans la chronique. En cas de réussite, `squadReward()` renforce leur loyauté et
+prélève leur part. On finit par tenir à eux.
+
+**Les fusillades.** `ranchGunStrength()` agrège le tir des hommes, le nombre de
+bons tireurs, les armes et les enfants affectés à la sécurité. C'est elle qui
+décide de l'issue des fusillades de la Prohibition. `hurtCowboys()` paie
+l'addition en visages, pas en points de jauge.
+
+⚠️ `runIllegalOp(id)` sans escouade reste valable et joue sur la moyenne du
+ranch : c'est la voie qu'empruntent les tests et les simulations.
+`chooseIllegalOp(id)` est le point d'entrée de l'interface.
+
 ## Compatibilité des sauvegardes
 
 `ensureProgress()` complète tout `state` chargé avec les champs ajoutés après coup
@@ -308,19 +421,24 @@ chargement et à l'import. **Toute nouvelle propriété de `state` doit y être 
 
 ## Équilibrage
 
-Courbe mesurée sur 100 parties par profil (`node tests/sim.js index.html 100 <profil>`) :
+Courbe mesurée sur 40 parties par profil (`node tests/sim.js index.html 40 <profil>`) :
 
-| Profil | Description | 2026 atteint | Patrimoine final médian* |
-|---|---|---|---|
-| `random` | clique au hasard | 2 % | 445 |
-| `passive` | ne fait rien | 12 % | 498 |
-| `outlaw` | contrebande à chaque trimestre | 37 % | 572 |
-| `honest` | concours et élevage | 97 % | 1 054 091 |
-| `mixed` | troupeau + crime d'appoint | 93 % | 1 611 012 |
-| `policy` | conduite du troupeau | 98 % | 1 704 188 |
+| Profil | Description | Fin médiane | Trésorerie finale* | Terres | Troupeau |
+|---|---|---|---|---|---|
+| `passive` | ne fait rien | 1893 | −239 | 185 | 25 |
+| `outlaw` | contrebande à chaque trimestre | 1905 | 27 291 | 320 | 28 |
+| `honest` | concours et élevage | 2026 | 460 463 | 2 269 | 752 |
+| `mixed` | troupeau + crime d'appoint | 2026 | 492 125 | 3 783 | 1 266 |
+| `policy` | conduite complète du ranch | 2026 | 561 756 | 3 862 | 1 299 |
 
-\* patrimoine converti en dollars de 1885, seule façon de comparer d'une époque
-à l'autre.
+\* en dollars de 1885, seule façon de comparer d'une époque à l'autre.
+
+**Effet mesuré de l'économie tardive.** À conduite égale, la trésorerie finale
+d'un jeu compétent passe de **1,43 M$ (V3.5) à 0,56 M$ (V3.6)** en dollars
+constants, sans que le domaine ni le troupeau ne reculent (3 862 ha, 1 299
+têtes) : ce n'est pas un appauvrissement du ranch, c'est de l'argent qui a enfin
+un emploi et des prélèvements à sa mesure. Les droits de succession seuls
+reprennent 3,5 à 4,6 M$ par partie.
 
 L'inaction reste sanctionnée, comme le veut le principe du déficit passif ; c'est
 la conduite du ranch qui fait la différence.
@@ -404,7 +522,8 @@ sans aucune dépendance :
 # doctrines couplées aux arcs, siège et mariage rival.
 # chronique de la saga, tournant fondateur.
 # export de la chronique, variantes de départ.
-# 415 vérifications, sortie non nulle en cas d'échec.
+# affaires d'époque, fiscalité, escouade, revendication foncière, pègre.
+# 497 vérifications, sortie non nulle en cas d'échec.
 node tests/scenarios.js index.html
 
 # Simulation de masse.
@@ -427,9 +546,17 @@ profils : il compare facilement deux versions du fichier
 - Quelques objectifs restent des jalons plus que des défis (`united`, `oldHand`
   sont atteints par ~98 % des parties bien menées)
 
+- **Une partie complète reste très longue** : 141 ans × 4 saisons = 564 tours.
+  Passer au tour annuel après 1950 la diviserait par quatre sans rien retirer
+  au récit — c'est la piste la plus prometteuse pour le rythme
+- **Un jeu compétent atteint encore 2026 dans presque tous les cas.** Les
+  nouveaux ennuis coûtent cher sans jamais tuer : il manque une menace qui
+  puisse réellement emporter une dynastie établie
 - Le départ `established` est nettement plus clément que les deux autres : il
   mériterait sa propre difficulté, ou un handicap compensatoire (dettes du
   prédécesseur, rancune héritée)
+- Les maisons rivales **réagissent** mais ne planifient jamais : un rival qui
+  poursuivrait un projet sur vingt ans changerait beaucoup
 - L'affiche exportée est un SVG ; un export PNG demanderait un passage par
   `<canvas>`, faisable sans dépendance
 - Une galerie des dynasties tombées plutôt qu'une seule entrée `LEGACY_KEY`,
