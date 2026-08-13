@@ -122,6 +122,23 @@
     .layout{grid-template-columns:1fr}
     .actions-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
     .timeline-mark{font-size:.54rem}
+    /* Sur téléphone, l'ordre du DOM plaçait tout le panneau « Le domaine » —
+       jauges, famille, factions, objectifs — avant les actions et le bouton de
+       fin de tour. Le bandeau d'alertes, qui existe pour prévenir d'une saisie
+       imminente, se retrouvait hors écran au chargement : il ne servait à rien.
+       On joue d'abord, on consulte ensuite. */
+    .layout > .center{order:1}
+    .layout > .estate{order:2}
+    .layout > .right{order:3}
+    /* Dans la colonne centrale : les décisions et leurs alertes, puis le
+       bouton de fin de tour, puis seulement la vignette d'ambiance — elle
+       situe l'époque, elle ne se joue pas. */
+    .center{display:flex;flex-direction:column}
+    .center > .panel{order:1}
+    .center > .turn-footer{order:2}
+    .center > .hero{order:3}
+    .center > #photoCredit{order:4}
+    .hero{min-height:150px}
   }
   *{box-sizing:border-box}
   body{
@@ -775,7 +792,7 @@
     </div>
 
     <div class="layout">
-      <aside class="panel">
+      <aside class="panel estate">
         <div class="panel-title">Le domaine</div>
         <div class="panel-body">
           <div class="stats">
@@ -2560,6 +2577,8 @@ const SAGA_KINDS = {
   goal:       {label:"Objectif",    icon:"🎯"},
   venture:    {label:"Affaire",     icon:"🏭"},
   developer:  {label:"Investisseurs", icon:"🏗️"},
+  town:       {label:"La ville",     icon:"🏘️"},
+  office:     {label:"Politique",    icon:"🏛️"},
   claim:      {label:"Revendication", icon:"🪶"},
   fisc:       {label:"Fisc",        icon:"🧾"},
   hardship:   {label:"Épreuve",     icon:"🌩️"}
@@ -2692,8 +2711,7 @@ function exportSaga(){
   if(!state){ toast("Aucune partie en cours."); return; }
   const name = "chronique-" + (state.familyName||"famille").toLowerCase().replace(/[^a-z0-9]+/gi,"-")
              + "-" + state.year + ".txt";
-  downloadText(name, sagaText(), "text/plain;charset=utf-8");
-  toast("Chronique exportée.");
+  saveFile(name, sagaText(), "text/plain;charset=utf-8");
 }
 
 // L'affiche : la même chronique, mais réduite à ce qui se raconte en un coup
@@ -2778,8 +2796,42 @@ function exportSagaImage(){
   if(!state){ toast("Aucune partie en cours."); return; }
   const name = "affiche-" + (state.familyName||"famille").toLowerCase().replace(/[^a-z0-9]+/gi,"-")
              + "-" + state.year + ".svg";
-  downloadText(name, sagaPosterSVG(), "image/svg+xml;charset=utf-8");
-  toast("Affiche de la saga exportée.");
+  savePoster(name, sagaPosterSVG());
+}
+
+// Deux façons d'obtenir un fichier, selon l'endroit où tourne la page.
+//
+//   • Dans le visualiseur d'Artifact, le bac à sable neutralise `<a download>`
+//     et toute sauvegarde pilotée par script : le bouton ne faisait rien du
+//     tout. Il faut passer par `window.claude.downloads.save()`, qui demande
+//     confirmation au lecteur — lequel peut refuser.
+//   • Partout ailleurs (fichier local, hébergement statique), le lien
+//     temporaire reste la bonne méthode.
+//
+// `saveFile` choisit, et signale honnêtement ce qui s'est passé.
+function hostSave(){
+  return (typeof window !== "undefined" && window.claude && window.claude.downloads) || null;
+}
+
+function saveFile(filename, content, type){
+  const host = hostSave();
+  if(host){
+    host.save({filename, data:content}).then(
+      () => toast("Fichier enregistré."),
+      (err) => {
+        const code = (err && err.code) || "unavailable";
+        if(code === "declined") toast("Enregistrement annulé.");
+        else if(code === "too_large") toast("Le fichier est trop volumineux.");
+        else if(code === "rate_limited") toast("Un enregistrement est déjà en cours.");
+        else if(code === "extension_not_enabled" || code === "rejected_extension")
+          toast("Ce format n'est pas accepté ici.");
+        else toast("L'enregistrement n'est pas disponible ici.");
+      }
+    );
+    return;
+  }
+  downloadText(filename, content, type);
+  toast("Fichier téléchargé.");
 }
 
 function downloadText(filename, content, type){
@@ -2792,6 +2844,34 @@ function downloadText(filename, content, type){
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+// L'affiche part en PNG : le SVG n'est pas toujours accepté par le visualiseur,
+// et une image matricielle se partage partout. Le SVG reste le repli.
+function savePoster(filename, svg){
+  const png = filename.replace(/\.svg$/, ".png");
+  try{
+    const img = new Image();
+    const data = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    img.onload = () => {
+      try{
+        const w = img.naturalWidth || 760, h = img.naturalHeight || 1000;
+        const canvas = document.createElement("canvas");
+        canvas.width = w * 2; canvas.height = h * 2;
+        const ctx = canvas.getContext("2d");
+        ctx.scale(2, 2);
+        ctx.drawImage(img, 0, 0, w, h);
+        canvas.toBlob(blob => {
+          if(blob) saveFile(png, blob, "image/png");
+          else saveFile(filename, svg, "image/svg+xml;charset=utf-8");
+        }, "image/png");
+      }catch(e){ saveFile(filename, svg, "image/svg+xml;charset=utf-8"); }
+    };
+    img.onerror = () => saveFile(filename, svg, "image/svg+xml;charset=utf-8");
+    img.src = data;
+  }catch(e){
+    saveFile(filename, svg, "image/svg+xml;charset=utf-8");
+  }
 }
 
 // ---- Doctrines : le choix qui ouvre chaque époque ----
@@ -3732,6 +3812,7 @@ function runIllegalOp(id, squadIds){
     state.reputation = clamp(state.reputation - rand(3,8));
     addLog(`${op.name} — l'affaire tourne mal. ${op.fail}`, "bad");
     if(op.onFail) op.onFail();
+    if(currentOffice()) officeScandal(op);
     squadCasualties(squad, op);
     if(!squad.length && chance(.14)){
       state.founder.health = clamp(state.founder.health - rand(8,20));
@@ -4492,6 +4573,20 @@ const ACHIEVEMENTS = [
   {id:"squared", icon:"🪶", title:"Les comptes soldés",
    desc:"Éteindre la revendication foncière alors qu'elle pesait déjà lourd.",
    check:()=>(state.stats.claimsSettled||0) > 0},
+  {id:"commission", icon:"🐂", title:"Écrire les règles",
+   desc:"Fonder la commission du bétail du comté.",
+   check:()=>!!(state.institutions && state.institutions.cattleCommission)},
+  {id:"elected", icon:"⭐", title:"La loi de son côté",
+   desc:"Faire élire la famille à une charge publique.",
+   check:()=>(state.politics && state.politics.held || []).length > 0},
+  {id:"governor", icon:"🎖️", title:"Le fauteuil de gouverneur",
+   desc:"Porter la famille jusqu'au gouvernorat de l'État.",
+   check:()=>(state.politics && state.politics.held || []).indexOf("governor") >= 0},
+  {id:"cleanPower", icon:"🕊️", title:"Le pouvoir sans la tache",
+   desc:"Exercer une charge d'État avec une réputation intacte et aucun soupçon.",
+   check:()=>state.politics && state.politics.office
+     && OFFICES[state.politics.office].level >= 3
+     && state.reputation >= 80 && state.suspicion <= 10},
   {id:"phoenix", icon:"🔥", title:"Relever le nom", desc:"Repartir sur les cendres d'une dynastie tombée et tenir jusqu'en 1935.",
    check:()=>(state.plus||0) > 0 && state.year >= 1935},
   {id:"heirloom", icon:"🏛️", title:"Le domaine hérité", desc:"Reprendre un ranch établi et doubler sa superficie de départ.",
@@ -4540,6 +4635,17 @@ function ensureProgress(){
   });
   if(typeof state.chaining !== "boolean") state.chaining = false;
   if(state.developer === undefined) state.developer = null;
+  if(!state.politics) state.politics = {office:null, until:0, held:[], scrutiny:0, defeats:0};
+  if(!Array.isArray(state.politics.held)) state.politics.held = [];
+  ["until","scrutiny","defeats"].forEach(k => {
+    if(typeof state.politics[k] !== "number") state.politics[k] = 0;
+  });
+  if(state.politics.office === undefined) state.politics.office = null;
+  // Une charge disparue du code ne doit pas bloquer la partie.
+  if(state.politics.office && !OFFICES[state.politics.office]) state.politics.office = null;
+  if(!state.institutions) state.institutions = {};
+  ensureTown();
+  if(typeof state.town.size !== "number") state.town.size = 0;
   ensureParcels();
   (state.parcels||[]).forEach(p => { if(typeof p.since !== "number") p.since = 1885; });
   (state.cowboys||[]).forEach(c => { if(c.post === undefined) c.post = null; });
@@ -5022,6 +5128,9 @@ function baseState() {
     receivership:0,
     obsolescence:0,
     nextCall:0,
+    politics:{office:null, until:0, held:[], scrutiny:0, defeats:0},
+    institutions:{},
+    town:{name:"Redemption", size:0, since:1885},
     partitioned:0,
     autoQuarters:0,
     chaining:false,
@@ -6020,6 +6129,9 @@ function endTurn(){
       state.factions.forEach(f => f.relation = clamp(f.relation + 12, -100, 100));
       addLog(`La réputation d'intégrité de la famille facilite les relations à cette nouvelle époque.`, "good");
     }
+    // Le comté ne reste pas trois baraques : chaque époque le fait grandir,
+    // et un ranch prospère l'attire encore plus vite.
+    growTown(1 + (state.land > 900 && chance(.5) ? 1 : 0));
     showEraTransition(newEra);
     return;
   }
@@ -6028,6 +6140,10 @@ function endTurn(){
   // pleine, seule la dernière saison en produit une, sinon le journal se
   // remplit de quatre brèves d'un coup.
   if(!insideAnnualChain()) showBrief();
+
+  // La charge exercée pèse sur le tour, et la lumière chauffe.
+  officeTurn();
+  if(!$("eventModal").classList.contains("hidden")) return;
 
   // La mise aux normes prime sur tout : c'est un rendez-vous, pas un hasard.
   if(capitalCallDue() && !insideAnnualChain()){
@@ -7552,6 +7668,376 @@ const events = [
 // générations ont pris finit par arriver avec un avocat.
 // ============================================================================
 
+// ---- La ville qui pousse à côté ----
+// En 1885 c'est trois baraques autour d'un abreuvoir. En 2026 c'est ce qui
+// finira par vouloir vos terres. Elle grandit toute seule, plus vite si le
+// ranch prospère, et sa taille commande ce qui est possible : le chemin de fer,
+// la banque, le conseil municipal, puis les promoteurs.
+const TOWN_STAGES = [
+  {size:0, label:"un relais de poste",       what:"Trois baraques et un abreuvoir au bord de la piste."},
+  {size:1, label:"un bourg",                 what:"Un magasin général, une forge, un saloon."},
+  {size:2, label:"une ville de comté",       what:"Un tribunal, une banque, un journal."},
+  {size:3, label:"une ville prospère",       what:"Des rues pavées, une gare, une école."},
+  {size:4, label:"une petite cité",          what:"Des faubourgs qui avancent vers vos clôtures."},
+  {size:5, label:"une agglomération",        what:"Le comté a plus d'habitants que de bêtes."}
+];
+function ensureTown(){
+  if(!state.town){
+    state.town = {name:"Redemption", size:0, since:1885};
+  }
+  return state.town;
+}
+function townStage(){
+  const t = ensureTown();
+  return TOWN_STAGES[Math.max(0, Math.min(TOWN_STAGES.length-1, t.size))];
+}
+function growTown(n, why){
+  const t = ensureTown();
+  const before = t.size;
+  t.size = Math.max(0, Math.min(TOWN_STAGES.length-1, t.size + (n === undefined ? 1 : n)));
+  if(t.size !== before){
+    addLog(`${t.name} devient ${townStage().label}. ${why || townStage().what}`, "info");
+    recordSaga("town", `${t.name} devient ${townStage().label}`, "city", townStage().what);
+  }
+}
+
+// ============================================================================
+// LA POLITIQUE — UN ÉDEN QUI EST UN PIÈGE
+// ----------------------------------------------------------------------------
+// Une famille de ranchers finit toujours par vouloir la loi de son côté. On
+// commence par fonder la commission du bétail, on y prend un siège, puis c'est
+// le comté, puis l'État. Chaque charge donne un pouvoir réel et durable.
+//
+// Et chaque charge braque une lumière sur la maison. Le `scrutiny` monte avec
+// les soupçons ; un coup en douce qui rate pendant un mandat devient un
+// scandale qui emporte la charge, la réputation et parfois le domaine. Plus on
+// monte, plus la chute est haute : le gouverneur est le poste le plus puissant
+// du jeu et le plus dangereux. Une famille propre y prospère ; une famille qui
+// a des choses à cacher y laisse tout.
+// ============================================================================
+const OFFICES = {
+  cattleCommission:{
+    level:1, from:1885, icon:"🐂", name:"un siège à la commission du bétail",
+    short:"Commission du bétail",
+    needs:()=>state.institutions && state.institutions.cattleCommission,
+    needsWhy:"La commission du bétail n'existe pas encore.",
+    cost:180, term:6, scrutiny:.5,
+    power:"Le cours plancher du bétail remonte, et les acheteurs vous suivent.",
+    danger:"Les éleveurs surveillent celui qui fixe les règles dont il profite.",
+    each:()=>{
+      state.cattlePriceMin = Math.min(state.cattlePriceMax-4, state.cattlePriceMin + 1);
+      if(chance(.3)) state.reputation = clamp(state.reputation + 1);
+    }
+  },
+  sheriff:{
+    level:2, from:1885, icon:"⭐", name:"le poste de shérif du comté",
+    short:"Shérif du comté",
+    needs:()=>ensureTown().size >= 1,
+    needsWhy:"Il faut une vraie ville pour qu'il y ait un shérif à élire.",
+    cost:320, term:6, scrutiny:1.1,
+    power:"Les soupçons retombent vite, et les incursions se heurtent à la loi.",
+    danger:"Un shérif pris la main dans le sac ne se relève pas.",
+    each:()=>{
+      state.suspicion = clamp(state.suspicion - rand(2,5));
+      const f = factionOfType("law"); if(f) f.relation = clamp(f.relation + 2, -100, 100);
+      if(state.rival) state.rival.strength = clamp(state.rival.strength - (chance(.3)?1:0), 10, 100);
+    }
+  },
+  prosecutor:{
+    level:2, from:1920, icon:"⚖️", name:"la charge de procureur du comté",
+    short:"Procureur du comté",
+    cost:420, term:6, scrutiny:1.4,
+    power:"Les procédures contre le ranch s'enlisent, les revendications reculent.",
+    danger:"Celui qui poursuit les autres est jugé sur ce qu'il ne poursuit pas.",
+    each:()=>{
+      state.claimPressure = Math.max(0, (state.claimPressure||0) - .6);
+      state.suspicion = clamp(state.suspicion - rand(1,3));
+      if(state.arrearYears > 0 && chance(.2)) state.arrearYears = Math.max(0, state.arrearYears - 1);
+    }
+  },
+  senator:{
+    level:3, from:1933, icon:"🏛️", name:"un siège de sénateur d'État",
+    short:"Sénateur d'État",
+    needs:()=>ensureTown().size >= 3,
+    needsWhy:"Le comté est trop peu peuplé pour peser à la capitale.",
+    cost:900, term:8, scrutiny:1.9,
+    power:"L'impôt foncier du domaine fond, et les projets qui le menacent s'enlisent.",
+    danger:"Un sénateur a des adversaires payés pour retourner son passé.",
+    each:()=>{
+      state.taxRelief = Math.min(50, (state.taxRelief||0) + 3);
+      if(state.developer) addDeveloperPressure(-.8);
+    }
+  },
+  governor:{
+    level:4, from:1946, icon:"🎖️", name:"le fauteuil de gouverneur",
+    short:"Gouverneur",
+    cost:2400, term:8, scrutiny:2.8,
+    power:"Le domaine devient intouchable : fiscalité allégée, projets bloqués, presse acquise.",
+    danger:"Tout ce que la famille a fait depuis 1885 devient une affaire d'État.",
+    each:()=>{
+      state.taxRelief = Math.min(60, (state.taxRelief||0) + 5);
+      if(state.developer) addDeveloperPressure(-1.6);
+      const m = factionOfType("media"); if(m) m.relation = clamp(m.relation + 2, -100, 100);
+      if(chance(.25)) state.reputation = clamp(state.reputation + 1);
+    }
+  }
+};
+
+function politics(){
+  if(!state.politics) state.politics = {office:null, until:0, held:[], scrutiny:0, defeats:0};
+  return state.politics;
+}
+function currentOffice(){
+  const p = politics();
+  return p.office ? OFFICES[p.office] : null;
+}
+function officeAvailable(id){
+  const o = OFFICES[id];
+  const p = politics();
+  if(!o) return {ok:false, why:"Charge inconnue."};
+  if(p.office) return {ok:false, why:"La famille occupe déjà une charge."};
+  if(state.year < o.from) return {ok:false, why:`Cette charge n'existe pas avant ${o.from}.`};
+  if(o.needs && !o.needs()) return {ok:false, why:o.needsWhy};
+  // On ne saute pas les échelons : il faut avoir tenu le niveau précédent.
+  if(o.level > 1){
+    const lower = Object.keys(OFFICES).filter(k => OFFICES[k].level === o.level - 1);
+    if(!lower.some(k => p.held.indexOf(k) >= 0)){
+      return {ok:false, why:"Il faut avoir déjà exercé une charge du niveau précédent."};
+    }
+  }
+  return {ok:true};
+}
+
+// Les chances d'être élu : ce que vaut le nom, ce que valent les appuis, et ce
+// que la maison traîne derrière elle.
+function electionOdds(id){
+  const o = OFFICES[id];
+  if(!o) return 0;
+  let p = .30;
+  p += (state.reputation - 40) / 260;
+  p += factionStance("media") * .10;
+  p += factionStance("community") * .09;
+  p += factionStance("law") * .07;
+  p += Math.min(.12, (state.legacy ? state.legacy.honor : 0) * .02);
+  p -= state.suspicion / 320;
+  p -= Math.min(.15, (state.legacy ? state.legacy.greed : 0) * .02);
+  p -= (o.level - 1) * .07;
+  p -= (politics().defeats || 0) * .04;
+  if(state.unity > 65) p += .05;
+  return Math.max(.05, Math.min(.92, p));
+}
+
+function runForOffice(id){
+  const avail = officeAvailable(id);
+  if(!avail.ok){ toast(avail.why); return; }
+  if(state.actions <= 0 || state.gameOver){ toast("Plus d'action disponible ce tour."); return; }
+  const o = OFFICES[id];
+  const chest = sc(o.cost);
+  if(state.money < chest){ toast("La caisse de campagne est hors de portée."); return; }
+  state.money -= chest;
+  useAction();
+
+  const p = politics();
+  if(chance(electionOdds(id))){
+    p.office = id;
+    p.until = state.year + o.term;
+    p.scrutiny = Math.max(0, p.scrutiny - 5);
+    if(p.held.indexOf(id) < 0) p.held.push(id);
+    p.defeats = 0;
+    state.reputation = clamp(state.reputation + 6 + o.level * 2);
+    // Les maisons rivales n'aiment pas voir un voisin tenir la loi.
+    rivalHouses().forEach(h => h.relation = clamp(h.relation - 8 - o.level * 3, -100, 100));
+    addLog(`Élection remportée : la famille ${state.familyName} obtient ${o.name}. Mandat jusqu'en ${p.until}.`, "good");
+    recordSaga("office", `${state.founder.name} ${state.familyName} — ${o.short}`, "law",
+      `${o.power} ${o.danger}`);
+    checkAchievements();
+  } else {
+    p.defeats = (p.defeats || 0) + 1;
+    state.reputation = clamp(state.reputation - 3);
+    addLog(`Campagne perdue pour ${o.name} : ${moneyFmt.format(chest)} $ engloutis et un revers public.`, "bad");
+  }
+  render();
+}
+
+// Fonder la commission du bétail : la première institution que la famille peut
+// créer de toutes pièces, et le premier barreau de l'échelle.
+function foundCattleCommission(){
+  if(!state.institutions) state.institutions = {};
+  if(state.institutions.cattleCommission){ toast("La commission existe déjà."); return; }
+  if(state.actions <= 0 || state.gameOver){ toast("Plus d'action disponible ce tour."); return; }
+  const cost = sc(240);
+  if(state.money < cost){ toast("Il faut de quoi réunir tous les éleveurs du comté."); return; }
+  state.money -= cost;
+  useAction();
+  state.institutions.cattleCommission = {since: state.year};
+  state.cattlePriceMin = Math.min(state.cattlePriceMax-4, state.cattlePriceMin + 2);
+  state.reputation = clamp(state.reputation + 8);
+  const t = factionOfType("trade"); if(t) t.relation = clamp(t.relation + 20, -100, 100);
+  const c = factionOfType("community"); if(c) c.relation = clamp(c.relation + 15, -100, 100);
+  addLog(`La commission du bétail du comté est fondée à l'initiative des ${state.familyName}. `
+    + `Les marques sont enregistrées, les litiges arbitrés, le cours plancher défendu.`, "good");
+  recordSaga("office", "La commission du bétail est fondée", "crowd",
+    `À l'initiative de la famille ${state.familyName}. Qui écrit les règles finit par en vivre.`);
+  checkAchievements();
+  render();
+}
+
+// Chaque tour passé en charge : le pouvoir s'exerce, et la lumière chauffe.
+function officeTurn(){
+  const p = politics();
+  const o = currentOffice();
+  if(!o){
+    // Hors mandat, l'attention retombe.
+    p.scrutiny = Math.max(0, (p.scrutiny || 0) - .4);
+    return;
+  }
+  try{ o.each(); }catch(e){ /* un pouvoir ne doit jamais interrompre le tour */ }
+  // La lumière : proportionnelle au rang, aggravée par ce qu'on a à cacher.
+  p.scrutiny = (p.scrutiny || 0) + o.scrutiny * (1 + state.suspicion / 90);
+
+  if(p.scrutiny >= 40 && chance(.35)){
+    openInvestigation();
+    return;
+  }
+  if(state.year >= p.until){
+    // Fin de mandat : on se représente, ou on rend les clés.
+    presentReelection();
+  }
+}
+
+function presentReelection(){
+  const o = currentOffice();
+  const p = politics();
+  if(!o) return;
+  const chest = sc(Math.round(o.cost * .7));
+  presentEvent({
+    art:"crowd",
+    title:`Fin de mandat — ${o.short}`,
+    text:()=>`Le mandat s'achève. Se représenter coûte ${moneyFmt.format(chest)} $ de campagne, `
+      + `et rouvre le dossier de la famille devant tout le comté. `
+      + `Se retirer maintenant, c'est garder ce qu'on a gagné — et le pouvoir qui va avec.`,
+    image:"Une estrade montée devant le tribunal du comté",
+    choices:[
+      {label:()=>`Se représenter (${moneyFmt.format(chest)} $)`,
+       condition:()=>state.money >= chest,
+       apply:()=>{
+         state.money -= chest;
+         if(chance(electionOdds(p.office) + .12)){
+           p.until = state.year + o.term;
+           addLog(`Réélu. Le mandat court jusqu'en ${p.until}.`, "good");
+         } else {
+           leaveOffice("battu aux élections", false);
+         }
+       }},
+      {label:"Se retirer avec les honneurs",
+       apply:()=>{
+         state.reputation = clamp(state.reputation + 5);
+         state.legacy.honor++;
+         leaveOffice("retiré de la vie publique", false);
+       }},
+      {label:"Faire jouer les appuis pour rester sans campagne",
+       apply:()=>{
+         state.legacy.greed++;
+         p.scrutiny += 14;
+         state.suspicion = clamp(state.suspicion + 10);
+         p.until = state.year + o.term;
+         addLog("Le mandat est prolongé sans vote véritable. On l'a remarqué.", "info");
+       }}
+    ]
+  });
+}
+
+function leaveOffice(why, disgrace){
+  const p = politics();
+  const o = currentOffice();
+  if(!o) return;
+  p.office = null;
+  p.until = 0;
+  if(disgrace){
+    p.scrutiny = Math.max(0, p.scrutiny - 10);
+    state.reputation = clamp(state.reputation - rand(12, 22));
+    state.legacy.grudges.push({name:"un mandat perdu dans le scandale", year:state.year});
+    recordSaga("office", `${o.short} — la chute`, "law", `La famille ${state.familyName} quitte la charge en disgrâce.`);
+  } else {
+    p.scrutiny = Math.max(0, p.scrutiny - 18);
+    recordSaga("office", `Fin de mandat — ${o.short}`, "law", `La famille ${state.familyName} s'est ${why}.`);
+  }
+  addLog(`La famille quitte ${o.name} : ${why}.`, disgrace ? "bad" : "info");
+  render();
+}
+
+// Le piège se referme : tout ce que la maison a fait remonte à la surface.
+function openInvestigation(){
+  const o = currentOffice();
+  const p = politics();
+  if(!o) return;
+  const dirty = state.suspicion + (state.legacy ? state.legacy.greed * 6 : 0);
+  presentEvent({
+    art:"law",
+    title:"Une commission d'enquête vise la famille",
+    text:()=>`Occuper ${o.name} attire les regards, et les regards ont trouvé quelque chose. `
+      + `Une commission examine les marchés passés, les terres acquises et les dossiers classés `
+      + `depuis que la famille ${state.familyName} exerce.`,
+    image:"Une salle d'audience pleine et des photographes",
+    choices:[
+      {label:"Démissionner avant les conclusions",
+       apply:()=>{
+         leaveOffice("démis avant le rapport", false);
+         state.suspicion = clamp(state.suspicion - 20);
+         addLog("Partir avant le rapport coupe court à l'enquête. Le pouvoir s'en va avec.", "info");
+       }},
+      {label:"Tenir et se défendre pied à pied",
+       apply:()=>{
+         const cost = Math.min(state.money, sc(rand(300, 900)));
+         state.money -= cost;
+         if(dirty < 45){
+           p.scrutiny = Math.max(0, p.scrutiny - 25);
+           state.reputation = clamp(state.reputation + 10);
+           state.legacy.honor++;
+           addLog(`${moneyFmt.format(cost)} $ d'avocats, et un rapport qui blanchit la maison. `
+             + `La charge en sort renforcée.`, "good");
+         } else {
+           leaveOffice("emporté par le scandale", true);
+           state.suspicion = clamp(state.suspicion + 20);
+           if(o.level >= 3) setReceivership(rand(3,6), "Les comptes du domaine sont saisis avec ceux de la campagne.");
+           addLog(`Le rapport est accablant. ${moneyFmt.format(cost)} $ pour rien.`, "bad");
+         }
+       }},
+      {label:"Faire disparaître les pièces gênantes",
+       apply:()=>{
+         state.legacy.greed += 2;
+         if(chance(.45)){
+           p.scrutiny = Math.max(0, p.scrutiny - 30);
+           state.suspicion = clamp(state.suspicion + 8);
+           addLog("Les cartons ont brûlé dans un incendie de bureau. L'enquête s'arrête faute de pièces.", "good");
+         } else {
+           leaveOffice("pris en flagrant délit d'entrave", true);
+           state.suspicion = clamp(state.suspicion + 35);
+           setReceivership(rand(4,8), "Entrave à une commission d'enquête.");
+           addLog("La destruction de preuves est constatée. C'est bien pire que ce qu'on cherchait.", "bad");
+         }
+       }}
+    ]
+  });
+}
+
+// Un coup en douce qui rate pendant un mandat ne coûte pas seulement de la
+// réputation : c'est la charge qui tombe, et de haut.
+function officeScandal(op){
+  const p = politics();
+  const o = currentOffice();
+  if(!o) return;
+  p.scrutiny += 10 + o.level * 4;
+  if(chance(.35 + o.level * .12)){
+    leaveOffice(`compromis dans l'affaire « ${op.name.toLowerCase()} »`, true);
+    state.suspicion = clamp(state.suspicion + 15 + o.level * 5);
+    recordSaga("office", `Scandale — ${o.short}`, "night",
+      `Un coup manqué, et la charge tombe avec celui qui l'occupait.`);
+  } else {
+    addLog(`L'affaire manquée remonte jusqu'à la charge. Pour l'instant, elle tient.`, "bad");
+  }
+}
+
 // ---- Les investisseurs, à partir de 2010 ----
 // La dernière époque n'a plus de rival à cheval : elle a des gens qui achètent
 // des vallées entières depuis un bureau. Leur pression monte toute seule, et
@@ -8204,6 +8690,281 @@ events.push(
         state.legacy.honor++;
         const c=factionOfType("community");if(c)c.relation=clamp(c.relation+18,-100,100);
         addLog(`${ha} ha classés en réserve : l'impôt baisse, et ces terres ne se vendront plus jamais.`,"good");}}
+   ]},
+
+  // ============================================ LA FRONTIÈRE, 1885–1919
+  // L'époque où toutes les parties commencent et où la plupart s'éteignent
+  // était la plus pauvre en événements. Ce sont les enjeux de la Fondation :
+  // des bandits qui ne connaissent pas la loi, une nation qu'on a chassée, et
+  // une ville qui pousse et qui, un jour, voudra la place.
+  {eraId:"foundation", art:"night", title:"La bande de Colter descend du nord",
+   text:"Six cavaliers ont vidé deux ranchs de la vallée voisine en une semaine. Ils remontent vers vos terres, et personne au comté n'a de quoi les arrêter.",
+   image:"Six silhouettes contre un ciel de fin de jour",
+   choices:[
+     {label:"Poster les hommes et attendre",apply:()=>{
+        const s=ranchGunStrength();
+        if(s>=45){state.reputation=clamp(state.reputation+9);
+          state.rival.strength=clamp(state.rival.strength-4,10,100);
+          addLog("Ils tâtent la clôture nord, comptent les carabines, et vont chercher ailleurs.","good");}
+        else {const l=Math.min(state.cattle,rand(8,20));state.cattle-=l;
+          const n=hurtCowboys(1,true);
+          addLog(`Ils passent où c'était ouvert : ${l} bêtes emmenées. ${casualtyLine(n)}`,"bad");}}},
+     {label:()=>`Payer un tribut pour être épargné (${moneyFmt.format(sc(140))} $)`,
+      condition:()=>state.money>=sc(140),
+      apply:()=>{state.money-=sc(140);state.legacy.greed++;
+        state.reputation=clamp(state.reputation-6);
+        const c=factionOfType("community");if(c)c.relation=clamp(c.relation-18,-100,100);
+        addLog("Le ranch est épargné. Les voisins, qui n'ont pas payé, savent pourquoi.","info");}},
+     {label:"Monter une battue avec les autres éleveurs",apply:()=>{
+        const c=factionOfType("community");if(c)c.relation=clamp(c.relation+25,-100,100);
+        if(ranchGunStrength()>=35||chance(.5)){
+          state.reputation=clamp(state.reputation+14);state.legacy.honor++;
+          const g=sc(rand(120,260));state.money+=g;
+          addLog(`La bande est prise dans le canyon. Prime de ${moneyFmt.format(g)} $ et un nom qui compte.`,"good");
+          recordSaga("hardship","La bande de Colter prise dans le canyon","rider",
+            "Les éleveurs du comté ont monté ensemble, et la famille menait.");}
+        else {const n=hurtCowboys(rand(1,2),true);
+          addLog(`La battue tourne à l'embuscade. ${casualtyLine(n)}`,"bad");}}}
+   ]},
+
+  {eraId:"foundation", art:"law", title:"Un hors-la-loi demande l'hospitalité",
+   text:"Il arrive au crépuscule, blessé, poli, et sans expliquer d'où il vient. Au matin, un adjoint passera demander si quelqu'un a vu un homme correspondant à sa description.",
+   image:"Un cheval fourbu attaché derrière la grange",
+   choices:[
+     {label:"Le soigner et le laisser repartir",apply:()=>{
+        state.suspicion=clamp(state.suspicion+10);
+        if(chance(.5)){const g=sc(rand(90,220));state.money+=g;
+          addLog(`Il laisse ${moneyFmt.format(g)} $ sous l'assiette et disparaît avant le jour.`,"good");}
+        else addLog("Il repart sans un mot. On ne saura jamais ce qu'il avait fait.","info");}},
+     {label:"Le livrer à l'adjoint",apply:()=>{
+        const g=sc(rand(60,150));state.money+=g;
+        state.sheriffRelation=clamp(state.sheriffRelation+18,-100,100);
+        const f=factionOfType("law");if(f)f.relation=clamp(f.relation+18,-100,100);
+        state.suspicion=clamp(state.suspicion-8);
+        addLog(`Prime de ${moneyFmt.format(g)} $ encaissée. Certains dans le comté trouvent ça peu élégant.`,"info");
+        if(chance(.3))state.legacy.grudges.push({name:"les amis d'un homme livré", year:state.year});}},
+     {label:"Lui proposer de rester travailler au ranch",apply:()=>{
+        state.suspicion=clamp(state.suspicion+16);
+        ensureCowboys();
+        state.cowboys.push(decorateCowboy({name:pickName("m")+" "+["Cade","Ryker","Vance","Ames"][rand(0,3)],
+          loyalty:rand(35,60), shoot:rand(75,95), ride:rand(60,85),
+          salary:Math.round(sc(14)), years:0, trait:"Tête brûlée", post:null}));
+        addLog("Il reste. Il tire mieux que n'importe qui ici, et il ne parle jamais de son passé.","good");}}
+   ]},
+
+  {eraId:"foundation", art:"crowd", title:"Le chemin de fer choisit son tracé",
+   condition:()=>ensureTown().size<=2,
+   text:()=>`Les ingénieurs de la compagnie campent près de ${ensureTown().name}. Le terminus ira soit au bourg, soit `
+     + `quarante kilomètres plus loin — et ce choix décidera de ce que vaut chaque hectare de la vallée pour cinquante ans.`,
+   image:"Des piquets d'arpentage plantés dans la prairie",
+   choices:[
+     {label:()=>`Financer le comité d'accueil de la compagnie (${moneyFmt.format(sc(200))} $)`,
+      condition:()=>state.money>=sc(200),
+      apply:()=>{state.money-=sc(200);growTown(1,"Le terminus se fera ici, et la ville double en trois ans.");
+        state.cattlePriceMin=Math.min(state.cattlePriceMax-4,state.cattlePriceMin+3);
+        const t=factionOfType("trade");if(t)t.relation=clamp(t.relation+25,-100,100);
+        addLog("Le rail arrive au bourg. Le bétail part désormais sans trois semaines de piste.","good");}},
+     {label:"Négocier un embranchement privé jusqu'au ranch",apply:()=>{
+        const c=Math.min(state.money,sc(rand(280,450)));state.money-=c;
+        if(chance(.45)){state.cattlePriceMin=Math.min(state.cattlePriceMax-4,state.cattlePriceMin+5);
+          addLog(`${moneyFmt.format(c)} $ pour un quai de chargement à vous. Plus personne ne prend de commission.`,"good");}
+        else {growTown(1);addLog(`${moneyFmt.format(c)} $ perdus : la compagnie ne dévie pas pour un seul ranch.`,"bad");}}},
+     {label:"S'y opposer : le rail amènera du monde",apply:()=>{
+        state.reputation=clamp(state.reputation-5);
+        const t=factionOfType("trade");if(t)t.relation=clamp(t.relation-22,-100,100);
+        addLog("Le terminus ira ailleurs. La vallée restera tranquille — et loin de tout.","info");
+        addClaimPressure(-2);}}
+   ]},
+
+  {eraId:"foundation", art:"city", title:()=>`${ensureTown().name} demande une charte`,
+   condition:()=>ensureTown().size>=1,
+   text:()=>`${ensureTown().name} veut devenir une municipalité en règle : un conseil, un budget, une police. `
+     + `Les éleveurs, eux, savent que qui tient la mairie tient les taxes et les routes.`,
+   image:"Une pétition sur le comptoir du magasin général",
+   choices:[
+     {label:()=>`Financer la charte et y placer vos gens (${moneyFmt.format(sc(220))} $)`,
+      condition:()=>state.money>=sc(220),
+      apply:()=>{state.money-=sc(220);growTown(1);
+        const f=factionOfType("law");if(f)f.relation=clamp(f.relation+25,-100,100);
+        const c=factionOfType("community");if(c)c.relation=clamp(c.relation+18,-100,100);
+        state.reputation=clamp(state.reputation+8);
+        addLog("La charte est signée, et deux conseillers vous doivent leur siège.","good");}},
+     {label:"S'y opposer pour éviter les taxes municipales",apply:()=>{
+        const c=factionOfType("community");if(c)c.relation=clamp(c.relation-25,-100,100);
+        state.taxRelief=(state.taxRelief||0)+10;
+        addLog("Pas de charte, pas de taxes. Et pas de route pavée jusqu'au ranch non plus.","info");}},
+     {label:"Rester à l'écart",apply:()=>{
+        growTown(1);
+        addLog("La ville s'organise sans vous. Elle prendra ses décisions sans vous aussi.","info");}}
+   ]},
+
+  {eraId:"foundation", art:"rider", title:"Le grand hiver",
+   text:"La neige tombe en octobre et ne s'arrête plus. Au matin du troisième jour, on ne distingue plus les clôtures, et le troupeau est quelque part sous cette blancheur.",
+   image:"Des piquets de clôture qui dépassent à peine de la neige",
+   choices:[
+     {label:"Sortir chercher le troupeau",apply:()=>{
+        const cw=(state.cowboys||[]).length;
+        const saved=Math.min(state.cattle,Math.round(state.cattle*(0.12+cw*0.03)));
+        const lost=Math.min(state.cattle,rand(Math.floor(state.cattle*.15),Math.floor(state.cattle*.35)+1));
+        state.cattle=Math.max(0,state.cattle-Math.max(0,lost-saved));
+        const n=hurtCowboys(chance(.4)?1:0,true);
+        state.reputation=clamp(state.reputation+5);
+        addLog(`Le troupeau est ramené en partie : ${Math.max(0,lost-saved)} bêtes perdues. ${casualtyLine(n)}`,"info");}},
+     {label:"Rester à l'abri et compter les pertes au dégel",apply:()=>{
+        const lost=Math.min(state.cattle,rand(Math.floor(state.cattle*.25),Math.floor(state.cattle*.45)+1));
+        state.cattle-=lost;
+        state.feed=Math.max(0,state.feed-rand(20,50));
+        addLog(`Au dégel, on compte ${lost} bêtes mortes. Personne n'est mort, lui.`,"bad");}},
+     {label:()=>`Acheter tout le foin du comté (${moneyFmt.format(sc(180))} $)`,
+      condition:()=>state.money>=sc(180),
+      apply:()=>{state.money-=sc(180);state.feed+=120;
+        const lost=Math.min(state.cattle,rand(2,Math.max(3,Math.floor(state.cattle*.1))));
+        state.cattle-=lost;
+        const c=factionOfType("community");if(c)c.relation=clamp(c.relation-15,-100,100);
+        addLog(`${lost} bêtes seulement. Mais il ne reste plus un brin de foin pour les voisins.`,"info");}}
+   ]},
+
+  {eraId:"foundation", art:"land", title:"Les moutons arrivent dans la vallée",
+   text:"Une famille de bergers s'installe sur les hauteurs avec deux mille têtes. Dans tout l'Ouest, l'arrivée des moutons chez les éleveurs de bovins finit de la même façon.",
+   image:"Un troupeau blanc sur une crête",
+   choices:[
+     {label:"Aller les voir et partager les hauteurs",apply:()=>{
+        state.legacy.honor++;state.reputation=clamp(state.reputation+7);
+        const c=factionOfType("community");if(c)c.relation=clamp(c.relation+18,-100,100);
+        state.feed=Math.max(0,state.feed-20);
+        addLog("Un accord de pacage est trouvé autour d'une table. C'est rare, et ça se sait.","good");}},
+     {label:"Les faire partir par l'intimidation",apply:()=>{
+        if(ranchGunStrength()>=40){state.feed+=40;state.suspicion=clamp(state.suspicion+14);
+          state.legacy.greed++;
+          addLog("Ils remballent en trois jours. On n'a même pas eu à tirer — presque.","info");}
+        else {const n=hurtCowboys(1,true);state.suspicion=clamp(state.suspicion+22);
+          addLog(`Les bergers ne sont pas partis, et ils tiraient bien. ${casualtyLine(n)}`,"bad");}}},
+     {label:"Racheter leur bail",apply:()=>{
+        const c=Math.min(state.money,sc(rand(160,320)));state.money-=c;
+        state.land+=40;addParcel(40);
+        addLog(`${moneyFmt.format(c)} $ pour leur bail et quarante hectares de hauteurs.`,"good");}}
+   ]},
+
+  {eraId:"foundation", art:"family", title:"Le maître d'école ou le contremaître",
+   condition:()=>state.children.some(c=>c.alive!==false&&c.age>=8&&c.age<=15),
+   text:()=>{const k=state.children.filter(c=>c.alive!==false&&c.age>=8&&c.age<=15)[0];
+     return `${ensureTown().name} a désormais une école. Y envoyer ${k.name}, c'est trois heures de cheval par jour `
+       + `et deux bras de moins au ranch. Ne pas l'y envoyer, c'est décider de ce qu'${k.sex==="f"?"elle":"il"} sera.`;},
+   image:"Une école de bois neuve au bout d'un chemin",
+   choices:[
+     {label:"L'envoyer à l'école",apply:()=>{
+        const k=state.children.filter(c=>c.alive!==false&&c.age>=8&&c.age<=15)[0];
+        if(k){k.schooled=true;k.ambition=clamp((k.ambition||40)+20);k.bond=clamp((k.bond||50)+5);}
+        state.reputation=clamp(state.reputation+4);
+        addLog(`${k?k.name:"L'enfant"} part à l'école chaque matin. Il faudra un homme de plus au ranch.`,"info");}},
+     {label:"Le garder au ranch",apply:()=>{
+        const k=state.children.filter(c=>c.alive!==false&&c.age>=8&&c.age<=15)[0];
+        if(k){k.role="ranch";k.bond=clamp((k.bond||50)+8);k.resentment=clamp((k.resentment||0)+8);}
+        addLog(`${k?k.name:"L'enfant"} apprend le métier à la dure. C'est comme ça qu'on l'a appris.`,"info");}},
+     {label:()=>`Faire venir un précepteur au ranch (${moneyFmt.format(sc(160))} $)`,
+      condition:()=>state.money>=sc(160),
+      apply:()=>{state.money-=sc(160);
+        state.children.forEach(k=>{if(k.age>=6&&k.age<=17){k.schooled=true;k.ambition=clamp((k.ambition||40)+12);}});
+        state.unity=clamp(state.unity+6);state.reputation=clamp(state.reputation+6);
+        addLog("Un précepteur s'installe dans l'aile est. Tous les enfants y passent.","good");}}
+   ]},
+
+  {eraId:"foundation", art:"rider", title:"La grande piste de convoyage",
+   text:"Le convoyage vers le terminus part dans dix jours : douze cents kilomètres, trois rivières, et des territoires où personne ne garantit rien. C'est là que se fait l'année.",
+   image:"Un troupeau qui s'étire jusqu'à l'horizon",
+   choices:[
+     {label:"Partir avec tout ce qu'on peut mener",apply:()=>{
+        const n=Math.min(state.cattle,Math.ceil(state.cattle*.5));
+        const cw=(state.cowboys||[]).length;
+        const loss=Math.max(0,Math.round(n*(0.22-Math.min(.16,cw*.03))));
+        state.cattle-=n;
+        const g=Math.round((n-loss)*state.cattlePrice*1.45);
+        state.money+=g;
+        state.reputation=clamp(state.reputation+6);
+        addLog(`${n} bêtes parties, ${loss} perdues en route, ${moneyFmt.format(g)} $ au terminus.`,"good");}},
+     {label:"N'envoyer qu'un petit lot, pour voir",apply:()=>{
+        const n=Math.min(state.cattle,Math.ceil(state.cattle*.18));
+        state.cattle-=n;
+        const g=Math.round(n*state.cattlePrice*1.35);state.money+=g;
+        addLog(`Petit convoi sans encombre : ${moneyFmt.format(g)} $.`,"good");}},
+     {label:"Vendre sur place au maquignon",apply:()=>{
+        const n=Math.min(state.cattle,Math.ceil(state.cattle*.4));
+        state.cattle-=n;
+        const g=Math.round(n*state.cattlePrice*.9);state.money+=g;
+        addLog(`${moneyFmt.format(g)} $ sans quitter la vallée, et sans risque.`,"info");}}
+   ]},
+
+  {eraId:"foundation", art:"night", title:"Le comité de vigilance",
+   condition:()=>state.suspicion>=15||factionStance("law")<0,
+   text:"Des éleveurs se réunissent le soir dans une grange. Faute de shérif capable, ils comptent pendre eux-mêmes les voleurs de bétail, et ils veulent le nom de la famille sur la liste des fondateurs.",
+   image:"Des hommes debout autour d'une lampe à pétrole",
+   choices:[
+     {label:"Signer et en prendre la tête",apply:()=>{
+        state.reputation=clamp(state.reputation+10);
+        state.suspicion=clamp(state.suspicion+12);
+        state.legacy.greed++;
+        const c=factionOfType("community");if(c)c.relation=clamp(c.relation+28,-100,100);
+        const l=factionOfType("law");if(l)l.relation=clamp(l.relation-25,-100,100);
+        state.rival.strength=clamp(state.rival.strength-10,10,100);
+        addLog("Trois hommes sont pendus dans le mois. Le vol de bétail cesse net dans la vallée.","info");
+        recordSaga("hardship","Le comité de vigilance",'night',
+          "Trois pendaisons sans procès, et la famille au premier rang.");}},
+     {label:"Refuser et défendre le tribunal",apply:()=>{
+        state.legacy.honor+=2;state.reputation=clamp(state.reputation+5);
+        const l=factionOfType("law");if(l)l.relation=clamp(l.relation+30,-100,100);
+        const c=factionOfType("community");if(c)c.relation=clamp(c.relation-18,-100,100);
+        addLog("Le comité se monte sans vous. Certains voisins ne vous le pardonneront pas.","info");}},
+     {label:"Prévenir discrètement le marshal",apply:()=>{
+        const l=factionOfType("law");if(l)l.relation=clamp(l.relation+35,-100,100);
+        const c=factionOfType("community");if(c)c.relation=clamp(c.relation-30,-100,100);
+        state.legacy.grudges.push({name:"le comité de vigilance", year:state.year});
+        addLog("Le comité est dissous avant d'agir. Quelqu'un a parlé, et tout le monde cherche qui.","info");}}
+   ]},
+
+  {eraId:"foundation", art:"land", title:"Une délégation ashkani demande à parler",
+   condition:()=>factionStance("nation")>=0,
+   text:()=>`Trois cavaliers de ${factionOfType("nation") ? factionOfType("nation").name : "la nation ashkani"} attendent devant `
+     + `la maison depuis l'aube. Ils veulent parler des terres du nord, et ils ont apporté les papiers de la cession de 1871.`,
+   image:"Trois cavaliers immobiles devant un portail",
+   choices:[
+     {label:"Les recevoir et lire les papiers avec eux",apply:()=>{
+        const f=factionOfType("nation");if(f)f.relation=clamp(f.relation+28,-100,100);
+        state.claimPressure=Math.max(0,(state.claimPressure||0)-4);
+        state.legacy.honor++;
+        addLog("La conversation dure la journée. Rien n'est signé, mais on s'est parlé.","good");}},
+     {label:"Signer un droit de passage écrit et payé",apply:()=>{
+        const c=Math.min(state.money,sc(rand(90,190)));state.money-=c;
+        const f=factionOfType("nation");if(f)f.relation=clamp(f.relation+40,-100,100);
+        state.claimPressure=Math.max(0,(state.claimPressure||0)-10);
+        state.legacy.honor+=2;
+        addLog(`${moneyFmt.format(c)} $ par an pour un droit de passage écrit. Cela vaudra cher dans un siècle.`,"good");
+        recordSaga("claim","Un droit de passage écrit et payé","law",
+          "Le seul papier que la nation ashkani pourra présenter en faveur de la famille.");}},
+     {label:"Les renvoyer sans les recevoir",apply:()=>{
+        const f=factionOfType("nation");if(f)f.relation=clamp(f.relation-30,-100,100);
+        addClaimPressure(5);
+        addLog("Ils repartent sans un mot. Les papiers, eux, restent quelque part.","bad");}}
+   ]},
+
+  {eraId:"foundation", art:"money", title:"La banque ouvre à la ville",
+   condition:()=>ensureTown().size>=1,
+   text:()=>`${ensureTown().name} a sa banque. Le directeur passe au ranch : il propose un crédit d'installation `
+     + `à des conditions qui paraissent douces, et rappelle qu'un ranch sans crédit reste petit.`,
+   image:"Un coffre-fort tout neuf derrière un guichet",
+   choices:[
+     {label:"Emprunter pour agrandir",apply:()=>{
+        const loan=sc(500);
+        state.money+=loan;state.debt=(state.debt||0)+Math.round(loan*1.2);
+        addLog(`${moneyFmt.format(loan)} $ tout de suite, ${moneyFmt.format(state.debt)} $ à rendre. `
+          + `La traite tombera chaque tour.`,"info");}},
+     {label:"Déposer l'argent du ranch et ne rien emprunter",apply:()=>{
+        const t=factionOfType("trade");if(t)t.relation=clamp(t.relation+20,-100,100);
+        state.reputation=clamp(state.reputation+4);
+        addLog("Le compte est ouvert, vide de dettes. Le directeur le note aussi.","good");}},
+     {label:"Se méfier des banques",apply:()=>{
+        state.legacy.honor++;
+        const t=factionOfType("trade");if(t)t.relation=clamp(t.relation-12,-100,100);
+        addLog("L'argent reste dans une caisse sous le plancher. Ça a ses avantages.","info");}}
    ]},
 
   // ==================================================== LES INVESTISSEURS
@@ -9111,16 +9872,10 @@ function loadGame(){
 
 function exportGame(){
   if(!state){ toast("Aucune partie en cours à exporter."); return; }
-  const blob = new Blob([JSON.stringify(state,null,2)], {type:"application/json"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "ranch-dynasty-"+(state.familyName||"famille")+"-"+state.year+".json";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  toast("Fichier de sauvegarde téléchargé.");
+  const name = "ranch-dynasty-"
+    + (state.familyName||"famille").toLowerCase().replace(/[^a-z0-9]+/gi,"-")
+    + "-" + state.year + ".json";
+  saveFile(name, JSON.stringify(state,null,2), "application/json");
 }
 
 function importGame(file){
@@ -9621,8 +10376,77 @@ function renderDiplomacy(){
       + "</div>";
    h += "</div>";
  });
- diplomacyContent.innerHTML = h;
+ // La politique passe en tête : c'est le levier le plus lourd du panneau, et
+ // il était relégué sous deux maisons rivales et cinq factions.
+ diplomacyContent.innerHTML = renderPolitics() + h;
 }
+
+// Le panneau politique : ce qu'on tient, ce qu'on peut viser, et ce que ça
+// coûte de le tenir. Le `scrutiny` est affiché parce qu'il est la contrepartie
+// de tout le reste.
+function renderPolitics(){
+ const p = politics();
+ const o = currentOffice();
+ let h = "<h3 class=\"section-head\">La politique</h3>";
+ h += "<p class=\"modal-intro\">Tenir une charge, c'est écrire les règles dont on vit. "
+    + "C'est aussi être regardé : chaque mandat fait monter l'attention, et un coup manqué "
+    + "pendant un mandat devient un scandale.</p>";
+
+ if(!state.institutions || !state.institutions.cattleCommission){
+   h += "<div class=\"faction\">";
+   h += "<div class=\"faction-head\"><span class=\"faction-name\">🐂 La commission du bétail</span>"
+      + "<span class=\"fact\">À fonder</span></div>";
+   h += "<div class=\"faction-role\">Réunir tous les éleveurs du comté, enregistrer les marques, "
+      + "arbitrer les litiges et défendre un cours plancher. La première institution que la famille "
+      + "peut créer — et le premier barreau de l'échelle.</div>";
+   h += "<div class=\"faction-acts\"><button class=\"choice\" onclick=\"foundCattleCommission()\">"
+      + "Fonder la commission (" + moneyFmt.format(sc(240)) + " $)</button></div>";
+   h += "</div>";
+ }
+
+ if(o){
+   const left = Math.max(0, p.until - state.year);
+   const heat = p.scrutiny >= 30 ? "bad" : (p.scrutiny >= 15 ? "info" : "good");
+   h += "<div class=\"faction\">";
+   h += "<div class=\"faction-head\"><span class=\"faction-name\">" + o.icon + " " + o.short + "</span>"
+      + "<span class=\"fact good\">Mandat — " + left + " an" + (left>1?"s":"") + "</span></div>";
+   h += "<div class=\"faction-meter\"><div class=\"faction-fill " + heat + "\" style=\"width:"
+      + Math.min(100, Math.round(p.scrutiny * 2.5)) + "%\"></div></div>";
+   h += "<div class=\"faction-role\"><b>" + o.power + "</b><br><span>" + o.danger
+      + "</span><br><span>Attention publique : " + Math.round(p.scrutiny) + "/40 — "
+      + "au-delà, une commission d'enquête s'ouvre.</span></div>";
+   h += "<div class=\"faction-acts\"><button class=\"choice\" onclick=\"leaveOffice('retiré de son plein gré', false)\">"
+      + "Se retirer de la charge</button></div>";
+   h += "</div>";
+ }
+
+ Object.keys(OFFICES).forEach(id => {
+   const off = OFFICES[id];
+   if(state.year < off.from) return;
+   if(p.office === id) return;
+   const avail = officeAvailable(id);
+   const chest = sc(off.cost);
+   const odds = Math.round(electionOdds(id) * 100);
+   const cls = odds >= 60 ? "good" : (odds >= 40 ? "info" : "bad");
+   const done = p.held.indexOf(id) >= 0;
+   h += "<div class=\"faction\">";
+   h += "<div class=\"faction-head\"><span class=\"faction-name\">" + off.icon + " " + off.short + "</span>"
+      + "<span class=\"fact " + (avail.ok ? cls : "") + "\">"
+      + (avail.ok ? odds + " % de chances" : "Indisponible") + "</span></div>";
+   h += "<div class=\"faction-role\"><b>" + off.power + "</b><br><span>" + off.danger + "</span>"
+      + (done ? "<br><span>Déjà exercée par la famille.</span>" : "") + "</div>";
+   h += "<div class=\"faction-acts\">";
+   if(avail.ok){
+     h += "<button class=\"choice\" " + (state.money >= chest ? "" : "disabled")
+        + " onclick=\"runForOffice('" + id + "')\">Se présenter (" + moneyFmt.format(chest) + " $)</button>";
+   } else {
+     h += "<small>" + avail.why + "</small>";
+   }
+   h += "</div></div>";
+ });
+ return h;
+}
+
 function negotiateHouse(idx){
  const h = rivalHouses()[idx];
  if(!h) return;

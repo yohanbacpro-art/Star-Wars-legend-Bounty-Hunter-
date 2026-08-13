@@ -99,6 +99,8 @@ function permissiveGame(){
   s.horses = 4;
   s.champion = {name:"Comanche", age:6, speed:60, training:60, wins:2, alive:true};
   s.spouse.role = "none";
+  // La ville a poussé : c'est ce qui ouvre la charte, la banque et le shérif.
+  s.town = {name:"Redemption", size:3, since:1885};
   s.factions.forEach((f,i) => f.relation = i === 0 ? -50 : 70);
   // Une maison hostile, l'autre assez cordiale pour qu'un mariage soit proposé.
   G.ensureSecondHouse();
@@ -114,6 +116,11 @@ function permissiveVariants(){
   return [
     () => permissiveGame(),
     () => { const s = permissiveGame(); s.champion.training = 5; return s; },
+    // La frontière des premières années : ville minuscule, tout est à bâtir.
+    () => { const s = permissiveGame(); s.year = 1890; s.eraId = "foundation"; s.costModifier = 1;
+            s.town = {name:"Redemption", size:0, since:1885};
+            s.factions.forEach(f => { if(f.type==="nation") f.relation = 30; });
+            return s; },
     () => { const s = permissiveGame(); s.cowboys = s.cowboys.slice(0,1); s.cattle = 300; return s; },
     // Les liens avec la pègre, l'époque et le contentieux foncier ouvrent des
     // familles d'événements entières : il leur faut leurs propres états.
@@ -1001,6 +1008,211 @@ section("Chronique de la saga");
     labels.some(l => l.indexOf("écran de création") >= 0));
 }
 
+// ------------------------------------------------- La politique
+section("La politique : l'échelle des charges");
+{
+  const s = freshGame();
+  check("aucune charge au départ", G.currentOffice() === null);
+  check("aucune institution au départ",
+    !(s.institutions && s.institutions.cattleCommission));
+  check("les charges forment une échelle sans trou",
+    [1,2,3,4].every(l => Object.values(ev("OFFICES")).some(o => o.level === l)),
+    Object.values(ev("OFFICES")).map(o=>o.level).sort().join(","));
+  check("chaque charge décrit son pouvoir et son danger",
+    Object.values(ev("OFFICES")).every(o => o.power && o.danger && o.cost > 0 && o.term > 0));
+
+  // La commission du bétail se fonde, et ouvre le premier barreau.
+  check("le premier siège est verrouillé tant que la commission n'existe pas",
+    G.officeAvailable("cattleCommission").ok === false,
+    G.officeAvailable("cattleCommission").why);
+  s.money = 100000;
+  const acts = s.actions;
+  G.foundCattleCommission();
+  check("fonder la commission coûte une action", ST().actions === acts - 1);
+  check("la commission existe", !!ST().institutions.cattleCommission);
+  check("elle relève le cours plancher", ST().cattlePriceMin > 16, ST().cattlePriceMin);
+  check("elle entre dans la saga", ST().saga.some(m => /commission du bétail/i.test(m.title)));
+  check("le siège devient accessible", G.officeAvailable("cattleCommission").ok === true);
+  G.foundCattleCommission();
+  check("on ne la fonde pas deux fois", ST().actions === acts - 1, ST().actions);
+
+  // On ne saute pas les échelons.
+  const s2 = freshGame();
+  s2.money = 5000000; s2.year = 1990; s2.eraId = "corporate"; s2.costModifier = 5;
+  s2.town = {name:"Redemption", size:4, since:1885};
+  check("le gouvernorat est fermé sans échelon précédent",
+    G.officeAvailable("governor").ok === false, G.officeAvailable("governor").why);
+  s2.politics.held = ["cattleCommission","sheriff","senator"];
+  check("il s'ouvre une fois le niveau 3 exercé",
+    G.officeAvailable("governor").ok === true, G.officeAvailable("governor").why);
+
+  // Les chances d'élection suivent le nom et ce qu'on traîne.
+  const s3 = freshGame();
+  s3.money = 5000000; s3.institutions = {cattleCommission:{since:1885}};
+  s3.reputation = 90; s3.suspicion = 0; s3.legacy.honor = 4;
+  const clean = G.electionOdds("cattleCommission");
+  s3.reputation = 20; s3.suspicion = 80; s3.legacy.honor = 0; s3.legacy.greed = 5;
+  const dirty = G.electionOdds("cattleCommission");
+  check("un nom respecté l'emporte plus souvent", clean > dirty, clean.toFixed(2) + " vs " + dirty.toFixed(2));
+  check("les chances restent bornées", dirty >= .05 && clean <= .92, dirty.toFixed(2) + " / " + clean.toFixed(2));
+  // Sur un nom sale, les deux chances tombent au plancher : il faut un état
+  // sain pour que l'écart entre les niveaux se voie.
+  s3.reputation = 75; s3.suspicion = 5; s3.legacy.greed = 0;
+  check("une charge élevée est plus dure à décrocher",
+    G.electionOdds("cattleCommission") > G.electionOdds("governor"),
+    G.electionOdds("cattleCommission").toFixed(2) + " vs " + G.electionOdds("governor").toFixed(2));
+
+  // Une élection gagnée donne la charge, son mandat et ses pouvoirs.
+  const s4 = freshGame();
+  s4.money = 5000000; s4.institutions = {cattleCommission:{since:1885}};
+  s4.reputation = 95; s4.suspicion = 0; s4.legacy.honor = 6;
+  let elected = false;
+  for(let i = 0; i < 30 && !elected; i++){
+    ST().actions = 3; ST().money = 5000000;
+    G.runForOffice("cattleCommission");
+    elected = !!G.currentOffice();
+  }
+  check("la famille finit par être élue", elected, elected);
+  if(elected){
+    check("le mandat a une échéance", ST().politics.until > ST().year, ST().politics.until);
+    check("la charge est mémorisée", ST().politics.held.indexOf("cattleCommission") >= 0);
+    check("l'élection entre dans la saga", ST().saga.some(m => m.kind === "office"));
+    check("les maisons rivales le prennent mal", ST().rival.relation < 30, ST().rival.relation);
+    const price0 = ST().cattlePriceMin;
+    for(let i = 0; i < 4; i++) G.officeTurn();
+    check("le pouvoir s'exerce chaque tour", ST().cattlePriceMin >= price0, ST().cattlePriceMin);
+    check("et l'attention monte", ST().politics.scrutiny > 0, ST().politics.scrutiny);
+  }
+
+  // Le piège : l'attention finit par ouvrir une commission d'enquête.
+  const s5 = freshGame();
+  s5.politics = {office:"sheriff", until:1950, held:["sheriff"], scrutiny:60, defeats:0};
+  s5.suspicion = 90; s5.legacy.greed = 6; s5.money = 5000000;
+  let investigated = false;
+  for(let i = 0; i < 40 && !investigated; i++){
+    G.officeTurn();
+    if($el("eventTitle").textContent.indexOf("commission d'enquête") >= 0) investigated = true;
+  }
+  check("une attention trop forte ouvre une enquête", investigated, ST().politics.scrutiny);
+  if(investigated){
+    check("l'enquête propose trois issues", $el("eventChoices").children.length === 3);
+    // Une maison sale qui se défend tombe.
+    $el("eventChoices").children[1].onclick();
+    check("une maison compromise perd la charge", G.currentOffice() === null);
+    check("la disgrâce laisse une rancune",
+      ST().legacy.grudges.some(g => /mandat/.test(g.name)), JSON.stringify(ST().legacy.grudges));
+  }
+
+  // Une maison propre s'en sort et en sort grandie.
+  const s6 = freshGame();
+  s6.politics = {office:"sheriff", until:1950, held:["sheriff"], scrutiny:45, defeats:0};
+  s6.suspicion = 5; s6.legacy.greed = 0; s6.money = 5000000; s6.reputation = 70;
+  G.openInvestigation();
+  $el("eventChoices").children[1].onclick();
+  check("une maison propre garde la charge", G.currentOffice() !== null);
+  check("et y gagne en réputation", ST().reputation > 70, ST().reputation);
+
+  // Un coup en douce manqué pendant un mandat coûte la charge.
+  const s7 = permissiveGame();
+  s7.eraId = "foundation"; s7.costModifier = 1; s7.year = 1900; s7.money = 200000;
+  s7.politics = {office:"sheriff", until:1930, held:["sheriff"], scrutiny:5, defeats:0};
+  let lost = 0;
+  for(let i = 0; i < 30; i++){
+    ST().politics = {office:"sheriff", until:1930, held:["sheriff"], scrutiny:5, defeats:0};
+    G.officeScandal({name:"Voler du bétail au ranch rival"});
+    if(!G.currentOffice()) lost++;
+  }
+  check("un coup manqué en fonction fait parfois tomber la charge", lost > 0, lost + "/30");
+  check("mais pas systématiquement", lost < 30, lost + "/30");
+
+  // Fin de mandat : se représenter, se retirer, ou forcer.
+  const s8 = freshGame();
+  s8.money = 5000000;
+  s8.politics = {office:"cattleCommission", until:1885, held:["cattleCommission"], scrutiny:5, defeats:0};
+  s8.institutions = {cattleCommission:{since:1885}};
+  G.officeTurn();
+  check("la fin de mandat ouvre un choix",
+    /Fin de mandat/.test($el("eventTitle").textContent), $el("eventTitle").textContent);
+  check("elle propose trois issues", $el("eventChoices").children.length === 3);
+  $el("eventChoices").children[1].onclick();   // se retirer
+  check("se retirer libère la charge", G.currentOffice() === null);
+  check("et compte comme un acte d'honneur", ST().legacy.honor > 0);
+
+  // Les objectifs politiques sont atteignables.
+  const s9 = freshGame();
+  s9.institutions = {cattleCommission:{since:1885}};
+  G.checkAchievements();
+  check("fonder la commission débloque son objectif",
+    ST().achievements.some(a => a.id === "commission"));
+  s9.politics.held = ["cattleCommission","sheriff","senator","governor"];
+  G.checkAchievements();
+  check("le gouvernorat débloque le sien",
+    ST().achievements.some(a => a.id === "governor"));
+  s9.politics.office = "senator"; s9.reputation = 90; s9.suspicion = 0;
+  G.checkAchievements();
+  check("le pouvoir sans la tache est atteignable",
+    ST().achievements.some(a => a.id === "cleanPower"));
+
+  // Le panneau se rend sans erreur dans tous les états.
+  let threw = false;
+  try{
+    [null, "cattleCommission", "governor"].forEach(o => {
+      const t = freshGame();
+      t.politics = {office:o, until:1900, held:o?[o]:[], scrutiny:20, defeats:1};
+      t.institutions = o ? {cattleCommission:{since:1885}} : {};
+      t.year = 1990; t.eraId = "corporate"; t.costModifier = 5;
+      t.town = {name:"Redemption", size:4, since:1885};
+      G.renderDiplomacy();
+    });
+  }catch(e){ threw = e.message; }
+  check("le panneau politique se rend dans tous les états", threw === false, threw);
+  check("il nomme la politique", /La politique/.test($el("diplomacyContent").innerHTML));
+  check("il n'appelle aucune ressource externe",
+    !/https?:\/\//.test($el("diplomacyContent").innerHTML));
+}
+
+section("La ville qui pousse");
+{
+  const s = freshGame();
+  check("la ville commence au plus bas", G.ensureTown().size === 0, ST().town.size);
+  check("elle a un nom", !!ST().town.name);
+  check("chaque palier est décrit",
+    ev("TOWN_STAGES").every(t => t.label && t.what));
+  const before = G.townStage().label;
+  G.growTown(1);
+  check("elle grandit", ST().town.size === 1, ST().town.size);
+  check("le palier change", G.townStage().label !== before, G.townStage().label);
+  check("la croissance entre dans la saga", ST().saga.some(m => m.kind === "town"));
+  G.growTown(99);
+  check("elle ne dépasse pas le dernier palier",
+    ST().town.size === ev("TOWN_STAGES").length - 1, ST().town.size);
+  G.growTown(-99);
+  check("et ne descend pas sous zéro", ST().town.size === 0, ST().town.size);
+
+  // Les bascules d'époque la font grandir.
+  const s2 = freshGame();
+  s2.year = 1919; s2.season = 3; s2.money = 500000; s2.feed = 9000;
+  const size0 = ST().town.size;
+  G.endTurn(); closeModals();
+  check("une bascule d'époque fait grandir la ville", ST().town.size > size0,
+    size0 + " → " + ST().town.size);
+
+  // Et elle commande l'accès aux charges.
+  const s3 = freshGame();
+  s3.town = {name:"Redemption", size:0, since:1885};
+  s3.politics.held = ["cattleCommission"];
+  check("pas de shérif sans ville", G.officeAvailable("sheriff").ok === false,
+    G.officeAvailable("sheriff").why);
+  s3.town.size = 2;
+  check("une vraie ville ouvre le poste de shérif", G.officeAvailable("sheriff").ok === true);
+  s3.year = 1940; s3.eraId = "depression"; s3.costModifier = 1.3;
+  s3.politics.held = ["cattleCommission","sheriff"];
+  check("pas de siège d'État sans comté peuplé",
+    G.officeAvailable("senator").ok === false, G.officeAvailable("senator").why);
+  s3.town.size = 4;
+  check("un comté peuplé ouvre la capitale", G.officeAvailable("senator").ok === true);
+}
+
 // ------------------------------------------------- La chute d'une grande maison
 section("Une dynastie établie peut tomber");
 {
@@ -1790,6 +2002,49 @@ section("Exporter la chronique");
   try{ G.sagaText(); G.sagaPosterSVG(); }catch(e){ threw = e.message; }
   check("une saga vide s'exporte sans erreur", threw === false, threw);
   check("une saga vide le dit dans le texte", G.sagaText().indexOf("commence à peine") >= 0);
+
+  // Dans le visualiseur d'Artifact, `<a download>` est neutralisé : il faut
+  // passer par l'API hôte. Sans elle, on garde le lien temporaire.
+  {
+    const calls = [];
+    sandbox.window.claude = { downloads: { save: (req) => { calls.push(req); return Promise.resolve({status:"saved"}); } } };
+    const t = freshGame();
+    G.recordSaga("arc", "Un moment", "ranch", "détail");
+    // Remis à zéro juste avant : le démarrage crée des boutons de choix.
+    lastCreated = null;
+    G.exportSaga();
+    check("avec l'API hôte, l'export passe par elle", calls.length === 1, calls.length);
+    check("elle reçoit le nom du fichier",
+      calls[0] && /^chronique-.*\.txt$/.test(calls[0].filename), calls[0] && calls[0].filename);
+    check("elle reçoit le contenu", calls[0] && String(calls[0].data).indexOf("RANCH DYNASTY") >= 0);
+    check("aucun lien temporaire n'est créé", lastCreated === null);
+
+    G.exportGame();
+    check("la sauvegarde passe aussi par l'API hôte", calls.length === 2, calls.length);
+    check("elle est bien nommée", /^ranch-dynasty-.*\.json$/.test(calls[1].filename), calls[1].filename);
+
+    // Un refus du lecteur ne doit pas casser la partie.
+    let threw = false;
+    sandbox.window.claude.downloads.save = () => Promise.reject({code:"declined", message:"non"});
+    try{ G.exportSaga(); }catch(e){ threw = e.message; }
+    check("un refus est absorbé sans erreur", threw === false, threw);
+    sandbox.window.claude.downloads.save = () => Promise.reject({code:"boum"});
+    threw = false;
+    try{ G.exportSaga(); }catch(e){ threw = e.message; }
+    check("un code inconnu aussi", threw === false, threw);
+    delete sandbox.window.claude;
+  }
+
+  // L'affiche part en PNG quand le navigateur sait la convertir, en SVG sinon.
+  {
+    const t = freshGame();
+    G.recordSaga("arc", "Un moment", "ranch");
+    lastBlob = null;
+    G.exportSagaImage();
+    check("sans conversion possible, l'affiche reste un SVG",
+      lastCreated && /\.svg$/.test(lastCreated.download), lastCreated && lastCreated.download);
+    check("et le contenu est bien le SVG", lastBlob && lastBlob.text.indexOf("<svg") === 0);
+  }
 
   // Une saga très longue reste exportable.
   const s4 = freshGame();
@@ -3299,6 +3554,12 @@ section("Partie menée jusqu'en 2026");
         // n'est qu'une trésorerie qui gonfle.
         const ven = G.ventureOfEra();
         if(ven && G.ventureLevel(ven.id) < ven.max) G.doAction("venture");
+        // La carrière politique : fonder la commission, puis gravir l'échelle.
+        if(!(s.institutions && s.institutions.cattleCommission)) G.foundCattleCommission();
+        else if(!G.currentOffice()){
+          const target = Object.keys(ev("OFFICES")).find(id => G.officeAvailable(id).ok);
+          if(target) G.runForOffice(target);
+        }
         if(G.claimStrength() >= 20 && G.favourReady("nation")) G.useFavour("nation");
         if(s.land < 900) G.doAction("buyLand");
         G.doAction("competition");
@@ -3333,9 +3594,11 @@ section("Partie menée jusqu'en 2026");
   check("des parties atteignent 2026", reached >= 3, reached + "/30");
   check("des successions préparées ont lieu", successions > 0, successions);
   check("des successions sont contestées", contested > 0, contested);
-  // `phoenix` et `heirloom` dépendent d'une variante de départ : ils sont
-  // vérifiés dans leur propre section, pas dans ces parties classiques.
-  const startModeGoals = ["phoenix","heirloom"];
+  // Ces objectifs dépendent d'un contexte que ces parties ne produisent pas :
+  // une variante de départ, ou une carrière politique menée sur plusieurs
+  // générations sans jamais tremper dans rien. Ils sont vérifiés directement
+  // dans leur propre section.
+  const startModeGoals = ["phoenix","heirloom","governor","cleanPower"];
   const all = ev("ACHIEVEMENTS").map(a=>a.id).filter(id => !startModeGoals.includes(id));
   const never = all.filter(id => !unlocked.has(id));
   console.log("       objectifs vus au moins une fois : " + unlocked.size + "/" + all.length);

@@ -1,4 +1,4 @@
-# Ranch Dynasty — V3.8
+# Ranch Dynasty — V3.9
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -38,6 +38,11 @@ Le CSS est dans un unique `<style>` en tête de fichier.
 - **`state.claimPressure`** — le poids de la revendication foncière ashkani, alimenté
   par chaque hectare pris de force. Voir `claimStrength()`.
 - **`state.mobTies`** — les liens noués avec la pègre sous la Prohibition.
+- **`state.politics`** — `{office, until, held, scrutiny, defeats}` : la charge
+  exercée, son échéance, celles déjà tenues, et l'attention publique accumulée.
+- **`state.institutions`** — ce que la famille a fondé (la commission du bétail).
+- **`state.town`** — le bourg voisin : `{name, size}`. Il grandit tout seul et
+  commande l'accès aux charges (voir `TOWN_STAGES`).
 - **`state.developer`** — l'investisseur immobilier entré en scène après 2010,
   avec sa `pressure` et le nombre de refus essuyés.
 - **`state.autoQuarters` / `state.chaining`** — le déroulé d'une année en quatre
@@ -155,8 +160,21 @@ Deux boutons en tête du panneau **Chroniques** :
   (`POSTER_KINDS`), et un pied de page chiffré. Aucune police ni image
   extérieure, donc elle s'ouvre partout.
 
-Les deux passent par `downloadText()` (`Blob` + `URL.createObjectURL`), qui
-fonctionne y compris dans un Artifact. ⚠️ Tout texte inséré dans l'affiche doit
+Les deux passent par **`saveFile()`**, qui choisit selon l'endroit où tourne la
+page :
+
+- ⚠️ **dans le visualiseur d'Artifact, `<a download>` et toute sauvegarde
+  pilotée par script sont neutralisés** — les boutons d'export ne faisaient
+  strictement rien. Il faut `window.claude.downloads.save()`, déclaré via
+  `capabilities: {downloads:true}` à la publication. Le lecteur confirme, et
+  peut refuser : chaque code d'erreur est traduit en message ;
+- partout ailleurs (fichier local, hébergement statique), `downloadText()` et
+  son lien temporaire restent la bonne méthode.
+
+L'affiche part en **PNG** (`savePoster()` la rend dans un `<canvas>` en double
+résolution) : le SVG appartient à l'ensemble étendu des extensions, pas toujours
+autorisé, et une image matricielle se partage partout. Le SVG reste le repli si
+la conversion échoue. ⚠️ Tout texte inséré dans l'affiche doit
 passer par `xmlEsc()` : le joueur nomme sa famille et son ranch librement, et un
 `&` non échappé casse le fichier SVG.
 
@@ -296,6 +314,69 @@ vérifie aussi qu'aucune illustration n'écrase les autres.
 `refreshStartMode()` tient l'écran de création à jour : elle verrouille l'option
 `legacy` tant qu'aucune dynastie n'est tombée, réécrit la note explicative et le
 libellé du bouton de départ.
+
+## La politique : un éden qui est un piège
+
+Une famille de ranchers finit toujours par vouloir la loi de son côté. On fonde
+la commission du bétail, on y prend un siège, puis c'est le comté, puis l'État.
+Le panneau **Diplomatie** s'ouvre là-dessus.
+
+### L'échelle
+
+| Niveau | Charge | À partir de | Il faut |
+|---|---|---|---|
+| 1 | Siège à la commission du bétail | 1885 | avoir **fondé** la commission |
+| 2 | Shérif du comté | 1885 | une vraie ville (`town.size ≥ 1`) |
+| 2 | Procureur du comté | 1920 | un niveau 1 déjà exercé |
+| 3 | Sénateur d'État | 1933 | un comté peuplé (`town.size ≥ 3`) |
+| 4 | Gouverneur | 1946 | un niveau 3 déjà exercé |
+
+**On ne saute pas les échelons** : il faut avoir tenu le niveau précédent, ce
+qui étale une carrière politique sur plusieurs générations. `foundCattleCommission()`
+crée la première institution ; `electionOdds()` pèse la réputation, la presse,
+le voisinage, l'autorité et l'honneur cumulé, moins les soupçons, la cupidité et
+les défaites passées.
+
+Chaque charge exerce un pouvoir **passif à chaque tour** (`OFFICES[id].each`) :
+cours plancher soutenu, soupçons qui retombent, revendications qui reculent,
+impôt allégé, promoteurs freinés.
+
+### Le piège
+
+`state.politics.scrutiny` monte chaque tour, proportionnellement au **rang** de
+la charge et aux **soupçons** qui pèsent déjà. À 40, une commission d'enquête
+s'ouvre — et son issue dépend de ce que la maison a réellement fait :
+
+- une famille propre (soupçons bas, peu de cupidité) **en sort grandie** ;
+- une famille sale perd la charge, la réputation, et au niveau 3+ le domaine
+  passe sous administration judiciaire.
+
+Et `officeScandal()` : **un coup en douce qui rate pendant un mandat** fait
+tomber la charge avec une probabilité qui croît avec le rang. Le gouverneur est
+le poste le plus puissant du jeu et le plus dangereux — tout ce que la famille a
+fait depuis 1885 devient une affaire d'État.
+
+En fin de mandat, `presentReelection()` propose de se représenter, de se retirer
+avec les honneurs (+1 honneur), ou de **rester sans vote véritable** — ce qui
+prolonge le pouvoir et fait bondir l'attention.
+
+## La ville qui pousse
+
+`state.town` : trois baraques autour d'un abreuvoir en 1885, une agglomération
+en 2026. Six paliers (`TOWN_STAGES`), un de plus à chaque bascule d'époque, deux
+si le domaine dépasse 900 hectares. Elle commande l'accès aux charges, nourrit
+les événements de la Fondation (le chemin de fer, la charte municipale, la
+banque) et finit par produire les promoteurs de 2010.
+
+## La Fondation, enfin peuplée
+
+L'époque où **toutes** les parties commencent et où la plupart s'éteignent était
+la plus pauvre du jeu : 6 événements propres, contre 12 pour l'ère moderne.
+Elle en compte désormais **17** — la bande de Colter qui descend du nord, le
+hors-la-loi qui demande l'hospitalité, le chemin de fer qui choisit son tracé,
+la charte municipale, le grand hiver, l'arrivée des moutons, l'école ou le
+ranch, la grande piste de convoyage, le comité de vigilance, la délégation
+ashkani qui apporte les papiers de la cession de 1871, et la première banque.
 
 ## Une dynastie établie peut tomber
 
@@ -565,6 +646,12 @@ chargement et à l'import. **Toute nouvelle propriété de `state` doit y être 
   `state` n'existe → `ReferenceError: Cannot access 'state' before initialization`.
   Mettre les montants dans `condition:` et `apply:`, jamais dans `label:`.
 - Les identifiants HTML doivent rester uniques (plusieurs panneaux les réutilisent).
+- ⚠️ **Sous 900 px, l'ordre du DOM n'est pas l'ordre d'affichage.** La colonne
+  centrale passe devant le panneau « Le domaine » via `order:`, et à l'intérieur
+  les décisions passent devant la vignette d'ambiance — sans quoi le bandeau
+  d'alertes, qui existe pour prévenir d'une saisie imminente, se retrouve hors
+  écran au chargement sur téléphone. Toute nouvelle colonne doit prendre son
+  `order`.
 - `scripts/build-artifact.js` échoue sur **toute** URL restante, sauf
   `http://www.w3.org/2000/svg` (espace de noms XML, pas une requête réseau).
 - Le jeu tourne volontairement en léger déficit passif : c'est ce qui pousse à agir.
@@ -585,27 +672,26 @@ chargement et à l'import. **Toute nouvelle propriété de `state` doit y être 
 
 ## Équilibrage
 
-Courbe mesurée sur 40 parties par profil (`node tests/sim.js index.html 40 <profil>`) :
+Courbe mesurée sur 30 parties par profil (`node tests/sim.js index.html 30 <profil>`) :
 
-| Profil | Description | Fin médiane | Tours | Trésorerie finale* | Terres | Troupeau |
-|---|---|---|---|---|---|---|
-| `passive` | ne fait rien | 1893 | 35 | −246 | 185 | 25 |
-| `outlaw` | contrebande à chaque tour | 1905 | 83 | 10 553 | 320 | 28 |
-| `honest` | concours et élevage | 2026 | 337 | 301 959 | 1 733 | 595 |
-| `mixed` | troupeau + crime d'appoint | 2026 | 337 | 269 430 | 3 110 | 1 087 |
-| `policy` | conduite complète du ranch | 2026 | 337 | 289 163 | 3 125 | 1 086 |
+| Profil | Fin médiane | Tours | Trésorerie finale* | Terres | Troupeau |
+|---|---|---|---|---|---|
+| `passive` | 1893 | 35 | −246 | 185 | 25 |
+| `outlaw` | 1905 | 83 | 10 553 | 320 | 28 |
+| `honest` | 2026 | 337 | 262 567 | 1 430 | 503 |
+| `mixed` | 2026 | 337 | 257 839 | 3 282 | 1 112 |
+| `policy` | 2026 | 337 | 285 902 | 3 340 | 1 135 |
 
 \* en dollars de 1885, seule façon de comparer d'une époque à l'autre.
 
-**Où en est la trésorerie de fin de partie**, en dollars constants, à conduite
-égale : 1,43 M$ en V3.5, 0,56 M$ en V3.6 (impôts et affaires d'époque), 0,46 M$
-en V3.7 (tour annuel), **0,29 M$ en V3.8** (mises aux normes). Le domaine, lui,
-n'a pas reculé : 3 125 ha et 1 086 têtes. L'argent a un emploi et des
-échéances ; il ne s'entasse plus.
+**Trésorerie de fin de partie**, en dollars constants, à conduite égale :
+1,43 M$ en V3.5 → 0,56 M$ (impôts et affaires d'époque) → 0,46 M$ (tour annuel)
+→ 0,29 M$ (mises aux normes) → **0,29 M$ en V3.9**. Le domaine, lui, n'a pas
+reculé : 3 340 ha et 1 135 têtes. L'argent a un emploi et des échéances.
 
-**Chutes postérieures à 1950**, jusque-là inexistantes : 3 parties sur 40 en jeu
-compétent, 11 sur 40 en jeu hors-la-loi — faillites, expropriations fiscales et
-ventes volontaires.
+**Chutes postérieures à 1950** : 2 à 3 parties sur 30 en jeu compétent —
+faillites, expropriations fiscales et ventes volontaires. Sur un empire laissé à
+l'abandon, la chute est certaine (20/20 en test dédié).
 
 L'inaction reste sanctionnée, comme le veut le principe du déficit passif ; c'est
 la conduite du ranch qui fait la différence.
@@ -692,7 +778,8 @@ sans aucune dépendance :
 # affaires d'époque, fiscalité, escouade, revendication foncière, pègre.
 # tour annuel, investisseurs immobiliers.
 # chute d'une dynastie établie, quarantaine, partage, alertes, libellés.
-# 618 vérifications, sortie non nulle en cas d'échec.
+# politique et charges publiques, ville qui pousse.
+# 672 vérifications, sortie non nulle en cas d'échec.
 node tests/scenarios.js index.html
 
 # Simulation de masse.
@@ -721,13 +808,17 @@ profils : il compare facilement deux versions du fichier
   qu'ils ne le devraient
 - **La première moitié reste au trimestre** : 260 tours de 1885 à 1949. Passer
   au tour annuel dès 1920, ou au semestre, la raccourcirait encore
+- **La carrière politique se joue rarement en entier** : atteindre le
+  gouvernorat demande trois échelons et plusieurs générations, ce qu'une partie
+  ordinaire ne produit pas. Les objectifs `governor` et `cleanPower` sont
+  vérifiés directement plutôt qu'atteints en simulation
+- **L'ère de la Dépression reste la plus maigre** (5 événements propres), pour
+  la même raison que la Fondation l'était
 - Le départ `established` est nettement plus clément que les deux autres : il
   mériterait sa propre difficulté, ou un handicap compensatoire (dettes du
   prédécesseur, rancune héritée)
 - Les maisons rivales **réagissent** mais ne planifient jamais : un rival qui
   poursuivrait un projet sur vingt ans changerait beaucoup
-- L'affiche exportée est un SVG ; un export PNG demanderait un passage par
-  `<canvas>`, faisable sans dépendance
 - Une galerie des dynasties tombées plutôt qu'une seule entrée `LEGACY_KEY`,
   pour choisir quel nom relever
 - Faire peser `state.plus` sur la partie elle-même (le comté se souvient des
