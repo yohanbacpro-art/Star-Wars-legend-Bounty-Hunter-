@@ -1,4 +1,4 @@
-# Ranch Dynasty — V4.2
+# Ranch Dynasty — V4.3
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -348,9 +348,11 @@ deux.
 `border-radius:50%; overflow:hidden` sur `.portrait`. Un moteur qui ignorerait
 le premier afficherait sinon la photo en carré.
 
-⚠️ **Limites du fonds fourni**, assumées : il ne contient aucune femme âgée
-(elles empruntent la série adulte), et tous les sujets ont le même type
-physique. Le sélecteur « teint de la famille » de la V4.0 a donc été retiré de
+⚠️ **Limites du fonds fourni**, assumées : les 24 aïeules sont vêtues d'époque,
+donc réservées aux trois premières bandes — au-delà de 1970, une femme âgée
+emprunte encore la série adulte, une robe de deuil victorienne en 1990 jurant
+davantage qu'un visage un peu trop jeune. Tous les sujets ont par ailleurs le
+même type physique. Le sélecteur « teint de la famille » de la V4.0 a donc été retiré de
 l'écran de création : il ne décrivait plus rien.
 
 ### Le dessin vectoriel, en secours
@@ -400,6 +402,32 @@ du récit. Elle s'ouvre depuis l'écran de fin de partie et s'exporte.
 
 L'affiche exportée porte elle aussi les **médaillons des six dernières
 générations**, avec leurs couleurs en dur pour survivre hors du navigateur.
+
+## Les vues du domaine
+
+**65 scènes photographiques** (`SCENES`, ~1,2 Mo), treize par bande d'époque :
+la piste, la ville, le travail, le troupeau, la route, la vue aérienne, l'hiver,
+la plaine, le ranch, la maison, les écuries, les chevaux, l'intérieur de grange.
+
+Elles remplacent les scènes vectorielles partout où une photo existe :
+
+- **le bandeau d'ambiance** change avec la saison — vue aérienne au printemps,
+  troupeau en été, scène de travail à l'automne, neige en hiver ;
+- **chaque événement** est illustré selon son motif (`SCENE_MAP`), avec une
+  graine tirée de son titre : la même affaire montre toujours la même image,
+  sinon le journal clignoterait à chaque rendu ;
+- **la chronique et l'épilogue** passent l'époque du moment, pas l'époque
+  courante : une fondation de 1885 relue en 2026 montre le ranch de 1885.
+
+⚠️ **Le fonds n'a qu'une seule vue météo, la neige.** Or `storm` couvre aussi la
+sécheresse, la crue, les sauterelles et le feu de prairie. La vue d'hiver n'est
+donc sortie que si le texte parle vraiment de froid (`WINTER_RE`) ; sinon
+`storm` retombe sur des vues extérieures neutres. Sans cela, un feu de prairie
+se jouait sous la neige.
+
+`DARK_MOTIFS` assombrit les scènes nocturnes : aucune vue de nuit dans le fonds.
+
+Le générateur vectoriel reste le secours, et garde ses couleurs d'époque.
 
 ## La politique : un éden qui est un piège
 
@@ -867,7 +895,8 @@ sans aucune dépendance :
 # politique et charges publiques, ville qui pousse.
 # visages, héritage des traits, arbre généalogique, épilogue.
 # catalogue photographique, bandes d'époque, stabilité de l'allure.
-# 744 vérifications, sortie non nulle en cas d'échec.
+# vues du domaine, motifs et scènes, vue d'hiver réservée au froid.
+# 757 vérifications, sortie non nulle en cas d'échec.
 node tests/scenarios.js index.html
 
 # Simulation de masse.

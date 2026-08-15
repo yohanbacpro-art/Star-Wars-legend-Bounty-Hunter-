@@ -3002,11 +3002,54 @@ section("Rythme du trimestre");
   // url(#id) référence un dégradé interne : seul url(quelque-chose-d-autre) sortirait.
   check("aucune scène ne charge de ressource externe",
     svgs.every(x => !/https?:\/\//.test(x) && !/url\((?!#)/.test(x)));
-  check("les scènes se teintent aux couleurs de l'époque",
-    svgs.every(x => x.includes("var(--")));
-  const ids = svgs.map(x => (x.match(/id="([^"]+)"/)||[])[1]);
-  check("les dégradés ont des identifiants distincts",
+  check("chaque scène embarque une photo du domaine",
+    svgs.every(x => x.indexOf("<image href=\"data:image/jpeg") >= 0),
+    motifs.filter((m,i) => svgs[i].indexOf("<image href=\"data:image/jpeg") < 0).join(","));
+  check("la nuit est assombrie", /opacity="0?\.52"/.test(ev('eventArtSVG("night")')),
+    ev('eventArtSVG("night")').slice(0,220));
+  // Une seule vue météo dans le fonds : la neige ne sort que si le texte
+  // parle vraiment de froid, sinon un feu de prairie se jouerait sous la neige.
+  const snow = ev('SCENES["0"].hiver');
+  check("un blizzard montre la neige",
+    ev('eventArtSVG("storm","Le blizzard de février")').indexOf(snow) >= 0);
+  check("un gel tardif aussi",
+    ev('eventArtSVG("storm","Un gel tardif")').indexOf(snow) >= 0);
+  check("un feu de prairie ne se joue pas sous la neige",
+    ev('eventArtSVG("storm","Un feu de prairie")').indexOf(snow) < 0);
+  check("une sécheresse non plus",
+    ev('eventArtSVG("storm","Une saison sans pluie")').indexOf(snow) < 0);
+  // Une même affaire garde son image d'un rendu à l'autre.
+  check("l'image d'un événement est stable",
+    ev('eventArtSVG("ranch","Le grand hiver")') === ev('eventArtSVG("ranch","Le grand hiver")'));
+  check("deux affaires différentes peuvent tirer des vues différentes",
+    new Set(["a","b","c","d","e","f"].map(x => ev(`eventArtSVG("land",${JSON.stringify(x)})`))).size > 1);
+
+  // Le dessin vectoriel reste en secours et garde ses couleurs d'époque.
+  const drawnScenes = motifs.map(m => ev(`(function(){const S=SCENES;SCENES=null;
+    try{ return eventArtSVG(${JSON.stringify(m)}); } finally { SCENES=S; }})()`));
+  check("le secours vectoriel se teinte aux couleurs de l'époque",
+    drawnScenes.every(x => x.includes("var(--")));
+  const ids = drawnScenes.map(x => (x.match(/id="([^"]+)"/)||[])[1]);
+  check("ses dégradés ont des identifiants distincts",
     new Set(ids).size === ids.length, ids.join(","));
+
+  // Le catalogue des vues du domaine.
+  const sbands = ev("Object.keys(SCENES)").sort();
+  check("les vues couvrent les cinq bandes d'époque", sbands.join(",") === "0,1,2,3,4", sbands.join(","));
+  const wanted = ["piste","ville","travail","troupeau","route","aerien","hiver",
+                  "plaine","ranch","maison","ecurie","chevaux","grange"];
+  check("chaque bande a ses treize vues",
+    sbands.every(b => wanted.every(k => !!ev(`SCENES["${b}"]["${k}"]`))),
+    sbands.filter(b => !wanted.every(k => !!ev(`SCENES["${b}"]["${k}"]`))).join(","));
+  check("toutes les vues sont encodées dans la page",
+    sbands.every(b => wanted.every(k => ev(`SCENES["${b}"]["${k}"]`).indexOf("data:image/") === 0)));
+  // Un moment ancien garde l'image de son époque.
+  check("la chronique illustre chaque moment à son époque",
+    ev('eventArtSVG("ranch","x","foundation")') !== ev('eventArtSVG("ranch","x","modern")'));
+
+  check("chaque motif d'illustration a ses vues",
+    Object.keys(ev("ART_MOTIFS")).every(m => (ev("SCENE_MAP")[m]||[]).length > 0),
+    Object.keys(ev("ART_MOTIFS")).filter(m => !(ev("SCENE_MAP")[m]||[]).length).join(","));
 
   // Le choix de scène doit suivre le sujet de l'événement.
   check("un événement de loi montre la scène de loi",
@@ -3548,6 +3591,10 @@ section("Montants et inflation");
   // faisait échouer la mesure une fois sur trois.
   s.eventModifier = 0;
   for(let i = 0; i < 80; i++){
+    // Les arcs ne passent pas par `eventModifier` et rendent de la réputation :
+    // on les tient à l'écart aussi, le sujet du test étant la seule érosion.
+    ST().arcCooldown = 99999;
+    ST().arc = null;
     G.endTurn();
     let guard = 0;
     while(!$el("eventModal")._classes.has("hidden") && guard++ < 10){
