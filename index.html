@@ -704,6 +704,18 @@
   .alarm b{display:block;margin-bottom:2px}
   .alarm small{color:var(--muted);line-height:1.4}
 
+  /* Le choix de la maison visée, en tête du panneau : deux tuiles côte à côte,
+     l'une allumée. */
+  .target-row{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+  .target{
+    flex:1 1 180px;display:flex;flex-direction:column;gap:4px;text-align:left;
+    padding:10px 12px;border-radius:10px;cursor:pointer;
+    border:1px solid var(--line);background:var(--surface-2);color:inherit;font:inherit;
+  }
+  .target.picked{border-color:var(--gold);background:var(--surface-hi)}
+  .target-name{font-weight:700}
+  .target-sub{font-size:.84rem;color:var(--muted)}
+
   .squad-man{cursor:pointer}
   .squad-man.picked{border-color:var(--gold);background:var(--surface-hi)}
   .squad-man .op-icon{color:var(--muted);font-weight:700}
@@ -1039,6 +1051,12 @@ var SCENES = {"0":{"piste":"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2
                 <small id="ventureDesc">Une entreprise propre à l'époque, qui rapporte chaque trimestre.</small>
                 <div class="action-cost" id="ventureCost">Coût : —</div>
               </button>
+              <button class="action" data-action="build">
+                <span class="icon">🏗️</span>
+                <strong>Bâtir sur le domaine</strong>
+                <small id="buildDesc">Un ouvrage permanent : cher à monter, coûteux à tenir, acquis pour toujours.</small>
+                <div class="action-cost" id="buildCount">Voir les chantiers</div>
+              </button>
               <button class="action" data-action="illegal">
                 <span class="icon">🌙</span>
                 <strong id="illegalLabel">Coup en douce</strong>
@@ -1047,9 +1065,9 @@ var SCENES = {"0":{"piste":"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2
               </button>
               <button class="action" data-action="rivalAction">
                 <span class="icon">⚔️</span>
-                <strong id="rivalLabel">Affronter le rival</strong>
-                <small id="rivalDesc">Tente d'affaiblir la famille rivale par la force ou l'intimidation.</small>
-                <div class="action-cost">Coût : 70 $</div>
+                <strong id="rivalLabel">Nuire à une maison rivale</strong>
+                <small id="rivalDesc">Choisir la maison, l'opération et les hommes qu'on envoie.</small>
+                <div class="action-cost" id="rivalOpCount">Voir les options</div>
               </button>
               <button class="action" data-action="rivalNegotiate">
                 <span class="icon">🕊️</span>
@@ -1691,8 +1709,9 @@ function parcelPhoto(p){
   if(typeof SCENES === "undefined" || !SCENES) return null;
   const band = SCENES[String(photoBand(state.eraId))] || SCENES["0"];
   if(!band) return null;
-  // En hiver, tout le domaine est sous la neige : c'est la saison qui commande.
-  if(state.season === 3 && band.hiver && !annualTurns()) return band.hiver;
+  // Une année sur quatre, le domaine se montre sous la neige : sans cela la
+  // vue d'hiver du fonds ne servirait jamais en tour annuel.
+  if(band.hiver && (state.year % 4 === 3)) return band.hiver;
   const keys = (PARCEL_SCENE[p.kind] || ["plaine"]).filter(k => band[k]);
   if(!keys.length) return null;
   return band[keys[hashStr(p.name + ":" + p.id) % keys.length]];
@@ -1872,28 +1891,39 @@ const ARCS = [
     id:"cityChild",
     title:"L'enfant parti en ville",
     canStart:()=>state.children.some(c=>c.alive!==false && c.age>=17 && c.age<=30),
+    // L'enfant qui part peut avoir vieilli, s'être marié ou être mort entre
+    // l'ouverture de l'arc et la réponse du joueur — au tour annuel, c'est une
+    // année entière qui s'écoule d'un coup. On retrouve d'abord celui que
+    // l'arc a noté, puis un enfant en âge, puis n'importe lequel.
+    who:()=>{
+      const kids = state.children.filter(c=>c.alive!==false);
+      const noted = (state.arc && state.arc.data && state.arc.data.cid != null)
+        ? kids.find(c=>c.cid === state.arc.data.cid) : null;
+      return noted || kids.filter(c=>c.age>=17 && c.age<=30)[0] || kids[0] || null;
+    },
     steps:[
       {
         art:"family",
         title:"Le départ",
         text:()=>{
-          const k=state.children.filter(c=>c.alive!==false && c.age>=17 && c.age<=30)[0];
+          const k=ARCS.find(a=>a.id==="cityChild").who();
+          if(!k) return "Un des enfants annonce à table qu'il n'a pas l'intention de passer sa vie ici.";
           return `${k.name} annonce à table qu'il n'a pas l'intention de passer sa vie ici. La ville, le chemin de fer, autre chose.`;
         },
         image:"Une valise au pied de l'escalier",
         choices:[
           {label:"Lui donner de quoi partir dignement",condition:()=>state.money>=sc(150),apply:()=>{
-            const k=state.children.filter(c=>c.alive!==false && c.age>=17 && c.age<=30)[0];
+            const k=ARCS.find(a=>a.id==="cityChild").who(); if(!k) return;
             state.money-=sc(150); state.arc.data.cid=k.cid; state.arc.data.name=k.name; state.arc.data.warm=true;
             k.bond=clamp((k.bond||50)+10);
             addLog(`${k.name} part pour la ville avec la bénédiction de la maison.`,"info"); }},
           {label:"Le laisser partir sans un mot",apply:()=>{
-            const k=state.children.filter(c=>c.alive!==false && c.age>=17 && c.age<=30)[0];
+            const k=ARCS.find(a=>a.id==="cityChild").who(); if(!k) return;
             state.arc.data.cid=k.cid; state.arc.data.name=k.name; state.arc.data.warm=false;
             k.bond=clamp((k.bond||50)-15); state.unity=clamp(state.unity-8);
             addLog(`${k.name} part sans que personne ne l'accompagne au train.`,"bad"); }},
           {label:"Le retenir au ranch",apply:()=>{
-            const k=state.children.filter(c=>c.alive!==false && c.age>=17 && c.age<=30)[0];
+            const k=ARCS.find(a=>a.id==="cityChild").who(); if(!k) return;
             state.arc.data.cid=k.cid; state.arc.data.name=k.name; state.arc.data.stayed=true;
             k.resentment=clamp((k.resentment||0)+30); k.role="ranch";
             addLog(`${k.name} reste, mais l'a en travers de la gorge.`,"info"); }, goto:2}
@@ -3962,6 +3992,7 @@ function squadOdds(op, ids){
   return Math.max(.05, Math.min(.95, p));
 }
 function squadMinimum(op){
+  if(typeof op.min === "number") return op.min;
   const need = op.needs ? op.needs() : {ok:true};
   const m = /au moins (\w+) cow-?boys?/.exec(need.why || "");
   const words = {un:1, deux:2, trois:3, quatre:4};
@@ -4090,12 +4121,289 @@ function squadCasualties(squad, op){
   }
 }
 
+// ============================================================================
+// NUIRE À LA MAISON D'EN FACE
+// ----------------------------------------------------------------------------
+// « Affronter le rival » tenait en un bouton et un jet de dés : on ne savait ni
+// ce qu'on tentait, ni qui partait, ni pourquoi ça marchait. Le coup porté à
+// une maison rivale se décide désormais en trois temps, comme un coup en douce :
+// on choisit LA MAISON, puis L'OPÉRATION, puis LES HOMMES — et ce sont leurs
+// qualités, tir et équitation, qui font les chances.
+//
+// La progression des époques est voulue : en 1885 on coupe des clôtures et on
+// tend des embuscades ; après-guerre on rachète des dettes, on fait annuler des
+// permis, on gagne des procès de bornage. Les opérations tardives sont les plus
+// chères du jeu — c'est là que passe l'argent d'un domaine qui n'a plus rien à
+// acheter.
+// ============================================================================
+var RIVAL_OPS = [
+  {id:"rvFence", icon:"🪓", name:"Couper la clôture nord",
+   what:"Trente mètres de fil au cisaille, la nuit. Leurs bêtes se dispersent d'elles-mêmes.",
+   cost:40, base:.70, edge:"ride", squad:true, min:1, danger:.12,
+   strength:[4,9], relation:[-10,-4], sus:[4,9], rep:[0,1],
+   fail:"Un de leurs hommes veillait. On sait d'où venaient les cisailles."},
+
+  {id:"rvScare", icon:"🔫", name:"Faire peur à leurs hommes",
+   what:"Quelques coups tirés en l'air au-dessus de leur campement. Les saisonniers ne restent pas.",
+   cost:70, base:.60, edge:"shoot", squad:true, min:2, danger:.22,
+   strength:[6,13], relation:[-14,-7], sus:[7,14], rep:[1,3],
+   fail:"Ils tiennent la position et ripostent. La nuit est longue."},
+
+  {id:"rvStampede", icon:"🐂", name:"Provoquer une débandade",
+   what:"On lâche leur troupeau dans le canyon. Ils en récupéreront la moitié.",
+   to:1960, cost:90, base:.55, edge:"ride", squad:true, min:2, danger:.26,
+   strength:[8,16], relation:[-18,-9], sus:[10,18], rep:[2,5],
+   onWin:()=>{ const t = rand(2,7); state.cattle += t;
+     addLog(`${t} de leurs bêtes se retrouvent de ce côté-ci de la clôture. Personne ne réclame.`, "good"); },
+   fail:"Le troupeau part du mauvais côté et piétine vos propres pâtures."},
+
+  {id:"rvWater", icon:"☠️", name:"Empoisonner l'abreuvoir",
+   what:"Du sel de plomb dans la mare basse. Leur bétail ne s'en remettra pas de la saison.",
+   to:1955, cost:120, base:.50, edge:"shoot", squad:true, min:2, danger:.30,
+   strength:[14,26], relation:[-30,-18], sus:[20,32], rep:[6,12],
+   onWin:()=>{ state.legacy.greed += 2;
+     addLog("On ne parle pas de cette nuit-là. Personne, jamais.", "info"); },
+   fail:"Un enfant de la maison d'en face boit à la mare. Le pays entier l'apprend."},
+
+  {id:"rvAmbush", icon:"🎯", name:"L'embuscade sur la piste",
+   what:"On les attend au défilé, à la sortie du convoi. C'est l'affaire d'une minute.",
+   to:1940, cost:160, base:.44, edge:"shoot", squad:true, min:3, danger:.45,
+   strength:[18,30], relation:[-35,-22], sus:[24,38], rep:[8,15],
+   fail:"Ils étaient prévenus. Ce sont vos hommes qui sont pris dans le défilé."},
+
+  {id:"rvForeman", icon:"🤝", name:"Débaucher leur contremaître",
+   what:"On lui offre le double, un logement, et une place à table. Il connaît toutes leurs bêtes.",
+   cost:420, base:.58, edge:"money", squad:false, min:0,
+   strength:[8,15], relation:[-16,-8], sus:[3,7], rep:[0,2],
+   onWin:()=>{ if((state.cowboys||[]).length < 14){ hireNamedCowboy(
+       {loyalty:rand(45,65), shoot:rand(55,75), ride:rand(60,85), trait:"Transfuge"});
+     addLog("Il arrive avec sa selle et quinze ans de secrets sur la maison d'en face.", "good"); } },
+   fail:"Il rapporte l'offre à ses maîtres, mot pour mot, et le prix qu'on y mettait."},
+
+  {id:"rvPress", icon:"📰", name:"La rumeur au journal",
+   what:"Un rédacteur bien payé publie ce qu'on lui souffle sur leurs méthodes.",
+   from:1900, cost:260, base:.60, edge:"relation", squad:false, min:0,
+   strength:[6,12], relation:[-12,-6], sus:[5,11], rep:[0,2], feud:[-14,-6],
+   fail:"Le journal recoupe, remonte à vous, et publie ça plutôt."},
+
+  {id:"rvTax", icon:"🧾", name:"La lettre anonyme au fisc",
+   what:"Six pages de chiffres exacts, sans signature. Le contrôle fera le reste.",
+   from:1930, cost:90, base:.55, edge:"relation", squad:false, min:0,
+   strength:[10,18], relation:[-14,-6], sus:[8,15], rep:[1,3],
+   fail:"L'écriture est reconnue. Le contrôle change d'adresse."},
+
+  {id:"rvDebt", icon:"🏦", name:"Racheter leur dette au banquier",
+   what:"On devient leur créancier. Ils travailleront pour vous sans le savoir.",
+   from:1900, cost:900, base:.62, edge:"money", squad:false, min:0,
+   strength:[16,28], relation:[-20,-10], sus:[4,9], rep:[0,2],
+   fail:"La banque prévient son client avant de vendre, et empoche votre offre."},
+
+  {id:"rvSuit", icon:"⚖️", name:"Le procès de bornage",
+   what:"Un cabinet de la capitale conteste chaque piquet de leur limite ouest.",
+   from:1946, cost:1400, base:.58, edge:"relation", squad:false, min:0,
+   strength:[14,24], relation:[-24,-12], sus:[3,8], rep:[1,4],
+   onWin:()=>{ const ha = rand(20,60); state.land += ha; addParcel(ha);
+     addLog(`Le tribunal déplace la limite : ${ha} hectares passent de votre côté.`, "good"); },
+   fail:"Le tribunal confirme leurs titres et vous laisse les frais des deux parties."},
+
+  {id:"rvPermit", icon:"📜", name:"Faire annuler leur permis de pâturage",
+   what:"Une décision administrative leur ferme les terres fédérales de l'est.",
+   from:1950, cost:700, base:.66, edge:"relation", squad:false, min:0,
+   needs:()=>currentOffice()
+     ? {ok:true}
+     : {ok:false, why:"Il faut exercer une charge publique pour peser sur l'administration."},
+   strength:[14,25], relation:[-22,-11], sus:[6,13], rep:[2,6],
+   fail:"Le recours aboutit, et votre nom figure en toutes lettres au dossier."},
+
+  {id:"rvBuyout", icon:"🏷️", name:"Racheter leurs terres à la barre",
+   what:"Leur parcelle sud part aux enchères. On surenchérit jusqu'à ce qu'ils lâchent.",
+   from:1970, cost:4500, base:.52, edge:"money", squad:false, min:0,
+   strength:[22,40], relation:[-30,-16], sus:[5,12], rep:[0,3],
+   onWin:()=>{ const ha = rand(60,140); state.land += ha; addParcel(ha);
+     addLog(`${ha} hectares de plus, et une maison rivale amputée de son meilleur pâturage.`, "good"); },
+   fail:"Ils vous laissent monter puis se retirent : vous avez payé pour rien."}
+];
+
+// La maison visée : 0 pour la première, 1 pour la seconde.
+var rivalTarget = 0;
+
+function rivalOps(){
+  return RIVAL_OPS.filter(o => (!o.from || state.year >= o.from) && (!o.to || state.year <= o.to));
+}
+function rivalTargetHouse(){
+  const houses = rivalHouses();
+  return houses[Math.min(rivalTarget, houses.length-1)] || state.rival;
+}
+// Une maison forte se défend mieux : la puissance d'en face retranche
+// directement des chances, ce qui rend l'ordre des coups important — on abat
+// d'abord ce qui est abattable.
+function rivalOdds(op, ids){
+  const base = ids === undefined ? illegalOdds(op) : squadOdds(op, ids);
+  const h = rivalTargetHouse();
+  const guard = h ? (h.strength - 40) / 400 : 0;
+  return Math.max(.05, Math.min(.95, base - guard));
+}
+
+function chooseRivalOp(id){
+  const op = rivalOps().find(o => o.id === id);
+  if(!op) return;
+  if(state.actions <= 0 || state.gameOver){ toast("Plus d'action disponible ce tour."); return; }
+  const need = op.needs ? op.needs() : {ok:true};
+  if(!need.ok){ toast(need.why); return; }
+  if(op.cost && state.money < sc(op.cost)){ toast("Vous n'avez pas assez d'argent."); return; }
+  if(needsSquad(op)) openSquadPanel(id); else runRivalOp(id);
+}
+
+function runRivalOp(id, squadIds){
+  const op = rivalOps().find(o => o.id === id);
+  if(!op) return;
+  if(state.actions <= 0 || state.gameOver){ toast("Plus d'action disponible ce tour."); return; }
+  const need = op.needs ? op.needs() : {ok:true};
+  if(!need.ok){ toast(need.why); return; }
+  if(op.cost && state.money < sc(op.cost)){ toast("Vous n'avez pas assez d'argent."); return; }
+
+  const h = rivalTargetHouse();
+  if(!h) return;
+  $("rivalModal").classList.add("hidden");
+  $("squadModal").classList.add("hidden");
+  if(op.cost) state.money -= sc(op.cost);
+  useAction();
+
+  const squad = squadMembers(squadIds);
+  const odds = rivalOdds(op, squadIds);
+  if(squad.length) addLog(`${op.name} — partent : ${squad.map(c=>c.name).join(", ")}.`, "info");
+
+  if(chance(odds)){
+    const drop = rand(op.strength[0], op.strength[1]);
+    h.strength = clamp(h.strength - drop, 10, 100);
+    h.relation = clamp(h.relation + rand(op.relation[0], op.relation[1]), -100, 100);
+    state.suspicion = clamp(state.suspicion + rand(op.sus[0], op.sus[1]));
+    state.reputation = clamp(state.reputation - rand(op.rep[0], op.rep[1]));
+    if(op.feud) state.rivalFeud = clamp(state.rivalFeud + rand(op.feud[0], op.feud[1]), -100, 100);
+    squadReward(squad, op);
+    addLog(`${op.name} — le coup porte : les ${h.name} perdent ${drop} points de puissance.`, "good");
+    if(op.onWin) op.onWin(h);
+  } else {
+    // Un coup manqué ne laisse pas les choses en l'état : la maison visée sait,
+    // se renforce, et la rancune est la même que si on avait réussi.
+    h.strength = clamp(h.strength + rand(2, 7), 10, 100);
+    h.relation = clamp(h.relation + rand(op.relation[0], op.relation[1]) - 6, -100, 100);
+    state.suspicion = clamp(state.suspicion + rand(op.sus[0]+4, op.sus[1]+8));
+    state.reputation = clamp(state.reputation - rand(op.rep[0]+2, op.rep[1]+4));
+    addLog(`${op.name} — ${op.fail}`, "bad");
+    if(op.onFail) op.onFail(h);
+    if(currentOffice()) officeScandal(op);
+    squadCasualties(squad, op);
+  }
+
+  if(chance(.3)) state.legacy.greed++;
+  checkAchievements();
+  renderDiplomacy();
+  render();
+}
+
+// ============================================================================
+// BÂTIR SUR LE DOMAINE
+// ----------------------------------------------------------------------------
+// Mesuré : passé 1950, la caisse d'un domaine bien tenu montait sans que rien
+// ne la vide, parce que tout ce qu'on pouvait acheter — terres, bêtes, affaires
+// — plafonnait. Les bâtiments sont l'emploi manquant de cet argent : chaque
+// ouvrage se paie une fois, cher, rapporte un avantage permanent, et coûte son
+// entretien chaque trimestre jusqu'au dernier jour. Le dernier de la liste ne
+// rapporte rien du tout — c'est le seul luxe du jeu, et il se voit dans
+// l'épilogue.
+// ============================================================================
+var BUILDINGS = [
+  {id:"corral", icon:"🚧", name:"Corral et couloir de contention", cost:420, upkeep:7,
+   what:"On trie, on marque et on charge sans perdre une bête ni une journée.",
+   gain:"+4 % de revenus"},
+  {id:"puits", icon:"💧", name:"Puits et éolienne", cost:820, upkeep:11,
+   what:"De l'eau au nord toute l'année : les pâtures hautes deviennent utilisables.",
+   gain:"+10 % de capacité de pâturage"},
+  {id:"grange", icon:"🏚️", name:"Grande grange à foin", cost:1300, upkeep:14,
+   what:"La récolte d'automne rentre entière et sèche au lieu de pourrir sous la bâche.",
+   gain:"+45 % de récolte de fourrage"},
+  {id:"etable", icon:"🐄", name:"Étable d'hivernage", cost:2100, upkeep:20,
+   what:"De quoi abriter le jeune bétail quand le fourrage vient à manquer.",
+   gain:"Deux fois moins de pertes en cas de disette"},
+  {id:"bureau", icon:"📇", name:"Bureau du domaine", cost:3200, upkeep:26,
+   what:"Un comptable, des livres tenus, et des factures qu'on discute avant de les payer.",
+   gain:"−9 % de charges"},
+  {id:"maison", icon:"🏛️", name:"Maison de maître", cost:6000, upkeep:60, from:1900,
+   what:"La demeure qu'on montre. On y reçoit, on y marie, on y meurt en place.",
+   gain:"+1 réputation et +1 unité par trimestre"},
+  {id:"hangar", icon:"🚜", name:"Hangar à machines", cost:9000, upkeep:90, from:1946,
+   what:"Tracteurs, remorques et atelier : le domaine cesse de dépendre des bras.",
+   gain:"+8 % de revenus"},
+  {id:"piste", icon:"✈️", name:"Piste d'atterrissage", cost:26000, upkeep:260, from:1970,
+   what:"Deux mille mètres de terre battue. Les acheteurs viennent à vous.",
+   gain:"+9 % de revenus"},
+  {id:"musee", icon:"🏺", name:"Musée de la dynastie", cost:70000, upkeep:620, from:1985,
+   what:"Les selles, les photos, les registres depuis 1885. On y fait entrer les écoles.",
+   gain:"+3 réputation par trimestre — et rien d'autre"}
+];
+
+function builtSet(){ return state.buildings || (state.buildings = []); }
+function hasBuilding(id){ return builtSet().indexOf(id) >= 0; }
+function availableBuildings(){
+  return BUILDINGS.filter(b => (!b.from || state.year >= b.from));
+}
+// Le prix monte avec l'époque comme tout le reste, mais aussi avec la taille du
+// domaine : bâtir sur trois mille hectares n'est pas bâtir sur deux cents.
+function buildingCost(b){
+  return Math.round(sc(b.cost) * (1 + Math.min(1.5, state.land / 2200)));
+}
+// L'entretien suit la taille du domaine autant que l'époque : une piste sur
+// trois mille hectares n'est pas la même piste. Sans cette pente, les ouvrages
+// se remboursaient tout seuls et devenaient une source de revenus de plus,
+// exactement l'inverse de ce qu'on cherchait.
+function buildingUpkeep(){
+  const scaleUp = 1 + Math.min(2.2, state.land / 1500);
+  return Math.round(builtSet().reduce((s,id) => {
+    const b = BUILDINGS.find(x => x.id === id);
+    return s + (b ? sc(b.upkeep) : 0);
+  }, 0) * scaleUp);
+}
+function buildingIncomeFactor(){
+  return 1 + (hasBuilding("corral") ? .04 : 0)
+           + (hasBuilding("hangar") ? .08 : 0)
+           + (hasBuilding("piste")  ? .09 : 0);
+}
+function buildingUpkeepFactor(){ return hasBuilding("bureau") ? .91 : 1; }
+function buildingCapacityFactor(){ return hasBuilding("puits") ? 1.10 : 1; }
+function buildingHarvestFactor(){ return hasBuilding("grange") ? 1.45 : 1; }
+
+function raiseBuilding(id){
+  const b = availableBuildings().find(x => x.id === id);
+  if(!b) return;
+  if(state.actions <= 0 || state.gameOver){ toast("Plus d'action disponible ce tour."); return; }
+  if(hasBuilding(id)){ toast("C'est déjà bâti."); return; }
+  if(inReceivership()){ toast("L'administrateur judiciaire bloque tout chantier."); return; }
+  const cost = buildingCost(b);
+  if(pay(cost) === false) return;
+  useAction();
+  builtSet().push(id);
+  $("buildModal").classList.add("hidden");
+  addLog(`${b.icon} ${b.name} — le chantier est payé ${moneyFmt.format(cost)} $. `
+    + `${b.gain}, pour ${sc(b.upkeep)} $ d'entretien par trimestre.`, "good");
+  recordSaga("prosperity", b.name, "ranch", b.what);
+  checkAchievements();
+  render();
+}
+
 // ---- Le panneau de l'escouade ----
 let squadPick = [];
 let squadOpId = null;
 
+// Le panneau des hommes sert aux deux catalogues : on retrouve l'opération
+// dans l'un ou dans l'autre.
+function opById(id){
+  return illegalOps().find(o => o.id === id) || RIVAL_OPS.find(o => o.id === id) || null;
+}
+function isRivalOp(id){ return RIVAL_OPS.some(o => o.id === id); }
+
 function openSquadPanel(id){
-  const op = illegalOps().find(o => o.id === id);
+  const op = opById(id);
   if(!op) return;
   squadOpId = id;
   const cw = state.cowboys || [];
@@ -4113,15 +4421,17 @@ function toggleSquad(i){
 }
 
 function renderSquadPanel(){
-  const op = illegalOps().find(o => o.id === squadOpId);
+  const op = opById(squadOpId);
   if(!op) return;
+  const rival = isRivalOp(squadOpId);
   const cw = state.cowboys || [];
   const min = squadMinimum(op);
-  const p = Math.round(squadOdds(op, squadPick) * 100);
+  const p = Math.round((rival ? rivalOdds(op, squadPick) : squadOdds(op, squadPick)) * 100);
   const cls = p >= 70 ? "good" : (p >= 50 ? "info" : "bad");
   $("squadTitle").textContent = op.icon + " " + op.name;
   $("squadIntro").innerHTML =
     `<b>${op.what}</b><br>`
+    + (rival ? `Contre les <b>${rivalTargetHouse().name}</b>, puissance ${rivalTargetHouse().strength}/100. ` : "")
     + `Vous choisissez qui part. Le tir et l'équitation font les chances ; `
     + `au-delà de cinq hommes, la troupe se remarque. `
     + `<b>Si ça rate, chacun d'eux est exposé</b> — blessé, arrêté, ou pire.`;
@@ -4151,10 +4461,11 @@ function renderSquadPanel(){
 }
 
 function launchSquad(){
-  const op = illegalOps().find(o => o.id === squadOpId);
+  const op = opById(squadOpId);
   if(!op) return;
   if(squadPick.length < squadMinimum(op)) return;
-  runIllegalOp(squadOpId, squadPick.slice());
+  if(isRivalOp(squadOpId)) runRivalOp(squadOpId, squadPick.slice());
+  else runIllegalOp(squadOpId, squadPick.slice());
 }
 
 // ============================================================================
@@ -5307,6 +5618,8 @@ function baseState() {
     season:0,
     turn:1,
     actions:3,
+    buildings:[],
+    competedTurn:-1,
     money:1100 + modifiers.money,
     land:160,
     cattle:38,
@@ -5590,6 +5903,13 @@ function render(){
   $("illegalLabel").textContent = era.illegalLabel;
   $("illegalDesc").textContent = era.illegalDesc;
   $("illegalCount").textContent = illegalOps().length + " opérations — chances affichées";
+  $("rivalOpCount").textContent = rivalOps().length + " opérations — chances affichées";
+  {
+    const av = availableBuildings(), built = av.filter(b => hasBuilding(b.id)).length;
+    $("buildCount").textContent = built >= av.length
+      ? "Tout est bâti"
+      : `${built} / ${av.length} bâtis — entretien ${moneyFmt.format(buildingUpkeep())} $`;
+  }
   const venture = ventureOfEra();
   if(venture){
     const lvl = ventureLevel(venture.id);
@@ -5630,16 +5950,19 @@ function render(){
   setMeter("sus",state.suspicion);
 
   $("apLabel").textContent = state.actions;
-  const head = 5 * lot();
-  $("sellValue").textContent = `Gain estimé : ${moneyFmt.format(state.cattlePrice*head)} $`;
+  // Les libellés annoncent le lot réellement payable : un bouton qui promet
+  // 20 bêtes pour une caisse qui n'en couvre que 5 se lit comme une panne.
+  const head = 5 * lotAffordable((state.cattlePrice+6)*5);
+  const sellHead = Math.min(state.cattle, 5*lot());
+  const feedN = lotAffordable(sc(60)), landN = lotAffordable(sc(260));
+  $("sellValue").textContent = `Gain estimé : ${moneyFmt.format(state.cattlePrice*sellHead)} $`;
   $("buyCattleCost").textContent = `Coût : ${moneyFmt.format((state.cattlePrice+6)*head)} $`;
   $("buyCattleLabel").textContent = `Acheter ${head} bovins`;
-  $("sellCattleLabel").textContent = `Vendre ${head} bovins`;
-  $("buyLandLabel").textContent = `Acheter ${20*lot()} hectares`;
-  $("buyFeedLabel").textContent = `Acheter ${40*lot()} balles de fourrage`;
-  $("buyFeedCost").textContent = `Coût : ${moneyFmt.format(sc(60*lot()))} $`;
-  $("buyLandCost").textContent = `Coût : ${moneyFmt.format(sc(260*lot()))} $`;
-  $("buyFeedCost").textContent = `Coût : ${sc(60)} $`;
+  $("sellCattleLabel").textContent = `Vendre ${sellHead} bovins`;
+  $("buyLandLabel").textContent = `Acheter ${20*landN} hectares`;
+  $("buyFeedLabel").textContent = `Acheter ${40*feedN} balles de fourrage`;
+  $("buyFeedCost").textContent = `Coût : ${moneyFmt.format(sc(60*feedN))} $`;
+  $("buyLandCost").textContent = `Coût : ${moneyFmt.format(sc(260*landN))} $`;
   $("trainCost").textContent = `Coût : ${sc(40)} $`;
   $("trainDesc").textContent = state.champion
     ? `${state.champion.name} — dressage ${state.champion.training}/100, ${state.champion.wins} victoire${state.champion.wins>1?"s":""}.`
@@ -5820,7 +6143,7 @@ function doAction(type){
 
   if(type === "buyCattle"){
     // `cattlePrice` est déjà à l'échelle de l'époque : ne pas repasser par spend().
-    const head = 5 * lot();
+    const head = 5 * lotAffordable((state.cattlePrice+6) * 5);
     const cost = pay((state.cattlePrice+6) * head);
     if(cost === false) return;
     useAction(); state.cattle += head;
@@ -5842,6 +6165,8 @@ function doAction(type){
 
   if(type === "venture"){ investVenture(); return; }
 
+  if(type === "build"){ openBuildPanel(); return; }
+
   if(type === "buyHorse"){
     const cost = spend(180);
     if(cost === false) return;
@@ -5852,9 +6177,18 @@ function doAction(type){
 
   if(type === "competition"){
     if(state.horses < 1){ toast("Il faut au moins un cheval."); return; }
+    // Un concours par tour, pas huit. Sans cette limite, la piste devenait la
+    // meilleure affaire du jeu : mise dérisoire, gain régulier, répétable
+    // autant de fois qu'il restait des actions — et l'argent s'accumulait tout
+    // seul, ce que le domaine n'a jamais fait.
+    if(state.competedTurn === state.turn){
+      toast("Il n'y a qu'un concours par saison. Le prochain attendra.");
+      return;
+    }
     const cost = spend(45);
     if(cost === false) return;
     useAction();
+    state.competedTurn = state.turn;
     const champ = ensureChampion();
     const avgRide = (state.cowboys&&state.cowboys.length) ? state.cowboys.reduce((s,c)=>s+c.ride,0)/state.cowboys.length : 0;
     const score = rand(1,70) + Math.round(championForm()*.7) + state.horses
@@ -5893,8 +6227,9 @@ function doAction(type){
   }
 
   if(type === "buyFeed"){
-    const bales = 40 * lot();
-    const cost = spend(60 * lot());
+    const n = lotAffordable(sc(60));
+    const bales = 40 * n;
+    const cost = spend(60 * n);
     if(cost === false) return;
     useAction(); state.feed += bales;
     addLog(`${bales} balles de fourrage sont rentrées à la grange pour ${cost} $.`, "good");
@@ -5902,8 +6237,9 @@ function doAction(type){
 
   if(type === "buyLand"){
     if(inReceivership()){ toast("L'administrateur judiciaire bloque toute acquisition."); return; }
-    const ha = 20 * lot();
-    const cost = spend(260 * lot());
+    const n = lotAffordable(sc(260));
+    const ha = 20 * n;
+    const cost = spend(260 * n);
     if(cost === false) return;
     useAction(); state.land += ha;
     const p = addParcel(ha);
@@ -5935,21 +6271,9 @@ function doAction(type){
   }
 
   if(type === "rivalAction"){
-    const cost = spend(70);
-    if(cost === false) return;
-    useAction();
-    const currentEra = ERAS.find(e=>e.id===state.eraId) || getEra(state.year);
-    const avgShoot = (state.cowboys&&state.cowboys.length) ? state.cowboys.reduce((s,c)=>s+c.shoot,0)/state.cowboys.length : 0;
-    const power = state.weapons*5 + avgShoot*0.6 + rand(1,40);
-    if(power > state.rival.strength){
-      state.rival.strength = clamp(state.rival.strength - rand(6,14), 10, 100);
-      state.rival.relation = clamp(state.rival.relation - rand(4,10), -100, 100);
-      addLog(`Une confrontation directe affaiblit ${currentEra.rivalType} des ${state.rival.name}.`, "good");
-    } else {
-      state.suspicion = clamp(state.suspicion + rand(5,15));
-      state.founder.health = clamp(state.founder.health - rand(4,12));
-      addLog(`La tentative d’affronter ${currentEra.rivalType} des ${state.rival.name} tourne mal.`, "bad");
-    }
+    // N'engage rien : ouvre le choix de la maison et de l'opération.
+    openRivalPanel();
+    return;
   }
 
   if(type === "rivalNegotiate"){
@@ -6000,13 +6324,26 @@ function doAction(type){
 // les saisons continuent de produire leurs veaux, leurs récoltes et leurs
 // impôts aux mêmes dates, et l'équilibrage mesuré reste comparable.
 // ============================================================================
-const ANNUAL_FROM = 1950;
+// Le tour annuel dès la fondation : à l'essai, la première moitié du siècle au
+// trimestre était longue sans être plus riche en décisions. 141 tours au lieu
+// de 337.
+const ANNUAL_FROM = 1885;
 function annualTurns(){ return !!state && state.year >= ANNUAL_FROM; }
-function actionsPerTurn(){ return annualTurns() ? 6 : 3; }
+function actionsPerTurn(){ return annualTurns() ? 8 : 3; }
 // Une action annuelle porte sur un lot, pas sur une poignée de bêtes : sans
 // cela, passer au tour annuel divisait par deux ce qu'un ranch peut faire dans
 // l'année, et le joueur se sentait affaibli plutôt que soulagé.
-function lot(){ return annualTurns() ? 4 : 1; }
+function lot(){ return annualTurns() ? 2 : 1; }
+// Un lot qu'on ne peut pas payer entier vaut mieux entamé qu'abandonné. Sans
+// cela, en 1885, la caisse de départ n'atteignait pas le prix d'un lot complet
+// de bétail : l'élevage se bloquait net dès la première année, faute de pouvoir
+// acheter la moindre bête. On renvoie 1 quand rien n'est payable, pour que
+// pay() affiche son refus habituel plutôt que de ne rien faire en silence.
+function lotAffordable(unitCost){
+  const full = lot();
+  if(!(unitCost > 0)) return full;
+  return Math.max(1, Math.min(full, Math.floor(state.money / unitCost)));
+}
 // Les trimestres intercalaires tirent moins d'événements : sans cela une année
 // en produisait quatre d'affilée, ce qui noyait le joueur sous les modales.
 function insideAnnualChain(){ return (state.autoQuarters || 0) > 0; }
@@ -6022,7 +6359,7 @@ function endTurn(){
   $("endTurnBtn").disabled = true;
 
   // Revenus du troupeau
-  const capacity = Math.max(20, Math.floor(state.land / 3));
+  const capacity = Math.max(20, Math.floor(state.land / 3 * buildingCapacityFactor()));
   const healthyCattle = Math.min(state.cattle, capacity);
   // Les bras servent à proportion du troupeau : un homme pour vingt-cinq bêtes.
   // Au-delà, ils coûtent leur salaire sans rien rapporter. C'est ce qui rend
@@ -6037,13 +6374,13 @@ function endTurn(){
   const workers = roleCount("ranch");
   const accountants = roleCount("business");
   let ranchIncome = Math.round(healthyCattle * rand(2,4) * state.costModifier
-    * (1 + workers*0.08) * handFactor);
+    * (1 + workers*0.08) * handFactor * buildingIncomeFactor());
   const cowboySalaries = (state.cowboys||[]).reduce((sum,c)=>sum+c.salary,0);
   // Les salaires sont déjà stockés à l'échelle de l'époque (réévalués à chaque
   // transition) : les remultiplier par costModifier les ferait croître au carré.
   const upkeepRaw = (state.cattle*2.75 + state.horses*5 + state.land*.17) * state.costModifier
-                  + cowboySalaries;
-  let upkeep = Math.round(upkeepRaw * Math.max(0.7, 1 - accountants*0.07));
+                  + cowboySalaries + buildingUpkeep();
+  let upkeep = Math.round(upkeepRaw * Math.max(0.7, 1 - accountants*0.07) * buildingUpkeepFactor());
 
   // Le négoce local pèse directement sur le compte d'exploitation
   const factionEffects = [];
@@ -6126,7 +6463,8 @@ function endTurn(){
   const feedUse = Math.ceil(state.cattle/10) + Math.ceil(state.horses/2);
   state.feed -= feedUse;
   if(state.feed < 0){
-    const losses = Math.min(state.cattle,rand(1,Math.max(1,Math.ceil(Math.abs(state.feed)/2))));
+    const shelter = hasBuilding("etable") ? 4 : 2;
+    const losses = Math.min(state.cattle,rand(1,Math.max(1,Math.ceil(Math.abs(state.feed)/shelter))));
     state.cattle -= losses;
     state.feed = 0;
     addLog(`Le manque de fourrage coûte ${losses} tête${losses>1?"s":""} de bétail.`, "bad");
@@ -6148,7 +6486,7 @@ function endTurn(){
     }
   }
   if(state.season === 2){
-    const harvest = Math.max(12,Math.floor(state.land/4));
+    const harvest = Math.max(12, Math.floor(state.land/4 * buildingHarvestFactor()));
     state.feed += harvest;
     addLog(`Les récoltes d’automne remplissent les réserves de fourrage : +${harvest}.`, "good");
   }
@@ -6164,6 +6502,11 @@ function endTurn(){
   // Soupçons et famille évoluent
   state.suspicion = clamp(state.suspicion - rand(0,3));
   state.unity = clamp(state.unity - rand(0,2));
+  if(hasBuilding("maison")){
+    state.reputation = clamp(state.reputation + 1);
+    state.unity = clamp(state.unity + 1);
+  }
+  if(hasBuilding("musee")) state.reputation = clamp(state.reputation + 3);
 
   // La renommée revient vers un socle : elle s'émousse quand on ne l'entretient
   // pas — sans quoi elle saturait à 100 pour tout le monde — mais elle remonte
@@ -6413,7 +6756,9 @@ function endTurn(){
   // Sur une année pleine, quatre tirages consécutifs à 82 % noieraient le
   // joueur : les trimestres intercalaires tirent moins, pour environ deux
   // événements et demi par année.
-  const eventChance = (insideAnnualChain() ? .52 : .82) * state.eventModifier;
+  // 141 tours au lieu de 564 : on remonte la densité pour qu'une année reste
+  // pleine — environ trois événements par an.
+  const eventChance = (insideAnnualChain() ? .66 : .86) * state.eventModifier;
   if(maybeShowSecretEvent()){
     return;
   } else if(chance(eventChance)){
@@ -11081,6 +11426,21 @@ document.getElementById("familyBtn").addEventListener("click",()=>{renderFamily(
 <button class="choice" onclick="illegalModal.classList.add('hidden')">Renoncer pour cette fois</button>
 </div></div>
 
+<div id="buildModal" class="modal hidden"><div class="modal-card">
+<h2>Bâtir sur le domaine</h2>
+<p class="modal-intro" id="buildIntro"></p>
+<div id="buildContent"></div>
+<button class="choice" onclick="buildModal.classList.add('hidden')">Plus tard</button>
+</div></div>
+
+<div id="rivalModal" class="modal hidden"><div class="modal-card">
+<h2>Nuire à une maison rivale</h2>
+<div id="rivalTargets" class="target-row"></div>
+<p class="modal-intro" id="rivalIntro"></p>
+<div id="rivalContent"></div>
+<button class="choice" onclick="rivalModal.classList.add('hidden')">Renoncer pour cette fois</button>
+</div></div>
+
 <div id="epilogueModal" class="modal hidden"><div class="modal-card">
 <h2 id="epilogueTitle">L'épilogue</h2>
 <div id="epilogueContent"></div>
@@ -11120,7 +11480,7 @@ function ensureCowboys(){
 }
 function renderCowboys(){
  ensureCowboys();
- const capacity = Math.max(20, Math.floor(state.land/3));
+ const capacity = Math.max(20, Math.floor(state.land/3 * buildingCapacityFactor()));
  const utiles = Math.max(1, Math.ceil(Math.min(state.cattle, capacity)/25));
  const total = state.cowboys.length;
  let h = "<p class=\"modal-intro\">Il faut environ <b>un homme pour vingt-cinq bêtes</b>. "
@@ -11185,6 +11545,24 @@ function hireCowboy(){
  renderCowboys();
  render();
 }
+
+// Un homme qui arrive autrement que par l'embauche ordinaire : débauché chez le
+// voisin, ramassé sur la route, légué par un événement. Ne coûte rien à la
+// caisse — le prix a été payé ailleurs.
+function hireNamedCowboy(over){
+ ensureCowboys();
+ const firstNames=["Tom","Sam","Luke","Frank","Charlie","Walt","Dan","Pete","Cole","Reed"];
+ const lastNames=["Reeves","Hayes","Dalton","Carson","Boone","McCoy","Lowry","Sutton","Grant","Wade"];
+ const man = Object.assign({
+   name:firstNames[rand(0,firstNames.length-1)]+" "+lastNames[rand(0,lastNames.length-1)],
+   loyalty:rand(40,80), shoot:rand(40,85), ride:rand(40,85),
+   salary:Math.round(rand(8,16)*state.costModifier), years:0,
+   trait:COWBOY_TRAITS[rand(0,COWBOY_TRAITS.length-1)].name
+ }, over || {});
+ state.cowboys.push(man);
+ decorateCowboy(man);
+ return man;
+}
 familyBtn.addEventListener("click",()=>ensureCowboys());
 cowboyBtn.addEventListener("click",()=>{renderCowboys();cowboyModal.classList.remove("hidden");});
 chronicleBtn.addEventListener("click",()=>{ ensureCowboys();
@@ -11241,6 +11619,99 @@ function renderIllegalPanel(){
      + `</button>`;
  });
  illegalContent.innerHTML = h;
+}
+
+function openBuildPanel(){
+ if(!state || state.gameOver) return;
+ if(state.actions <= 0){ toast("Plus d'action disponible ce tour."); return; }
+ renderBuildPanel();
+ buildModal.classList.remove("hidden");
+}
+function renderBuildPanel(){
+ const list = availableBuildings();
+ const done = list.filter(b => hasBuilding(b.id)).length;
+ $("buildIntro").innerHTML =
+   `<b>${done} ouvrage${done>1?"s":""} sur ${list.length}</b> déjà bâti${done>1?"s":""}. `
+   + `Un chantier se paie une fois, tient jusqu'au dernier jour, et coûte son entretien `
+   + `chaque trimestre — au total <b>${moneyFmt.format(buildingUpkeep())} $</b> pour l'instant. `
+   + `Le prix monte avec l'époque et avec la taille du domaine.`;
+ let h = "";
+ list.forEach(b => {
+   const built = hasBuilding(b.id);
+   const cost = buildingCost(b);
+   const affordable = state.money >= cost;
+   const facts = [];
+   facts.push(`<span class="fact ${affordable||built?"":"bad"}">Chantier : ${moneyFmt.format(cost)} $</span>`);
+   facts.push(`<span class="fact bad">Entretien : ${sc(b.upkeep)} $ / trimestre</span>`);
+   facts.push(`<span class="fact good">${b.gain}</span>`);
+   h += `<button class="op" ${built||!affordable?"disabled":""} onclick="raiseBuilding('${b.id}')">`
+     + `<span class="op-icon">${b.icon}</span>`
+     + `<span><span class="op-name">${b.name}</span>`
+     + `<span class="op-what">${b.what}</span></span>`
+     + `<span class="op-facts">${facts.join("")}</span>`
+     + (built ? `<span class="op-blocked">Bâti. Il tient debout.</span>`
+              : (!affordable ? `<span class="op-blocked">La caisse ne suit pas.</span>` : ""))
+     + `</button>`;
+ });
+ buildContent.innerHTML = h;
+}
+
+// Le panneau des maisons rivales : la cible d'abord, l'opération ensuite, les
+// hommes en dernier. Rien n'est engagé tant qu'on n'a pas cliqué une opération.
+function openRivalPanel(){
+ if(!state || state.gameOver) return;
+ if(state.actions <= 0){ toast("Plus d'action disponible ce tour."); return; }
+ ensureSecondHouse();
+ renderRivalPanel();
+ rivalModal.classList.remove("hidden");
+}
+function setRivalTarget(i){ rivalTarget = i; renderRivalPanel(); }
+
+function renderRivalPanel(){
+ const houses = rivalHouses();
+ if(rivalTarget >= houses.length) rivalTarget = 0;
+ const target = rivalTargetHouse();
+
+ $("rivalTargets").innerHTML = houses.map((hh,i) => {
+   const t = rivalTraitOf(hh);
+   const lead = hh.leader ? hh.leader.name : "—";
+   return `<button class="target ${i===rivalTarget?"picked":""}" onclick="setRivalTarget(${i})">`
+     + `<span class="target-name">${t.icon} Les ${hh.name}</span>`
+     + `<span class="target-sub">${lead} · ${t.label}</span>`
+     + `<span class="op-facts">`
+     + `<span class="fact">Puissance ${hh.strength}</span>`
+     + `<span class="fact ${hh.relation < -30 ? "bad" : (hh.relation > 30 ? "good" : "")}">Relation ${hh.relation}</span>`
+     + `</span></button>`;
+ }).join("");
+
+ $("rivalIntro").innerHTML =
+   `Chaque coup engage une action du tour. Vous frappez <b>les ${target.name}</b> : `
+   + `plus une maison est puissante, mieux elle se garde — sa puissance de ${target.strength} `
+   + `retranche déjà ${Math.round(Math.max(0,(target.strength-40)/4))} points de vos chances. `
+   + `Un coup manqué la renforce et la dresse davantage contre vous.`;
+
+ let h = "";
+ rivalOps().forEach(op => {
+   const need = op.needs ? op.needs() : {ok:true};
+   const affordable = !op.cost || state.money >= sc(op.cost);
+   const blocked = !need.ok || !affordable;
+   const pct = Math.round(rivalOdds(op) * 100);
+   const cls = pct >= 70 ? "good" : (pct >= 50 ? "info" : "bad");
+   const facts = [`<span class="fact ${cls}">${pct} % — ${pct>=70?"Bonnes chances":(pct>=50?"Incertain":"Très risqué")}</span>`];
+   if(op.cost) facts.push(`<span class="fact">Mise : ${moneyFmt.format(sc(op.cost))} $</span>`);
+   facts.push(`<span class="fact good">Puissance : −${op.strength[0]} à −${op.strength[1]}</span>`);
+   facts.push(`<span class="fact bad">Soupçons : +${op.sus[0]} à ${op.sus[1]}</span>`);
+   if(needsSquad(op)) facts.push(`<span class="fact">Escouade : ${op.min} homme${op.min>1?"s":""} au moins</span>`);
+   h += `<button class="op" ${blocked?"disabled":""} onclick="chooseRivalOp('${op.id}')">`
+     + `<span class="op-icon">${op.icon}</span>`
+     + `<span><span class="op-name">${op.name}</span>`
+     + `<span class="op-what">${op.what}</span></span>`
+     + `<span class="op-facts">${facts.join("")}</span>`
+     + `<span class="op-fail"><b>Si ça rate :</b> ${op.fail}</span>`
+     + (blocked ? `<span class="op-blocked">${!need.ok ? need.why : "Vous n'avez pas la mise."}</span>` : "")
+     + `</button>`;
+ });
+ rivalContent.innerHTML = h;
 }
 function renderGoals(){
  if(!state) return;

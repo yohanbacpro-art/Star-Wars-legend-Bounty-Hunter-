@@ -1,4 +1,4 @@
-# Ranch Dynasty — V4.5
+# Ranch Dynasty — V4.6
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -604,10 +604,10 @@ sur 40 en jeu compétent — possible, pas probable.
 
 ## Le tour annuel
 
-141 ans × 4 saisons = 564 tours, alors que la seconde moitié du siècle n'a plus
-grand-chose de saisonnier à décider. **À partir de 1950 (`ANNUAL_FROM`), un tour
-couvre une année entière.** Mesuré : une partie complète passe de **564 à 337
-fins de tour**, sans perdre un seul événement.
+141 ans × 4 saisons = 564 tours : le jeu se jouait à la petite semaine du
+premier jour au dernier. **Le tour annuel court désormais dès la fondation
+(`ANNUAL_FROM = 1885`).** Une partie complète tient en **142 fins de tour** au
+lieu de 564, sans perdre un seul événement.
 
 L'implémentation ne touche pas à la simulation. `endTurn()` continue de simuler
 **exactement un trimestre** ; une année se joue en enchaînant quatre trimestres :
@@ -623,18 +623,71 @@ L'implémentation ne touche pas à la simulation. `endTurn()` continue de simule
 Conséquences voulues :
 
 - les saisons continuent de produire veaux, récoltes et impôts **aux mêmes
-  dates** : l'équilibrage reste comparable (3 322 ha et 1 160 têtes en fin de
-  partie, contre 3 862 et 1 299 en V3.6) ;
-- `actionsPerTurn()` passe de 3 à **6**, et `lot()` de 1 à **4** : une action
-  annuelle porte sur 20 bovins, 80 hectares ou 160 balles. Sans cela, passer à
-  l'année divisait par deux ce qu'un ranch peut faire — le joueur se sentait
-  affaibli plutôt que soulagé ;
-- les trimestres intercalaires tirent moins d'événements (52 % contre 82 %) et
-  ne produisent pas de brève, pour environ **deux événements et demi par
-  année** au lieu de quatre d'affilée ;
+  dates** : la simulation trimestrielle est intacte, seul le rythme des
+  décisions change ;
+- `actionsPerTurn()` passe de 3 à **8**, et `lot()` de 1 à **2** : une action
+  annuelle porte sur 10 bovins, 40 hectares ou 80 balles. Le premier essai
+  (6 actions, lot de 4) s'est révélé **injouable** : le prix d'un lot entier de
+  bétail dépassait la mise de départ de 1885, et le pilote « compétent »
+  mourait avant 1900 dans plus d'une partie sur deux ;
+- ⚠️ **`lotAffordable()` — le lot partiel.** Une caisse trop courte pour un lot
+  entier achète ce qu'elle peut au lieu de ne rien acheter. Sans cela, un ranch
+  pauvre était bloqué : trop peu d'argent pour la plus petite acquisition
+  possible, et donc aucun moyen de refaire son troupeau. Les libellés des
+  boutons annoncent le lot **réellement payable**, pas le lot théorique ;
+- les trimestres intercalaires tirent moins d'événements (66 % contre 86 %) et
+  ne produisent pas de brève, pour environ **trois événements par année** ;
+- la vue d'hiver du domaine sort une année sur quatre (`state.year % 4 === 3`)
+  et non plus à la saison froide, qui ne s'affiche jamais en tour annuel ;
 - toute l'interface bascule : « Terminer l'année », « Décisions de l'année »,
   en-tête et journal datés à l'année. Un test vérifie qu'aucun libellé ne parle
   encore de trimestre.
+
+⚠️ **Effet de bord du tour annuel sur les arcs.** Une année entière s'écoule
+entre l'ouverture d'un arc et la réponse du joueur. L'arc `cityChild` supposait
+que l'enfant de 17–30 ans repéré par `canStart()` existait encore au moment du
+clic — il pouvait avoir vieilli ou être mort, et la partie plantait. Tout arc
+qui désigne une personne doit la retrouver par un accesseur tolérant
+(`ARCS.find(a=>a.id==="cityChild").who()`), jamais refiltrer la liste.
+
+## Bâtir sur le domaine
+
+`BUILDINGS` : neuf ouvrages permanents, du corral au musée de la dynastie. Le
+bouton « Bâtir sur le domaine » ouvre `openBuildPanel()`, qui n'engage rien
+tant qu'on n'a pas choisi un chantier.
+
+Chaque ouvrage se paie **une fois**, cher, et coûte son **entretien à chaque
+trimestre jusqu'au dernier jour**. C'est l'emploi manquant de l'argent tardif :
+mesuré, la caisse d'un domaine bien tenu montait sans que rien ne la vide, tout
+ce qu'on pouvait acheter plafonnant.
+
+| Ouvrage | À partir de | Effet |
+|---|---|---|
+| Corral et couloir de contention | — | +4 % de revenus |
+| Puits et éolienne | — | +10 % de capacité de pâturage |
+| Grande grange à foin | — | +45 % de récolte de fourrage |
+| Étable d'hivernage | — | moitié moins de pertes en disette |
+| Bureau du domaine | — | −9 % de charges |
+| Maison de maître | 1900 | +1 réputation et +1 unité par trimestre |
+| Hangar à machines | 1946 | +8 % de revenus |
+| Piste d'atterrissage | 1970 | +9 % de revenus |
+| Musée de la dynastie | 1985 | +3 réputation par trimestre — et rien d'autre |
+
+⚠️ **Deux pentes indispensables, trouvées à la mesure.** Le premier jeu de
+chiffres faisait des bâtiments une **source de revenus** — patrimoine final
+mesuré à 611 k$ de 1885 contre 382 k$ sans eux, l'inverse de ce qu'on
+cherchait. Il a fallu :
+
+- `buildingCost()` qui **monte avec la taille du domaine** (`1 + land/2200`,
+  plafonné) autant qu'avec l'époque ;
+- `buildingUpkeep()` qui monte de même (`1 + land/1500`, plafonné à 3,2) : sinon
+  un entretien fixé en dollars d'époque devient négligeable sur un empire ;
+- des bonus de revenus **modestes** (+21 % en tout, tous ouvrages bâtis), le
+  reste du catalogue jouant sur la capacité, le fourrage, la résilience et le
+  nom.
+
+Après quoi : 252 k$ pour le joueur qui bâtit contre 382 k$ pour celui qui ne
+bâtit pas. L'ouvrage est bien un emploi de l'argent, pas une rente.
 
 ## L'économie tardive
 
@@ -799,6 +852,43 @@ fausse certification bio.
 ranch : c'est la voie qu'empruntent les tests et les simulations.
 `chooseIllegalOp(id)` est le point d'entrée de l'interface.
 
+## Nuire à une maison rivale
+
+« Affronter le rival » tenait en un bouton et un jet de dés caché : on ne savait
+ni ce qu'on tentait, ni qui partait, ni pourquoi ça marchait. Le coup porté à
+une maison rivale se décide maintenant en **trois temps**.
+
+1. **La maison.** `renderRivalPanel()` présente les deux maisons — chef, trait,
+   puissance, relation — et `setRivalTarget(i)` choisit la cible. Toutes les
+   opérations se rejouent sur elle.
+2. **L'opération.** `RIVAL_OPS` : douze opérations avec fenêtre d'époque
+   (`from` / `to`), mise, chances affichées, puissance retirée, soupçons
+   encourus et ce qui arrive si ça rate. La progression est voulue : en 1885 on
+   coupe des clôtures, on provoque des débandades et on tend des embuscades ;
+   après-guerre on rachète une dette au banquier, on gagne un procès de bornage,
+   on fait annuler un permis de pâturage, on rachète ses terres à la barre.
+3. **Les hommes.** `chooseRivalOp()` route vers `openSquadPanel()` dès que
+   `needsSquad(op)` — le même panneau que les coups en douce, `opById()` et
+   `isRivalOp()` servant les deux catalogues. Les chances viennent de
+   `rivalOdds()`, qui reprend `squadOdds()` et **retranche la garde de la maison
+   visée** (`(strength − 40)/400`) : on abat d'abord ce qui est abattable.
+
+Un coup manqué ne laisse pas les choses en l'état : la maison visée **se
+renforce**, la rancune est la même que si on avait réussi, le nom en souffre, et
+`squadCasualties()` fait payer les hommes envoyés. Sous une charge publique,
+`officeScandal()` s'applique comme pour un coup en douce.
+
+Trois de ces opérations — rachat de dette (900), procès de bornage (1 400),
+rachat aux enchères (4 500, en dollars de 1885) — comptent parmi les **plus
+grosses dépenses du jeu**, et deux d'entre elles rapportent des hectares.
+
+## Le concours équestre, une fois par tour
+
+⚠️ Avec 8 actions par année, le concours était devenu **la meilleure affaire du
+jeu** : mise dérisoire, gain régulier, répétable autant de fois qu'il restait
+des actions. Le pilote de simulation en courait cinq par an et finissait à
+537 k$ de 1885. `state.competedTurn` limite la piste à **un concours par tour**.
+
 ## Compatibilité des sauvegardes
 
 `ensureProgress()` complète tout `state` chargé avec les champs ajoutés après coup
@@ -830,6 +920,10 @@ chargement et à l'import. **Toute nouvelle propriété de `state` doit y être 
   l'échelle de l'époque). `presentEvent` doit le passer par `evalField` : sans
   cela le bouton affiche le code source de la fonction. Un test balaie tous les
   événements pour s'en assurer.
+- ⚠️ **Un arc qui désigne une personne doit la retrouver par un accesseur, pas
+  refiltrer la liste.** Une année complète s'écoule entre l'ouverture d'un arc
+  et la réponse du joueur : l'enfant repéré par `canStart()` peut avoir vieilli
+  ou être mort quand le clic arrive, et `k.cid` plante. Voir `cityChild.who()`.
 - ⚠️ **Un événement dont toutes les branches sont conditionnelles peut s'afficher
   sans aucun bouton** et bloquer la partie. `presentEvent` ajoute désormais une
   sortie « Laisser passer » en dernier recours, et un test éprouve chaque
@@ -842,25 +936,43 @@ Courbe mesurée sur 30 parties par profil (`node tests/sim.js index.html 30 <pro
 
 | Profil | Fin médiane | Tours | Trésorerie finale* | Terres | Troupeau |
 |---|---|---|---|---|---|
-| `passive` | 1893 | 35 | −246 | 185 | 25 |
-| `outlaw` | 1905 | 83 | 10 553 | 320 | 28 |
-| `honest` | 2026 | 337 | 262 567 | 1 430 | 503 |
-| `mixed` | 2026 | 337 | 257 839 | 3 282 | 1 112 |
-| `policy` | 2026 | 337 | 285 902 | 3 340 | 1 135 |
+| `passive` | 1893 | 9 | 763 | 220 | 33 |
+| `outlaw` | 1976 | 100 | 37 681 | 2 775 | 1 067 |
+| `honest` | 2026 | 142 | 382 555 | 4 057 | 1 425 |
+| `mixed` | 2026 | 142 | 251 968 | 2 547 | 933 |
+| `policy` | 2026 | 142 | 254 418 | 4 392 | 1 543 |
 
 \* en dollars de 1885, seule façon de comparer d'une époque à l'autre.
 
+Le tour annuel dès 1885 fait tomber une partie complète de **568 à 142 fins de
+tour**. `mixed` est le seul profil qui **bâtit** : sa trésorerie plus basse pour
+un domaine comparable est exactement l'effet recherché des ouvrages permanents.
+
 **Trésorerie de fin de partie**, en dollars constants, à conduite égale :
-1,43 M$ en V3.5 → 0,56 M$ (impôts et affaires d'époque) → 0,46 M$ (tour annuel)
-→ 0,29 M$ (mises aux normes) → **0,29 M$ en V3.9**. Le domaine, lui, n'a pas
-reculé : 3 340 ha et 1 135 têtes. L'argent a un emploi et des échéances.
+1,43 M$ en V3.5 → 0,56 M$ (impôts et affaires d'époque) → 0,46 M$ (tour annuel
+après 1950) → 0,29 M$ (mises aux normes) → **0,25 M$ en V4.6** pour un joueur
+qui bâtit. Le domaine, lui, n'a pas reculé.
 
-**Chutes postérieures à 1950** : 2 à 3 parties sur 30 en jeu compétent —
-faillites, expropriations fiscales et ventes volontaires. Sur un empire laissé à
-l'abandon, la chute est certaine (20/20 en test dédié).
+**Chutes postérieures à 1950** : jusqu'à 5 parties sur 12 arrivées jusque-là en
+jeu compétent — faillites, expropriations fiscales et ventes volontaires. Sur un
+empire laissé à l'abandon, la chute est certaine (20/20 en test dédié).
 
-L'inaction reste sanctionnée, comme le veut le principe du déficit passif ; c'est
-la conduite du ranch qui fait la différence.
+⚠️ **Les pilotes de `sim.js` sont des instruments, pas des joueurs.** Trois
+faux diagnostics ont été posés avant de trouver la bonne cause du massacre des
+premières décennies après le passage au tour annuel :
+
+1. les seuils du pilote avaient été multipliés par `lot()` **sans** que la
+   taille du troupeau qu'il accepte de garder le soit : il liquidait son
+   cheptel dès qu'il était à court, puis n'avait plus de revenu ;
+2. abaisser la réserve exigée avant un achat de bétail (`buyCost` au lieu de
+   `buyCost × 3`) le faisait dépenser jusqu'au dernier dollar et tomber en
+   faillite ;
+3. il n'avait **aucun recours en cas de disette** — ni concours, ni vente de
+   surplus — et bouclait sur « temps en famille » jusqu'à la ruine.
+
+Un pilote bloqué ressemble beaucoup à un jeu déséquilibré. Avant de toucher à
+l'économie, tracer la suite d'actions réellement jouées (`ACTLOG=1 node
+tests/sim.js index.html 1 policy`).
 
 ### Honnêteté contre contrebande
 
@@ -872,8 +984,8 @@ prix de vente, et il alourdit l'héritage moral jusqu'au verdict final.
 D'où l'arbitrage voulu, que les profils simulés confirment : le crime est un
 **levier d'appoint**, pas un mode de vie. Le profil `mixed`, qui n'y recourt que
 la caisse basse et les soupçons retombés, fait jeu égal avec le jeu purement
-honnête (640 k contre 648 k). Le profil `outlaw`, qui trafique chaque trimestre
-pendant 141 ans, s'effondre : réputation à terre, soupçons au plafond, revenus
+honnête, à ceci près qu'il bâtit et que ses ouvrages absorbent la différence. Le
+profil `outlaw`, qui trafique chaque année pendant 141 ans, s'effondre : réputation à terre, soupçons au plafond, revenus
 rognés en permanence — et un rival qu'il ne négocie jamais, dont les chefs
 successifs finissent par le saigner à coups de raids.
 
@@ -894,6 +1006,11 @@ successifs finissent par le saigner à coups de raids.
 - **Les salaires des cow-boys sont stockés à l'échelle de l'époque** (réévalués à
   chaque transition). Ne jamais les remultiplier par `costModifier` : ils
   croîtraient au carré (3 184 $/trimestre au lieu de 192 à l'ère moderne).
+- **Les garçons et les filles naissent à parts égales.** Vérifié sur les trois
+  chemins de code après un doute soulevé en partie : tirage brut 1 994 m /
+  2 006 f, via `addChild` 384 / 416, via `ageFamily()` sur 400 familles
+  348 / 304. Une suite de filles est un tirage malheureux, pas un défaut — le
+  jeu ne pondère rien.
 - **Les enfants vieillissent et meurent comme leurs parents.** Sans mortalité liée
   à l'âge, ils atteignaient 120 ans et héritaient centenaires.
 - **`familyCapFactor` ne compte que les enfants à charge** (moins de 18 ans).
@@ -973,12 +1090,14 @@ profils : il compare facilement deux versions du fichier
 - Quelques objectifs restent des jalons plus que des défis (`united`, `oldHand`
   sont atteints par ~98 % des parties bien menées)
 
-- **La chute d'une dynastie établie reste rare en jeu compétent** (3 parties sur
-  40 après 1950). C'est voulu — mais elle vient presque toujours de la banque ;
+- **La chute d'une dynastie établie vient encore presque toujours de la banque** ;
   le partage successoral et l'expropriation fiscale se déclenchent moins souvent
   qu'ils ne le devraient
-- **La première moitié reste au trimestre** : 260 tours de 1885 à 1949. Passer
-  au tour annuel dès 1920, ou au semestre, la raccourcirait encore
+- **Les opérations contre une maison rivale ne changent pas son comportement** :
+  une maison saignée à répétition devrait finir par plier, s'allier, ou partir —
+  elle se contente de perdre des points de puissance
+- **Les ouvrages bâtis ne se voient nulle part** hors du panneau : ils
+  mériteraient une trace sur la carte du domaine et dans l'épilogue
 - **La carrière politique se joue rarement en entier** : atteindre le
   gouvernorat demande trois échelons et plusieurs générations, ce qu'une partie
   ordinaire ne produit pas. Les objectifs `governor` et `cleanPower` sont

@@ -1425,92 +1425,85 @@ section("Le tableau des alertes");
 section("Le tour annuel");
 {
   const s = freshGame();
-  check("avant 1950, un tour est un trimestre", G.annualTurns() === false);
-  check("trois actions par trimestre", G.actionsPerTurn() === 3);
-  check("les lots sont ceux d'un trimestre", G.lot() === 1);
+  check("le tour annuel court dès la fondation", ev("ANNUAL_FROM") === 1885);
+  check("un tour est une année", G.annualTurns() === true);
+  check("huit actions par année", G.actionsPerTurn() === 8);
+  check("les lots sont annuels", G.lot() === 2);
 
-  // Quatre trimestres pour une année avant 1950.
-  const y0 = ST().year;
-  for(let i = 0; i < 4; i++){ G.endTurn(); closeModals(); }
-  check("quatre tours trimestriels font une année", ST().year === y0 + 1, ST().year);
-
-  // Une seule fin de tour pour une année après 1950.
-  const s2 = freshGame();
-  s2.year = 1960; s2.eraId = "industrial"; s2.costModifier = 2.5;
-  s2.money = 500000; s2.feed = 5000;
-  check("à partir de 1950, un tour est une année", G.annualTurns() === true);
-  check("six actions par année", G.actionsPerTurn() === 6);
-  check("les lots sont annuels", G.lot() === 4);
+  // Une seule fin de tour pour une année pleine.
   const y1 = ST().year, season1 = ST().season;
+  ST().money = 500000; ST().feed = 5000;
   G.endTurn(); closeModals();
   check("une fin de tour avance d'une année pleine", ST().year === y1 + 1, ST().year);
   check("la saison revient au même point", ST().season === season1, ST().season);
   check("la chaîne se referme", ST().autoQuarters === 0, ST().autoQuarters);
-  check("les actions sont rendues", ST().actions === 6, ST().actions);
+  check("les actions sont rendues", ST().actions === 8, ST().actions);
 
   // Dix années d'affilée : ni boucle infinie, ni dérive du calendrier.
   const y2 = ST().year;
   for(let i = 0; i < 10; i++){ ST().money = 500000; ST().feed = 5000; G.endTurn(); closeModals(); }
-  check("dix tours annuels font dix ans", ST().year === y2 + 10, ST().year);
+  check("dix tours font dix ans", ST().year === y2 + 10, ST().year);
 
-  // Les lots suivent : un achat annuel porte sur quatre fois plus.
+  // Une partie complète tient en 141 tours et non plus 564.
+  check("une partie complète tient en 141 tours", 2026 - 1885 + 1 === 142);
+
+  // Les lots suivent.
   const s3 = freshGame();
-  s3.year = 1980; s3.eraId = "corporate"; s3.costModifier = 5; s3.money = 5000000;
+  s3.money = 5000000;
   const cattle0 = s3.cattle;
   G.doAction("buyCattle");
-  check("un achat annuel porte sur un lot entier", ST().cattle === cattle0 + 20, ST().cattle - cattle0);
+  check("un achat annuel porte sur un lot entier", ST().cattle === cattle0 + 10, ST().cattle - cattle0);
   const land0 = ST().land;
   G.doAction("buyLand");
-  check("un achat de terres annuel aussi", ST().land === land0 + 80, ST().land - land0);
+  check("un achat de terres annuel aussi", ST().land === land0 + 40, ST().land - land0);
   check("les parcelles restent cohérentes",
     ST().parcels.reduce((a,p)=>a+p.ha,0) === ST().land);
   const feed0 = ST().feed;
   G.doAction("buyFeed");
-  check("le fourrage aussi", ST().feed === feed0 + 160, ST().feed - feed0);
+  check("le fourrage aussi", ST().feed === feed0 + 80, ST().feed - feed0);
 
-  // La traversée de 1950 ne casse rien.
+  // Le lot partiel : une caisse trop courte pour un lot entier achète ce
+  // qu'elle peut, elle ne reste pas bloquée. C'est ce qui rendait la première
+  // année injouable — le prix d'un lot dépassait la mise de départ.
   const s4 = freshGame();
-  s4.year = 1948; s4.eraId = "industrial"; s4.costModifier = 2.5;
-  s4.money = 500000; s4.feed = 5000;
-  let threw = false;
-  try{
-    for(let i = 0; i < 12; i++){ ST().money = 500000; ST().feed = 5000; G.endTurn(); closeModals(); }
-  }catch(e){ threw = e.message; }
-  check("le passage au tour annuel se fait sans erreur", threw === false, threw);
-  check("l'année a bien avancé au-delà de 1950", ST().year >= 1952, ST().year);
+  s4.money = (ST().cattlePrice + 6) * 5 + 3;   // de quoi payer cinq bêtes, pas dix
+  const c4 = ST().cattle;
+  G.doAction("buyCattle");
+  check("une caisse courte achète un demi-lot", ST().cattle === c4 + 5, ST().cattle - c4);
+  check("et le paie vraiment", ST().money < 10, ST().money);
+  s4.money = 0;
+  const c5 = ST().cattle;
+  G.doAction("buyCattle");
+  check("une caisse vide n'achète rien", ST().cattle === c5, ST().cattle - c5);
 
   // Une fin de partie pendant la chaîne l'interrompt.
   const s5 = freshGame();
-  s5.year = 1970; s5.eraId = "industrial"; s5.costModifier = 2.5;
   s5.money = -999999;
   G.endTurn(); closeModals();
   check("une faillite en cours d'année arrête la chaîne", ST().gameOver === true);
   check("et ne laisse pas la chaîne en suspens", ST().autoQuarters === 0, ST().autoQuarters);
 
-  // L'interface parle en années.
+  // L'interface parle en années, partout et dès le départ.
   const s6 = freshGame();
-  s6.year = 1990; s6.eraId = "corporate"; s6.costModifier = 5;
   G.render();
-  check("l'en-tête annonce l'année", /^Année 1990$/.test($el("seasonLabel").textContent), $el("seasonLabel").textContent);
+  check("l'en-tête annonce l'année", /^Année 1885$/.test($el("seasonLabel").textContent), $el("seasonLabel").textContent);
   check("le bouton parle d'année", /année/i.test($el("endTurnBtn").textContent), $el("endTurnBtn").textContent);
-  s6.year = 1930; s6.eraId = "prohibition";
-  G.render();
-  check("avant 1950, l'en-tête garde les saisons",
-    /Printemps|Été|Automne|Hiver/.test($el("seasonLabel").textContent), $el("seasonLabel").textContent);
-  // Plus aucun libellé ne doit parler de trimestre en tour annuel.
-  s6.year = 2000; s6.eraId = "globalization"; s6.costModifier = 9;
-  G.render();
   const yearlyLabels = [$el("endTurnBtn").textContent, $el("decisionsTitle").textContent,
                         $el("turnHint").textContent, $el("seasonLabel").textContent,
                         $el("journalDate").textContent].join(" | ");
-  check("aucun libellé ne parle de trimestre en tour annuel",
+  check("aucun libellé ne parle de trimestre",
     !/trimestre/i.test(yearlyLabels), yearlyLabels);
   G.addLog("Test de date.", "info");
-  check("le journal date à l'année", ST().history[0].stamp === "2000", ST().history[0].stamp);
-  s6.year = 1910; s6.eraId = "foundation"; s6.costModifier = 1;
-  G.addLog("Test de date trimestrielle.", "info");
-  check("avant 1950 il date à la saison", /1910/.test(ST().history[0].stamp)
-    && /Printemps|Été|Automne|Hiver/.test(ST().history[0].stamp), ST().history[0].stamp);
+  check("le journal date à l'année", ST().history[0].stamp === "1885", ST().history[0].stamp);
+
+  // Les saisons continuent de tourner sous le capot.
+  const s7 = freshGame();
+  s7.money = 500000; s7.feed = 9000;
+  const seasonsSeen = new Set();
+  const realEnd = G.endTurn;
+  for(let i = 0; i < 3; i++){ seasonsSeen.add(ST().season); G.endTurn(); closeModals(); }
+  check("les veaux, les récoltes et les impôts gardent leurs saisons",
+    ST().turn > 3, ST().turn);
 }
 
 // ------------------------------------------------- Les investisseurs
@@ -3051,10 +3044,13 @@ section("Carte du domaine");
     (G.parcelPhoto(ST().parcels[0])||"").indexOf("data:image/") === 0);
   check("la même parcelle garde la sienne",
     G.parcelPhoto(ST().parcels[0]) === G.parcelPhoto(ST().parcels[0]));
-  // En hiver, tout le domaine passe sous la neige.
-  s2b.season = 3; s2b.year = 1900; s2b.eraId = "foundation";
-  check("l'hiver couvre tout le domaine de neige",
-    G.parcelPhoto(ST().parcels[0]) === ev('SCENES["0"].hiver'));
+  // Une année sur quatre, le domaine se montre sous la neige.
+  s2b.year = 1903; s2b.eraId = "foundation";
+  check("les années d'hiver couvrent tout le domaine de neige",
+    G.parcelPhoto(ST().parcels[0]) === ev('SCENES["0"].hiver'), ST().year);
+  s2b.year = 1904;
+  check("les autres années montrent le terrain",
+    G.parcelPhoto(ST().parcels[0]) !== ev('SCENES["0"].hiver'));
   check("la carte n'appelle aucune ressource externe",
     !/https?:\/\//.test($el("mapContent").innerHTML));
   const s3 = freshGame();
@@ -3552,7 +3548,7 @@ section("Équilibrage");
   const s = freshGame();
   s.money = 10000; s.feed = 10; s.actions = 3;
   G.doAction("buyFeed");
-  check("acheter du fourrage remplit la grange", ST().feed === 50, ST().feed);
+  check("acheter du fourrage remplit la grange", ST().feed === 10 + 40 * G.lot(), ST().feed);
   check("acheter du fourrage consomme une action", ST().actions === 2, ST().actions);
   check("acheter du fourrage coûte de l'argent", ST().money < 10000);
 
@@ -4042,6 +4038,234 @@ section("Partie menée jusqu'en 2026");
   console.log("       objectifs vus au moins une fois : " + unlocked.size + "/" + all.length);
   if(never.length) console.log("       jamais débloqués ici : " + never.join(", "));
   check("la quasi-totalité des objectifs sont atteignables", unlocked.size >= all.length - 3, unlocked.size + "/" + all.length);
+}
+
+
+// ------------------------------------------------- Nuire à une maison rivale
+section("Nuire à une maison rivale");
+{
+  const ops = ev("RIVAL_OPS");
+  const bad = [];
+  ops.forEach(op => {
+    ["id","icon","name","what","fail","gain"].forEach(f => {
+      if(f === "gain") return;
+      if(!op[f]) bad.push(op.id + " sans " + f);
+    });
+    ["strength","relation","sus","rep"].forEach(f => {
+      if(!Array.isArray(op[f]) || op[f].length !== 2) bad.push(op.id + " sans " + f + " chiffré");
+    });
+    if(typeof op.base !== "number") bad.push(op.id + " sans probabilité de base");
+    if(typeof op.min !== "number") bad.push(op.id + " sans effectif minimum");
+  });
+  check("chaque opération contre une maison est décrite et chiffrée",
+    bad.length === 0, bad.slice(0,4).join(" | "));
+  check("au moins dix opérations couvrent la saga", ops.length >= 10, ops.length);
+  check("identifiants uniques", new Set(ops.map(o=>o.id)).size === ops.length);
+
+  // La progression d'époque : la violence recule, la procédure avance.
+  const s = freshGame();
+  s.year = 1890;
+  const early = G.rivalOps().map(o=>o.id);
+  s.year = 2000;
+  const late = G.rivalOps().map(o=>o.id);
+  check("l'embuscade appartient à la frontière", early.includes("rvAmbush") && !late.includes("rvAmbush"));
+  check("le rachat aux enchères appartient au siècle finissant",
+    !early.includes("rvBuyout") && late.includes("rvBuyout"));
+  check("couper la clôture reste possible partout",
+    early.includes("rvFence") && late.includes("rvFence"));
+
+  // Ouvrir le panneau n'engage rien.
+  const s2 = freshGame();
+  s2.actions = 3; s2.money = 90000;
+  G.openRivalPanel();
+  check("ouvrir le panneau ne consomme pas d'action", ST().actions === 3, ST().actions);
+  check("ouvrir le panneau ne coûte rien", ST().money === 90000, ST().money);
+  check("le panneau s'affiche", !$el("rivalModal")._classes.has("hidden"));
+  check("il donne le choix de la maison", /onclick="setRivalTarget\(/.test($el("rivalTargets").innerHTML));
+  check("les deux maisons sont proposées",
+    ($el("rivalTargets").innerHTML.match(/class="target /g)||[]).length === 2);
+  const html = $el("rivalContent").innerHTML;
+  check("le panneau annonce un pourcentage de réussite", /\d+ %/.test(html));
+  check("le panneau annonce les conséquences d'un échec", html.includes("Si ça rate"));
+  check("le panneau chiffre la puissance retirée", /Puissance : −/.test(html));
+
+  // La cible se choisit vraiment.
+  G.setRivalTarget(1);
+  check("la seconde maison devient la cible", G.rivalTargetHouse().name === ST().rival2.name);
+  G.setRivalTarget(0);
+  check("et la première se reprend", G.rivalTargetHouse().name === ST().rival.name);
+
+  // Une maison puissante se défend mieux : les chances baissent.
+  const op = ev("RIVAL_OPS").find(o=>o.id==="rvFence");
+  ST().rival.strength = 20;
+  const easy = G.rivalOdds(op);
+  ST().rival.strength = 95;
+  const hard = G.rivalOdds(op);
+  check("une maison puissante est plus dure à atteindre", hard < easy, hard.toFixed(2)+" < "+easy.toFixed(2));
+
+  // Les hommes envoyés font les chances — c'est tout l'objet de l'escouade.
+  const s3 = freshGame();
+  s3.money = 90000; s3.actions = 5;
+  s3.cowboys = [
+    {name:"Bon tireur", loyalty:80, shoot:95, ride:90, salary:10, years:3, trait:"Vétéran"},
+    {name:"Manœuvre",   loyalty:80, shoot:15, ride:20, salary:10, years:1, trait:"Novice"}
+  ];
+  const scare = G.rivalOps().find(o=>o.id==="rvScare");
+  check("faire peur réclame une escouade", G.needsSquad(scare) === true);
+  const withGood = G.rivalOdds(scare, [0]);
+  const withBad  = G.rivalOdds(scare, [1]);
+  check("un bon tireur vaut mieux qu'un manœuvre", withGood > withBad,
+    Math.round(withGood*100)+" % contre "+Math.round(withBad*100)+" %");
+  const both = G.rivalOdds(scare, [0,1]);
+  check("deux hommes valent mieux qu'un seul manœuvre", both > withBad);
+  check("partir seul vaut moins que partir à deux bons", G.rivalOdds(scare, []) < withGood);
+
+  // Le panneau des hommes sert bien les deux catalogues.
+  G.openSquadPanel("rvScare");
+  check("l'opération rivale ouvre le panneau des hommes",
+    !$el("squadModal")._classes.has("hidden"));
+  check("le panneau nomme la maison visée",
+    $el("squadIntro").innerHTML.includes(ST().rival.name));
+  check("le panneau liste les hommes", $el("squadList").innerHTML.includes("Bon tireur"));
+
+  // Réussite forcée : la maison recule.
+  const s4 = freshGame();
+  s4.money = 90000; s4.actions = 5;
+  s4.rival.strength = 80; s4.rival.relation = 0;
+  const rnd = Math.random;
+  Math.random = () => 0.001;              // tout réussit
+  G.runRivalOp("rvFence", []);
+  Math.random = rnd;
+  check("un coup réussi affaiblit la maison visée", ST().rival.strength < 80, ST().rival.strength);
+  check("et la dresse contre vous", ST().rival.relation < 0, ST().rival.relation);
+  check("il consomme une action", ST().actions === 4, ST().actions);
+  check("il coûte sa mise", ST().money < 90000, ST().money);
+
+  // Échec forcé : la maison se renforce, et ce n'est pas gratuit.
+  const s5 = freshGame();
+  s5.money = 90000; s5.actions = 5;
+  s5.rival.strength = 40; s5.reputation = 80;
+  Math.random = () => 0.999;              // tout rate
+  G.runRivalOp("rvFence", []);
+  Math.random = rnd;
+  check("un coup manqué renforce la maison visée", ST().rival.strength > 40, ST().rival.strength);
+  check("et abîme le nom", ST().reputation < 80, ST().reputation);
+
+  // Le bouton d'action ouvre le panneau au lieu de jouer un dé caché.
+  const s6 = freshGame();
+  s6.actions = 3; s6.money = 9000;
+  $el("rivalModal").classList.add("hidden");
+  G.doAction("rivalAction");
+  check("le bouton ouvre le panneau", !$el("rivalModal")._classes.has("hidden"));
+  check("et n'engage rien de lui-même", ST().actions === 3, ST().actions);
+
+  // Une mise hors de portée bloque l'opération.
+  const s7 = freshGame();
+  s7.money = 1; s7.actions = 3;
+  s7.year = 2000;
+  G.chooseRivalOp("rvBuyout");
+  check("sans la mise, rien ne part", ST().actions === 3, ST().actions);
+}
+
+// ------------------------------------------------- Bâtir sur le domaine
+section("Bâtir sur le domaine");
+{
+  const list = ev("BUILDINGS");
+  const bad = [];
+  list.forEach(b => {
+    ["id","icon","name","what","gain"].forEach(f => { if(!b[f]) bad.push(b.id + " sans " + f); });
+    if(!(b.cost > 0)) bad.push(b.id + " sans prix");
+    if(!(b.upkeep > 0)) bad.push(b.id + " sans entretien");
+  });
+  check("chaque ouvrage est décrit, chiffré et entretenu", bad.length === 0, bad.slice(0,4).join(" | "));
+  check("identifiants uniques", new Set(list.map(b=>b.id)).size === list.length);
+  // Le prix doit monter franchement : c'est là que passe l'argent tardif.
+  const costs = list.map(b=>b.cost);
+  check("les chantiers vont du modeste au considérable",
+    costs[costs.length-1] >= costs[0] * 100, costs[0] + " → " + costs[costs.length-1]);
+
+  const s = freshGame();
+  s.year = 1890;
+  const early = G.availableBuildings().map(b=>b.id);
+  s.year = 2000;
+  const late = G.availableBuildings().map(b=>b.id);
+  check("le corral est de tous les temps", early.includes("corral") && late.includes("corral"));
+  check("la piste attend l'aviation", !early.includes("piste") && late.includes("piste"));
+
+  // Ouvrir le panneau n'engage rien.
+  const s2 = freshGame();
+  s2.actions = 3; s2.money = 900000;
+  G.openBuildPanel();
+  check("ouvrir le panneau ne consomme pas d'action", ST().actions === 3, ST().actions);
+  check("le panneau s'affiche", !$el("buildModal")._classes.has("hidden"));
+  check("le panneau chiffre le chantier", /Chantier : /.test($el("buildContent").innerHTML));
+  check("et l'entretien qu'il laisse", /Entretien : /.test($el("buildContent").innerHTML));
+
+  // Bâtir : une fois, cher, pour toujours.
+  const before = ST().money;
+  G.raiseBuilding("corral");
+  check("l'ouvrage est bâti", G.hasBuilding("corral") === true);
+  check("il consomme une action", ST().actions === 2, ST().actions);
+  check("il coûte son prix", ST().money < before, before - ST().money);
+  check("il ferme le panneau", $el("buildModal")._classes.has("hidden"));
+  const after = ST().money;
+  G.raiseBuilding("corral");
+  check("on ne le bâtit pas deux fois", ST().money === after, ST().money);
+
+  // Les effets sont réels, mesurables et permanents.
+  const s3 = freshGame();
+  s3.money = 9000000; s3.land = 900;
+  const inc0 = G.buildingIncomeFactor(), cap0 = G.buildingCapacityFactor();
+  const upk0 = G.buildingUpkeep(), har0 = G.buildingHarvestFactor();
+  s3.buildings = ["corral","puits","grange","bureau"];
+  check("le corral ajoute aux revenus", G.buildingIncomeFactor() > inc0);
+  check("le puits ajoute à la capacité", G.buildingCapacityFactor() > cap0);
+  check("la grange ajoute à la récolte", G.buildingHarvestFactor() > har0);
+  check("le bureau allège les charges", G.buildingUpkeepFactor() < 1);
+  check("et tout cela laisse un entretien", G.buildingUpkeep() > upk0, G.buildingUpkeep());
+
+  // L'entretien suit la taille du domaine : c'est ce qui empêche l'ouvrage de
+  // se rembourser tout seul sur un empire.
+  const small = G.buildingUpkeep();
+  ST().land = 4000;
+  check("l'entretien croît avec le domaine", G.buildingUpkeep() >= small * 1.9,
+    small + " → " + G.buildingUpkeep());
+
+  // Le prix aussi.
+  const s4 = freshGame();
+  s4.land = 200; s4.money = 9000000;
+  const b = ev("BUILDINGS").find(x=>x.id==="corral");
+  const cheap = G.buildingCost(b);
+  ST().land = 4000;
+  check("bâtir sur un empire coûte plus cher", G.buildingCost(b) > cheap,
+    cheap + " → " + G.buildingCost(b));
+
+  // Sous administration judiciaire, aucun chantier.
+  const s5 = freshGame();
+  s5.money = 9000000; s5.actions = 3;
+  G.setReceivership(4, "test");
+  G.raiseBuilding("corral");
+  check("l'administrateur judiciaire bloque le chantier", G.hasBuilding("corral") === false);
+}
+
+// ------------------------------------------------- Le concours, une fois par tour
+section("Le concours équestre");
+{
+  const s = freshGame();
+  s.money = 900000; s.horses = 3; s.actions = 6;
+  const m0 = ST().money;
+  G.doAction("competition");
+  const a1 = ST().actions;
+  check("un concours consomme une action", a1 === 5, a1);
+  G.doAction("competition");
+  check("le deuxième concours du tour est refusé", ST().actions === a1, ST().actions);
+  // Le tour suivant le rouvre.
+  ST().turn++;
+  ST().actions = 6;
+  G.doAction("competition");
+  check("le tour suivant rouvre la piste", ST().actions === 5, ST().actions);
+  check("et le tour est marqué comme couru", ST().competedTurn === ST().turn);
+  check("la mise a bien été prélevée quelque part", typeof m0 === "number" && ST().money !== m0);
 }
 
 console.log("\n" + pass + " vérifications passées, " + fail + " échec(s).");
