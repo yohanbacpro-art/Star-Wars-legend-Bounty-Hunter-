@@ -1,4 +1,4 @@
-# Ranch Dynasty — V4.0
+# Ranch Dynasty — V4.1
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -318,11 +318,36 @@ libellé du bouton de départ.
 ## Les visages de la dynastie
 
 On passe 141 ans avec Yohan, Élise, Alice, Jake Morgan — et jusqu'en V3.9 ce
-n'étaient que des prénoms dans des listes. C'était le dernier endroit où le jeu
-restait un tableur alors qu'il raconte une saga de famille.
+n'étaient que des prénoms dans des listes.
 
-Chaque personne porte désormais un **portrait dessiné en SVG dans la page** :
-aucune ressource extérieure, et un rendu stable.
+### Les portraits photographiques
+
+**155 portraits sont encodés dans la page** (`PHOTOS`, ~1,5 Mo en base64 sur un
+fichier de 2,1 Mo), rangés par **bande d'époque** (`PHOTO_BAND` : 1885–1920,
+1920–1945, 1950–1970, 1970–2000, 2000–2026), par **sexe** et par **âge**
+(enfant, adulte, âgé). La CSP d'un Artifact bloque toute requête sortante :
+rien ne peut vivre à côté du fichier.
+
+Une photo ne se mélange pas comme un dessin. L'allure d'une personne est donc
+**arrêtée au premier rendu** — sa bande d'époque (`p.photoEra`) et son rang dans
+le tirage (`p.photoIx`) — puis elle la garde toute sa vie, comme on garde son
+style. Seul le passage d'un âge à l'autre la fait changer de série : l'enfant du
+premier chapitre devient l'adulte du troisième.
+
+Le portrait reste un `<svg>` contenant une `<image>` en `data:` découpée en
+rond. C'est ce qui permet aux mêmes appels de servir les panneaux, l'affiche
+exportée et sa conversion en PNG.
+
+⚠️ **Limites du fonds fourni**, assumées : il ne contient aucune femme âgée
+(elles empruntent la série adulte), et tous les sujets ont le même type
+physique. Le sélecteur « teint de la famille » de la V4.0 a donc été retiré de
+l'écran de création : il ne décrivait plus rien.
+
+### Le dessin vectoriel, en secours
+
+Le générateur procédural de la V4.0 reste en place et sert dès qu'une case du
+catalogue est vide (`portraitSVG(p, {drawn:true})` le force). Il conserve toute
+sa logique d'hérédité :
 
 - `faceOf(p, parents)` tire les traits **une seule fois** puis les range dans
   `p.face` — ils sont donc sauvegardés avec la partie, et un même être humain a
@@ -831,7 +856,8 @@ sans aucune dépendance :
 # chute d'une dynastie établie, quarantaine, partage, alertes, libellés.
 # politique et charges publiques, ville qui pousse.
 # visages, héritage des traits, arbre généalogique, épilogue.
-# 721 vérifications, sortie non nulle en cas d'échec.
+# catalogue photographique, bandes d'époque, stabilité de l'allure.
+# 744 vérifications, sortie non nulle en cas d'échec.
 node tests/scenarios.js index.html
 
 # Simulation de masse.

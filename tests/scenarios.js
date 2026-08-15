@@ -1948,8 +1948,11 @@ section("Les visages de la dynastie");
   check("le conjoint aussi", !!G.faceOf(ST().spouse));
   const f = G.faceOf(ST().founder);
   check("un visage porte tous ses traits",
-    ["skin","hair","eye","jaw","nose","mouth","brow","style","beard","ears"].every(k => f[k] !== undefined),
+    ["skinIx","hairIx","eyeIx","jaw","nose","mouth","brow","style","beard","ears","cheek"]
+      .every(k => f[k] !== undefined),
     Object.keys(f).join(","));
+  check("le teint est un rang dans une échelle ordonnée",
+    Number.isInteger(f.skinIx) && f.skinIx >= 0 && f.skinIx < ev("SKIN").length, f.skinIx);
   check("les traits sont rangés sur la personne", !!ST().founder.face);
 
   // Stabilité : le même être humain a toujours le même visage.
@@ -1967,33 +1970,118 @@ section("Les visages de la dynastie");
   }
   check("quarante personnes donnent des visages variés", faces.size >= 35, faces.size + "/40");
 
-  // Un enfant tient de ses parents.
+  // Un enfant tient le milieu entre ses deux parents, jamais un tirage au sort.
+  const face0 = (ix, rest) => Object.assign({skinIx:ix, hairIx:1, eyeIx:0, jaw:1, nose:1,
+    mouth:1, brow:1, style:0, beard:0, ears:0, cheek:1}, rest||{});
   const s2 = freshGame();
-  s2.founder.face = {skin:"#f2d3b4", hair:"#2b1d14", eye:"#4a3323", jaw:0, nose:0, mouth:0, brow:0, style:0, beard:0, ears:0};
-  s2.spouse.face  = {skin:"#6f4a2f", hair:"#d9c08a", eye:"#3d5a7a", jaw:2, nose:2, mouth:2, brow:2, style:3, beard:0, ears:1};
-  let inherited = 0;
-  for(let i = 0; i < 30; i++){
+  s2.familySkin = 2;
+  s2.founder.face = face0(0);
+  s2.spouse.face  = face0(4, {hairIx:6, eyeIx:3});
+  let between = 0;
+  for(let i = 0; i < 40; i++){
     const kid = G.addChild("Enfant"+i, {sex:i%2?"f":"m"});
-    const kf = kid.face;
-    if([ST().founder.face.skin, ST().spouse.face.skin].indexOf(kf.skin) >= 0) inherited++;
+    // Milieu des deux rangs, à un cran près.
+    if(Math.abs(kid.face.skinIx - 2) <= 1) between++;
   }
-  check("un enfant tient la peau d'un de ses parents", inherited >= 25, inherited + "/30");
+  check("un enfant tient le milieu entre ses deux parents", between === 40, between + "/40");
 
-  // Le visage vieillit.
-  const young = G.portraitSVG({name:"Ada", sex:"f", cid:900, age:25});
-  const old   = G.portraitSVG({name:"Ada", sex:"f", cid:900, age:80});
-  check("un visage âgé diffère d'un visage jeune", young !== old);
+  // Le cheveu foncé domine, comme dans la vie.
+  const s2b = freshGame();
+  s2b.founder.face = face0(1, {hairIx:0});
+  s2b.spouse.face  = face0(1, {hairIx:6});
+  let dark = 0;
+  for(let i = 0; i < 40; i++){
+    const kid = G.addChild("Brun"+i, {sex:i%2?"f":"m"});
+    if(kid.face.hairIx === 0) dark++;
+  }
+  check("le cheveu foncé l'emporte le plus souvent", dark > 20, dark + "/40");
+
+  // Une famille claire reste claire sur cinq générations.
+  const s3b = freshGame();
+  // Le teint de la maison est un état à part, arrêté à la fondation : c'est lui
+  // qui borne toute la descendance, pas le visage du chef en cours.
+  s3b.familySkin = 0;
+  s3b.founder.face = face0(0);
+  s3b.spouse.face  = face0(1);
+  let couple = [s3b.founder, s3b.spouse];
+  const tones = [];
+  for(let gen = 0; gen < 5; gen++){
+    // L'héritier de la génération, et le conjoint qui entre au foyer.
+    const heir = {name:"G"+gen, sex:"m", cid:700+gen, age:30};
+    G.faceOf(heir, couple);
+    tones.push(heir.face.skinIx);
+    ST().founder = heir;
+    const married = {name:"C"+gen, sex:"f", cid:800+gen, age:28};
+    G.faceOfSpouse(married);
+    tones.push(married.face.skinIx);
+    couple = [heir, married];
+  }
+  check("une famille claire le reste sur cinq générations",
+    tones.every(t => t <= 1), tones.join(","));
+
+  // Et une famille foncée aussi.
+  const s3c = freshGame();
+  s3c.familySkin = 5;
+  s3c.founder.face = face0(5);
+  s3c.spouse.face  = face0(4);
+  let couple2 = [s3c.founder, s3c.spouse];
+  const tones2 = [];
+  for(let gen = 0; gen < 5; gen++){
+    const heir = {name:"H"+gen, sex:"f", cid:750+gen, age:30};
+    G.faceOf(heir, couple2);
+    tones2.push(heir.face.skinIx);
+    ST().founder = heir;
+    const married = {name:"D"+gen, sex:"m", cid:850+gen, age:28};
+    G.faceOfSpouse(married);
+    tones2.push(married.face.skinIx);
+    couple2 = [heir, married];
+  }
+  check("une famille foncée le reste aussi", tones2.every(t => t >= 4), tones2.join(","));
+
+  // Un cow-boy n'est pas de la famille : son teint est libre.
+  const s3d = freshGame();
+  s3d.familySkin = 0;
+  s3d.founder.face = face0(0);
+  const hands = new Set();
+  for(let i = 0; i < 30; i++){
+    const c = {name:"Hand"+i, sex:"m", cid:950+i, age:30};
+    G.faceOf(c);
+    hands.add(c.face.skinIx);
+  }
+  check("les cow-boys ne prennent pas le teint de la maison", hands.size >= 4, [...hands].join(","));
+
+  // Le choix de l'écran de création s'applique au couple fondateur.
+  $el("founderSkin").value = "0";
+  const s3e = freshGame();
+  check("le teint choisi s'applique au fondateur", ST().founder.face.skinIx === 0, ST().founder.face.skinIx);
+  check("et le conjoint s'en approche", Math.abs(ST().spouse.face.skinIx - 0) <= 1, ST().spouse.face.skinIx);
+  $el("founderSkin").value = "5";
+  const s3f = freshGame();
+  check("un autre teint est respecté", ST().founder.face.skinIx === 5, ST().founder.face.skinIx);
+  check("le conjoint suit", ST().spouse.face.skinIx >= 4, ST().spouse.face.skinIx);
+  $el("founderSkin").value = "";
+
+  // L'âge change de série de photos : l'enfant devient adulte.
+  const kid   = G.portraitSVG({name:"Ada", sex:"f", cid:900, age:9});
+  const grown = G.portraitSVG({name:"Ada", sex:"f", cid:900, age:34});
+  check("un enfant et un adulte n'ont pas le même portrait", kid !== grown);
+  // Le dessin de secours, lui, vieillit trait par trait.
+  const dYoung = G.portraitSVG({name:"Ada", sex:"f", cid:900, age:25}, {drawn:true});
+  const dOld   = G.portraitSVG({name:"Ada", sex:"f", cid:900, age:80}, {drawn:true});
+  check("le dessin de secours vieillit", dYoung !== dOld);
   check("les cheveux blanchissent avec l'âge",
     G.greyed("#2b1d14", 25) === "#2b1d14" && G.greyed("#2b1d14", 85) !== "#2b1d14",
     G.greyed("#2b1d14", 85));
 
   // Le portrait est un SVG autonome, sans requête extérieure.
   check("le portrait est un SVG", svg1.indexOf("<svg") === 0);
+  check("il embarque une photo", svg1.indexOf("<image href=\"data:image/jpeg") >= 0);
   check("il est bien fermé", svg1.trim().slice(-6) === "</svg>");
   check("il n'appelle aucune ressource externe", !/https?:\/\/[^"]*\.(png|jpg|svg)/.test(svg1));
   check("il porte un texte alternatif", /aria-label=/.test(svg1));
-  check("les couleurs ont un repli hors CSS",
-    /var\(--surface-2, #/.test(svg1) && /var\(--line, #/.test(svg1));
+  const drawn = G.portraitSVG(ST().founder, {drawn:true});
+  check("le dessin de secours garde un repli de couleurs hors CSS",
+    /var\(--surface-2, #/.test(drawn) && /var\(--line, #/.test(drawn));
 
   // Un mort se voit.
   const gone = G.portraitSVG({name:"Feu", sex:"m", cid:901, age:70, alive:false});
@@ -2009,6 +2097,46 @@ section("Les visages de la dynastie");
     ($el("familyContent").innerHTML.match(/portrait-svg/g)||[]).length);
   G.renderCowboys();
   check("le panneau équipe aussi", /portrait-svg/.test($el("cowboyContent").innerHTML));
+
+  // ---- Le catalogue photographique ----
+  check("le catalogue est chargé", typeof ev("typeof PHOTOS") === "string" && ev("typeof PHOTOS") === "object");
+  const bands = ev("Object.keys(PHOTOS)").sort();
+  check("il couvre les cinq bandes d'époque", bands.join(",") === "0,1,2,3,4", bands.join(","));
+  check("chaque bande a ses deux sexes",
+    bands.every(b => ev(`PHOTOS["${b}"].m`) && ev(`PHOTOS["${b}"].f`)));
+  check("chaque case a au moins une photo",
+    bands.every(b => ["m","f"].every(x => ["a","c","o"].every(g =>
+      (ev(`PHOTOS["${b}"]["${x}"]["${g}"]||[]`)||[]).length > 0))));
+  check("toutes les photos sont encodées dans la page",
+    bands.every(b => ["m","f"].every(x => ["a","c","o"].every(g =>
+      (ev(`PHOTOS["${b}"]["${x}"]["${g}"]||[]`)||[]).every(u => u.indexOf("data:image/") === 0)))));
+
+  // Chaque époque du jeu tombe dans une bande.
+  check("chaque époque a sa bande de portraits",
+    ev("ERAS").every(e => ev(`PHOTO_BAND["${e.id}"]`) !== undefined),
+    ev("ERAS").filter(e => ev(`PHOTO_BAND["${e.id}"]`) === undefined).map(e=>e.id).join(","));
+
+  // L'allure est arrêtée une fois pour toutes : elle ne change pas d'époque.
+  const s5b = freshGame();
+  const guy = {name:"Cole", sex:"m", cid:1200, age:34};
+  const p1 = G.portraitSVG(guy, {eraId:"foundation"});
+  check("la bande d'époque est mémorisée", guy.photoEra === 0, guy.photoEra);
+  const p2 = G.portraitSVG(guy, {eraId:"modern"});
+  check("un personnage garde son allure quand l'époque change", p1 === p2);
+
+  // Deux personnes différentes n'ont pas la même photo.
+  const pics = new Set();
+  for(let i = 0; i < 30; i++){
+    pics.add(G.photoFor({name:"X"+i, sex:"m", cid:1300+i, age:35}, "foundation"));
+  }
+  check("trente personnes tirent des photos variées", pics.size >= 12, pics.size + "/30");
+
+  // Les femmes ne reçoivent pas de portraits d'hommes.
+  const she = G.photoFor({name:"Ada", sex:"f", cid:1400, age:30}, "industrial");
+  const he  = G.photoFor({name:"Ada", sex:"m", cid:1400, age:30}, "industrial");
+  check("le sexe change la série", she !== he);
+  check("la photo d'une femme vient bien du fonds féminin",
+    (ev('PHOTOS["2"]["f"]["a"]')||[]).indexOf(she) >= 0);
 
   // L'arbre généalogique.
   const s4 = freshGame();
@@ -2067,12 +2195,17 @@ section("Les visages de la dynastie");
   const poster = G.sagaPosterSVG();
   check("l'affiche montre la lignée en médaillons",
     (poster.match(/portrait-svg/g)||[]).length >= 2, (poster.match(/portrait-svg/g)||[]).length);
-  check("les médaillons de l'affiche ont des couleurs en dur",
-    poster.indexOf("#2a2016") >= 0);
+  check("les médaillons de l'affiche embarquent la photo",
+    poster.indexOf("<image href=\"data:image/jpeg") >= 0);
   check("l'affiche reste bien formée", poster.trim().slice(-6) === "</svg>");
 
   // Migration : une partie d'avant les visages en reçoit.
   const s6 = freshGame();
+  // Un visage d'avant l'échelle ordonnée, en couleurs codées en dur.
+  ST().founder.face = {skin:"#f2d3b4", hair:"#2b1d14", eye:"#4a3323", jaw:0};
+  G.ensureProgress();
+  check("un visage d'ancien format est régénéré",
+    typeof ST().founder.face.skinIx === "number", JSON.stringify(ST().founder.face));
   delete ST().founder.face; delete ST().spouse.face;
   (ST().children||[]).forEach(c => delete c.face);
   (ST().cowboys||[]).forEach(c => delete c.face);
