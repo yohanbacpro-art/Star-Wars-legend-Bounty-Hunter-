@@ -565,6 +565,38 @@
   }
   .saga-title{font-weight:700;line-height:1.3}
   .saga-detail{font-size:.86rem;color:var(--muted);line-height:1.4}
+  /* ---- Les visages : chaque personne du jeu en a un ---- */
+  .portrait{
+    display:inline-block;vertical-align:middle;
+    width:52px;height:52px;flex:0 0 auto;
+  }
+  .portrait.small{width:38px;height:38px}
+  .portrait.large{width:88px;height:88px}
+  .portrait-svg{width:100%;height:100%;display:block}
+  .portrait.gone{opacity:.55;filter:grayscale(.6)}
+  .who{display:flex;gap:10px;align-items:flex-start}
+  .who > div{min-width:0}
+
+  /* L'arbre généalogique : une colonne de générations reliées entre elles. */
+  .tree{display:grid;gap:0;margin:6px 0 2px}
+  .tree-gen{
+    display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;
+    padding:10px 12px;border:1px solid var(--line);background:var(--card-bg);
+  }
+  .tree-link{
+    width:2px;height:16px;background:var(--line);
+    margin:0 auto;
+  }
+  .tree-role{font-size:.78rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
+  .tree-name{font-weight:700;line-height:1.25}
+  .tree-dates{font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums}
+  .tree-now{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold)}
+  .kin{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 4px}
+  .kin figure{margin:0;width:64px;text-align:center}
+  .kin figcaption{font-size:.72rem;line-height:1.25;margin-top:3px;word-break:break-word}
+  .epilogue-facts{margin:6px 0 0;padding-left:20px;line-height:1.6}
+  .epilogue-facts li{margin-bottom:3px}
+
   /* ---- L'escouade : on choisit qui part, et on le voit ---- */
   /* ---- Les alertes : une chute doit se voir venir des années à l'avance ---- */
   .alarms{display:grid;gap:8px;margin-bottom:14px}
@@ -1150,6 +1182,7 @@ function addChild(name, extra){
     ambition: 0,
     resentment: 0
   }, extra || {});
+  faceOf(child, [state.founder, state.spouse]);
   state.children.push(child);
   return child;
 }
@@ -2735,6 +2768,31 @@ function wrapLine(text, max){
 
 const POSTER_KINDS = ["founding","doctrine","succession","secret","era","rival"];
 
+// La lignée en médaillons : c'est ce qui fait qu'on garde l'affiche.
+function lineageMedallions(W){
+  const line = (state.lineage || []).slice(-6);
+  if(!line.length) return "";
+  const r = 30, gap = 14;
+  const total = line.length * (r*2) + (line.length-1) * gap;
+  let x = (W - total) / 2 + r;
+  let out = "";
+  line.forEach((l,i) => {
+    const era = getEra(l.startYear);
+    const current = i === line.length - 1 && !l.endYear;
+    const who = current && state.founder ? state.founder
+      : {name:l.name, sex:guessSex(l.name),
+         age:Math.max(30, (l.endYear||l.startYear) - l.startYear + 30),
+         alive:false, cid:"med"+i};
+    // Les portraits de l'affiche portent leurs couleurs en dur : le fichier
+    // exporté n'a aucune feuille de style derrière lui.
+    out += portraitSVG(who, {eraId:era.id, bg:"#2a2016", ring:"#8a6a3c",
+      x:x-r, y:196, size:r*2});
+    out += `<text x="${x}" y="${196 + r*2 + 14}" class="med">${xmlEsc(l.name)}</text>`;
+    x += r*2 + gap;
+  });
+  return out;
+}
+
 function sagaPosterSVG(){
   const saga = state.saga || [];
   // On garde les moments qui font l'ossature du récit, puis on complète.
@@ -2746,7 +2804,7 @@ function sagaPosterSVG(){
 
   const W = 760;
   const rows = [];
-  let y = 232;
+  let y = 232 + 84;
   let currentEra = null;
   picked.forEach(m => {
     if(m.eraId !== currentEra){
@@ -2779,6 +2837,7 @@ function sagaPosterSVG(){
       .date{font-size:14px;fill:#a08a63}
       .moment{font-size:16px}
       .foot{font-size:14px;fill:#a08a63;text-anchor:middle}
+      .med{font-size:12px;fill:#c8a86a;text-anchor:middle}
       .rule{stroke:#5a4526;stroke-width:1}
     </style>`
     + `<rect width="${W}" height="${H}" fill="#1b140c"/>`
@@ -2787,6 +2846,7 @@ function sagaPosterSVG(){
     + `<text x="${W/2}" y="118" class="sub">${xmlEsc(state.ranchName)}</text>`
     + `<text x="${W/2}" y="148" class="sub">${(state.lineage&&state.lineage[0]?state.lineage[0].startYear:1885)} — ${state.year}</text>`
     + `<line x1="${W/2-120}" y1="176" x2="${W/2+120}" y2="176" class="rule"/>`
+    + lineageMedallions(W)
     + rows.join("")
     + `<text x="${W/2}" y="${H-34}" class="foot">${xmlEsc(footer)}</text>`
     + `</svg>`;
@@ -3350,6 +3410,7 @@ const COWBOY_FAREWELLS = [
 ];
 
 function decorateCowboy(c){
+ faceOf(c);
   if(!c.from){
     const o = COWBOY_ORIGINS[rand(0,COWBOY_ORIGINS.length-1)];
     c.from = o.from;
@@ -4645,6 +4706,7 @@ function ensureProgress(){
   if(state.politics.office && !OFFICES[state.politics.office]) state.politics.office = null;
   if(!state.institutions) state.institutions = {};
   ensureTown();
+  ensureFaces();
   if(typeof state.town.size !== "number") state.town.size = 0;
   ensureParcels();
   (state.parcels||[]).forEach(p => { if(typeof p.since !== "number") p.since = 1885; });
@@ -7668,6 +7730,237 @@ const events = [
 // générations ont pris finit par arriver avec un avocat.
 // ============================================================================
 
+// ============================================================================
+// LES VISAGES DE LA DYNASTIE
+// ----------------------------------------------------------------------------
+// On passe 141 ans avec Yohan, Élise, Alice, Jake Morgan — et jusqu'ici ce
+// n'étaient que des prénoms dans des listes. C'est le dernier endroit où le jeu
+// restait un tableur alors qu'il raconte une saga de famille.
+//
+// Chaque personne porte désormais un visage, dessiné en SVG dans la page :
+// aucune ressource extérieure, et un rendu stable — les traits sont tirés une
+// fois puis rangés dans `p.face`, donc sauvegardés avec la partie. Un enfant
+// hérite de ses deux parents, un visage vieillit avec son propriétaire, et le
+// couvre-chef suit l'époque.
+// ============================================================================
+const SKIN   = ["#f2d3b4","#e8c39e","#d7a97f","#c08b5f","#9a6742","#6f4a2f"];
+const HAIRC  = ["#2b1d14","#4a3323","#6b4a2c","#8c6239","#b4894f","#d9c08a","#7a2f1c","#3a3a3a"];
+const EYEC   = ["#4a3323","#6b4a2c","#3f5a52","#3d5a7a","#5a5a4a"];
+const CLOTH  = {
+  foundation:["#6d5236","#7a4a35","#4f5a45","#5a4a3a"],
+  prohibition:["#3f3f4a","#4a3a3a","#2f3a45","#4a4a3a"],
+  depression:["#5a5040","#4a4438","#57503f","#3f4438"],
+  industrial:["#3f5a6b","#5a4a3a","#46564a","#6b5a3f"],
+  corporate:["#3a4a5a","#5a3f3f","#404a40","#55503a"],
+  globalization:["#37485a","#4a4a52","#3f5248","#5a4a45"],
+  modern:["#2f3a45","#44454a","#3a4a45","#4a4038"]
+};
+// Le couvre-chef dit l'époque au premier coup d'œil.
+const HATS = {
+  foundation:["stetson","stetson","bonnet","none"],
+  prohibition:["fedora","stetson","bonnet","none"],
+  depression:["flatcap","stetson","kerchief","none"],
+  industrial:["stetson","flatcap","none","none"],
+  corporate:["stetson","cap","none","none"],
+  globalization:["cap","stetson","none","none"],
+  modern:["cap","stetson","none","none"]
+};
+
+function hashStr(s){
+  let h = 2166136261;
+  for(let i = 0; i < String(s).length; i++){
+    h ^= String(s).charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+// Générateur déterministe : le même être humain a toujours le même visage.
+function seededPick(seed, salt, list){
+  return list[hashStr(seed + "|" + salt) % list.length];
+}
+function seededInt(seed, salt, min, max){
+  return min + (hashStr(seed + "|" + salt) % (max - min + 1));
+}
+
+// Les traits sont tirés une fois, puis rangés sur la personne : ils survivent
+// à la sauvegarde, et un enfant peut hériter des tirages de ses parents.
+function faceOf(p, parents){
+  if(!p) return null;
+  if(p.face) return p.face;
+  const seed = "f" + (p.cid !== undefined ? p.cid : hashStr(p.name || "?"))
+             + ":" + (p.name || "") + ":" + (p.sex || "m");
+  const a = parents && parents[0] && parents[0].face;
+  const b = parents && parents[1] && parents[1].face;
+  const inherit = (key, own) => {
+    if(a && b) return (hashStr(seed + key) % 2) ? a[key] : b[key];
+    if(a) return (hashStr(seed + key) % 3) ? a[key] : own;
+    return own;
+  };
+  p.face = {
+    skin:  inherit("skin",  seededPick(seed, "sk", SKIN)),
+    hair:  inherit("hair",  seededPick(seed, "hr", HAIRC)),
+    eye:   inherit("eye",   seededPick(seed, "ey", EYEC)),
+    jaw:   seededInt(seed, "jw", 0, 2),
+    nose:  seededInt(seed, "ns", 0, 2),
+    mouth: seededInt(seed, "mo", 0, 2),
+    brow:  seededInt(seed, "bw", 0, 2),
+    style: seededInt(seed, "st", 0, 3),
+    beard: seededInt(seed, "bd", 0, 3),
+    ears:  seededInt(seed, "er", 0, 1)
+  };
+  return p.face;
+}
+
+// Le visage vieillit : les cheveux blanchissent, les traits se creusent.
+function greyed(colour, age){
+  if(age < 40) return colour;
+  const t = Math.min(1, (age - 40) / 45);
+  const hex = (c)=>parseInt(c,16);
+  const r = hex(colour.slice(1,3)), g = hex(colour.slice(3,5)), b = hex(colour.slice(5,7));
+  const mix = (v)=>Math.round(v + (198 - v) * t);
+  const to = (v)=>("0"+mix(v).toString(16)).slice(-2);
+  return "#" + to(r) + to(g) + to(b);
+}
+
+function portraitSVG(p, opts){
+  const o = opts || {};
+  if(!p) return "";
+  const f = faceOf(p, o.parents);
+  const age = typeof p.age === "number" ? p.age : 30;
+  const child = age < 14;
+  const old = age >= 62;
+  const eraId = o.eraId || (state && state.eraId) || "foundation";
+  const cloth = seededPick((p.name||"") + eraId, "cl", CLOTH[eraId] || CLOTH.foundation);
+  const hair = greyed(f.hair, age);
+  const dead = p.alive === false || o.dead;
+
+  // Proportions : une tête d'enfant est plus ronde et plus grosse.
+  const headW = child ? 31 : 26 + f.jaw * 1.5;
+  const headH = child ? 30 : 34 + f.jaw;
+  const cy = child ? 42 : 38;
+
+  const hatKind = child ? "none"
+    : (o.hat === false ? "none" : seededPick((p.name||"") + eraId, "ht", HATS[eraId] || HATS.foundation));
+  const bearded = p.sex !== "f" && !child && f.beard > 0;
+
+  let g = "";
+  // Col et épaules
+  g += `<path d="M14 100 q16 -22 36 -22 q20 0 36 22 z" fill="${cloth}"/>`;
+  g += `<path d="M38 84 l12 14 l12 -14 l6 4 l-18 20 l-18 -20 z" fill="${dead ? "#9a9a9a" : "#f4ead6"}" opacity=".9"/>`;
+  // Cou
+  g += `<rect x="44" y="66" width="12" height="14" rx="4" fill="${f.skin}"/>`;
+  // Oreilles
+  g += `<ellipse cx="${50-headW+2}" cy="${cy+4}" rx="${3+f.ears}" ry="5" fill="${f.skin}"/>`;
+  g += `<ellipse cx="${50+headW-2}" cy="${cy+4}" rx="${3+f.ears}" ry="5" fill="${f.skin}"/>`;
+  // Tête
+  g += `<ellipse cx="50" cy="${cy}" rx="${headW}" ry="${headH}" fill="${f.skin}"/>`;
+  // Cheveux
+  if(f.style === 0){
+    g += `<path d="M${50-headW} ${cy-4} q0 -${headH} ${headW} -${headH} q${headW} 0 ${headW} ${headH} q-6 -12 -${headW} -12 q-${headW} 0 -${headW} 12 z" fill="${hair}"/>`;
+  } else if(f.style === 1){
+    g += `<path d="M${50-headW} ${cy+6} q-2 -${headH+6} ${headW} -${headH-2} q${headW+2} 0 ${headW} ${headH+4} q-4 -16 -8 -18 q-14 8 -${headW+8} 2 q-6 6 -6 14 z" fill="${hair}"/>`;
+  } else if(f.style === 2 && !old){
+    g += `<path d="M${50-headW} ${cy-2} q0 -${headH} ${headW} -${headH} q${headW} 0 ${headW} ${headH} q-4 -14 -${headW} -14 q-${headW} 0 -${headW} 14 z" fill="${hair}"/>`;
+    g += `<ellipse cx="50" cy="${cy-headH+6}" rx="9" ry="7" fill="${hair}"/>`;
+  } else {
+    g += `<path d="M${50-headW+3} ${cy-10} q4 -${headH-4} ${headW-3} -${headH+2} q${headW-3} 2 ${headW-3} ${headH-2} q-8 -16 -${headW-3} -16 q-${headW-6} 0 -${headW-3} 18 z" fill="${hair}" opacity="${old?".75":"1"}"/>`;
+  }
+  // Sourcils
+  const browY = cy - 8 - f.brow;
+  g += `<rect x="${50-14}" y="${browY}" width="10" height="${2+(f.brow>1?1:0)}" rx="1" fill="${hair}"/>`;
+  g += `<rect x="${50+4}" y="${browY}" width="10" height="${2+(f.brow>1?1:0)}" rx="1" fill="${hair}"/>`;
+  // Yeux
+  const eyeY = cy - 2;
+  if(dead){
+    g += `<path d="M${50-13} ${eyeY} l8 0 M${50+5} ${eyeY} l8 0" stroke="#5a5a5a" stroke-width="2"/>`;
+  } else {
+    const er = child ? 5 : 4.2, eh = child ? 4 : (old ? 2.4 : 3.2), ir = child ? 2.5 : 2;
+    g += `<ellipse cx="${50-9}" cy="${eyeY}" rx="${er}" ry="${eh}" fill="#fff"/>`;
+    g += `<ellipse cx="${50+9}" cy="${eyeY}" rx="${er}" ry="${eh}" fill="#fff"/>`;
+    g += `<circle cx="${50-9}" cy="${eyeY}" r="${ir}" fill="${f.eye}"/>`;
+    g += `<circle cx="${50+9}" cy="${eyeY}" r="${ir}" fill="${f.eye}"/>`;
+  }
+  // Nez
+  const noseY = cy + 6;
+  g += `<path d="M50 ${noseY-5} q${f.nose===0?-3:(f.nose===1?-4:-2)} ${5+f.nose} 1 ${6+f.nose}" fill="none" stroke="rgba(0,0,0,.28)" stroke-width="1.6" stroke-linecap="round"/>`;
+  // Bouche
+  const mouthY = cy + 15;
+  if(f.mouth === 0) g += `<path d="M${50-7} ${mouthY} q7 4 14 0" fill="none" stroke="rgba(90,40,30,.75)" stroke-width="1.8" stroke-linecap="round"/>`;
+  else if(f.mouth === 1) g += `<path d="M${50-6} ${mouthY} l12 0" fill="none" stroke="rgba(90,40,30,.75)" stroke-width="1.8" stroke-linecap="round"/>`;
+  else g += `<path d="M${50-7} ${mouthY+1} q7 -4 14 0" fill="none" stroke="rgba(90,40,30,.75)" stroke-width="1.8" stroke-linecap="round"/>`;
+  // Pilosité
+  if(bearded){
+    if(f.beard === 1){
+      g += `<path d="M${50-8} ${mouthY-4} q8 -3 16 0 q-3 4 -8 4 q-5 0 -8 -4 z" fill="${hair}"/>`;
+    } else if(f.beard === 2){
+      g += `<path d="M${50-headW+5} ${cy+4} q0 ${headH-4} ${headW-5} ${headH-6} q${headW-5} 2 ${headW-5} -${headH-6} q-6 16 -${headW-5} 16 q-${headW-5} 0 -${headW-5} -16 z" fill="${hair}" opacity=".92"/>`;
+    } else {
+      g += `<path d="M${50-headW+4} ${cy-2} q-1 16 4 20 l0 -20 z" fill="${hair}"/>`;
+      g += `<path d="M${50+headW-4} ${cy-2} q1 16 -4 20 l0 -20 z" fill="${hair}"/>`;
+    }
+  }
+  // Rides
+  if(old){
+    g += `<path d="M${50-16} ${cy+2} q4 3 7 0 M${50+9} ${cy+2} q4 3 7 0" fill="none" stroke="rgba(0,0,0,.18)" stroke-width="1.2"/>`;
+    g += `<path d="M${50-10} ${cy+20} q10 4 20 0" fill="none" stroke="rgba(0,0,0,.14)" stroke-width="1.2"/>`;
+  }
+  // Couvre-chef
+  if(hatKind === "stetson"){
+    const brimY = cy - headH + 15, half = headW + 13;
+    g += `<path d="M${50-half} ${brimY} q${half} 11 ${half*2} 0 q-4 -8 -10 -7 q-${half-14} 6 -${(half-14)*2} 0 q-6 -1 -10 7 z" fill="#5e452b"/>`;
+    g += `<path d="M${50-16} ${brimY+1} q0 -24 16 -24 q16 0 16 24 q-16 6 -32 0 z" fill="#7d5c39"/>`;
+    g += `<path d="M${50-6} ${brimY-23} q6 6 12 0 l0 8 q-6 5 -12 0 z" fill="#6b4f31"/>`;
+    g += `<rect x="${50-16}" y="${brimY-6}" width="32" height="5" rx="1" fill="#3d2b18"/>`;
+  } else if(hatKind === "fedora"){
+    g += `<path d="M${50-headW-7} ${cy-headH+13} q${headW+7} 7 ${(headW+7)*2} 0 q-${headW+7} 6 -${(headW+7)*2} 0 z" fill="#3a3a42"/>`;
+    g += `<path d="M${50-14} ${cy-headH+14} q1 -16 14 -16 q13 0 14 16 q-14 4 -28 0 z" fill="#4a4a54"/>`;
+    g += `<rect x="${50-14}" y="${cy-headH+9}" width="28" height="4" fill="#23232a"/>`;
+  } else if(hatKind === "flatcap"){
+    g += `<path d="M${50-headW-4} ${cy-headH+14} q6 -14 ${headW+4} -14 q${headW+4} 0 ${headW+4} 14 z" fill="#5a5348"/>`;
+    g += `<path d="M${50-headW-8} ${cy-headH+14} q10 4 18 3 l-2 3 q-12 1 -16 -6 z" fill="#4a4439"/>`;
+  } else if(hatKind === "cap"){
+    g += `<path d="M${50-headW-2} ${cy-headH+13} q4 -15 ${headW+2} -15 q${headW+2} 0 ${headW+2} 15 z" fill="#3f5a6b"/>`;
+    g += `<path d="M${50-headW-11} ${cy-headH+13} q12 6 22 5 l0 3 q-14 1 -22 -8 z" fill="#31485a"/>`;
+  } else if(hatKind === "bonnet"){
+    g += `<path d="M${50-headW-3} ${cy-6} q0 -${headH+8} ${headW+3} -${headH+6} q${headW+3} -2 ${headW+3} ${headH+6} q-8 -10 -${headW+3} -10 q-${headW+3} 0 -${headW+3} 10 z" fill="#e8dcc4" opacity=".95"/>`;
+  } else if(hatKind === "kerchief"){
+    g += `<path d="M${50-headW-2} ${cy-8} q0 -${headH+4} ${headW+2} -${headH+2} q${headW+2} -2 ${headW+2} ${headH+2} q-10 -8 -${headW+2} -8 q-${headW+2} 0 -${headW+2} 8 z" fill="#8a5a4a"/>`;
+  }
+
+  const ring = o.ring || "var(--line, #745636)";
+  const bg = o.bg || "var(--surface-2, #f2e4c4)";
+  // Identifiant déterministe : le même portrait doit se rendre à l'identique
+  // d'un appel à l'autre. Deux personnes qui collident partagent un clipPath
+  // qui est de toute façon le même cercle — sans conséquence.
+  const id = "pc" + hashStr((p.name||"") + ":" + (p.cid!==undefined?p.cid:"") + ":" + age);
+  // Imbriqué dans une autre image (l'affiche), il faut une géométrie explicite :
+  // un <svg> sans dimensions occupe tout le cadre parent.
+  const geom = (o.size !== undefined)
+    ? ` x="${o.x||0}" y="${o.y||0}" width="${o.size}" height="${o.size}"` : "";
+  return `<svg class="portrait-svg"${geom} viewBox="0 0 100 100" role="img" aria-label="Portrait de ${(p.name||"").replace(/"/g,"")}">`
+    + `<defs><clipPath id="${id}"><circle cx="50" cy="50" r="48"/></clipPath></defs>`
+    + `<circle cx="50" cy="50" r="48" style="fill:${bg}"/>`
+    + `<g clip-path="url(#${id})">${g}</g>`
+    + `<circle cx="50" cy="50" r="47" fill="none" style="stroke:${ring}" stroke-width="2"/>`
+    + (dead ? `<circle cx="50" cy="50" r="48" fill="rgba(40,40,40,.35)"/>` : "")
+    + `</svg>`;
+}
+
+// Un portrait avec son cadre et son nom, tel qu'il apparaît dans les panneaux.
+function portraitTag(p, opts){
+  const o = opts || {};
+  return `<span class="portrait ${o.size||""} ${p && p.alive===false ? "gone":""}">${portraitSVG(p,o)}</span>`;
+}
+
+// Tout le monde a un visage, y compris les parties d'avant.
+function ensureFaces(){
+  if(!state) return;
+  faceOf(state.founder);
+  faceOf(state.spouse);
+  (state.children||[]).forEach(c => faceOf(c, [state.founder, state.spouse]));
+  (state.cowboys||[]).forEach(c => faceOf(c));
+}
+
 // ---- La ville qui pousse à côté ----
 // En 1885 c'est trois baraques autour d'un abreuvoir. En 2026 c'est ce qui
 // finira par vouloir vos terres. Elle grandit toute seule, plus vite si le
@@ -9793,6 +10086,94 @@ function showDynastyEnding(){
   showGameOver(verdict, verdictText + bilan);
 }
 
+// L'épilogue : la page qu'on garde après 141 ans. Les visages de la lignée,
+// le verdict, ce que la famille a bâti et ce qu'elle a laissé derrière elle.
+function epilogueHTML(){
+  ensureFaces();
+  const l = state.legacy || {honor:0, greed:0, grudges:[]};
+  const line = state.lineage || [];
+  const verdict = l.honor > l.greed + 1 ? "La dynastie respectée"
+    : (l.greed > l.honor + 1 ? "L'empire bâti à tout prix" : "La dynastie tenace");
+  const first = line[0] ? line[0].startYear : 1885;
+
+  let h = `<p class="modal-intro">${verdict} — famille ${state.familyName}, `
+    + `${first}–${state.year}, ${line.length} génération${line.length>1?"s":""}.</p>`;
+
+  h += "<h3 class=\"section-head\">Ceux qui ont tenu le ranch</h3><div class=\"kin\">";
+  line.forEach((g,i) => {
+    const era = getEra(g.startYear);
+    const current = i === line.length - 1 && !g.endYear && state.founder;
+    const who = current ? state.founder
+      : {name:g.name, sex:guessSex(g.name),
+         age:Math.max(30,(g.endYear||g.startYear)-g.startYear+30), alive:false, cid:"ep"+i};
+    h += `<figure>${portraitTag(who,{eraId:era.id})}`
+      + `<figcaption>${g.name}<br><span class="tree-dates">${g.startYear}–${g.endYear||"…"}</span></figcaption></figure>`;
+  });
+  h += "</div>";
+
+  const kin = (state.children||[]).filter(c=>c.alive!==false);
+  if(kin.length || (state.spouse && state.spouse.alive)){
+    h += "<h3 class=\"section-head\">La maison au dernier jour</h3><div class=\"kin\">";
+    if(state.spouse && state.spouse.alive){
+      h += `<figure>${portraitTag(state.spouse,{size:"small"})}<figcaption>${state.spouse.name}</figcaption></figure>`;
+    }
+    kin.forEach(c => {
+      h += `<figure>${portraitTag(c,{size:"small"})}`
+        + `<figcaption>${c.name}<br><span class="tree-dates">${c.age} ans</span></figcaption></figure>`;
+    });
+    h += "</div>";
+  }
+
+  h += "<h3 class=\"section-head\">Ce qu'il reste</h3><ul class=\"epilogue-facts\">";
+  const facts = [
+    `${state.land} hectares, ${state.cattle} têtes, ${state.horses} chevaux`,
+    `${moneyFmt.format(Math.round(state.money))} $ en caisse`,
+    `Réputation ${Math.round(state.reputation)}/100 · unité ${Math.round(state.unity)}/100 · soupçons ${Math.round(state.suspicion)}/100`,
+    `${(state.achievements||[]).length}/${ACHIEVEMENTS.length} objectifs accomplis`,
+    `${(state.saga||[]).length} moments retenus par la chronique`
+  ];
+  const offices = (state.politics && state.politics.held) || [];
+  if(offices.length){
+    facts.push("Charges exercées : " + offices.map(id => OFFICES[id] ? OFFICES[id].short : id).join(", "));
+  }
+  if(state.institutions && state.institutions.cattleCommission){
+    facts.push("La commission du bétail du comté, fondée par la famille");
+  }
+  if(state.protectedLand > 0){
+    facts.push(`${state.protectedLand} hectares classés, qui ne seront jamais bâtis`);
+  }
+  if(state.town) facts.push(`${state.town.name} est devenue ${townStage().label}`);
+  facts.push(`Héritage moral : ${l.honor} acte(s) d'honneur, ${l.greed} de cupidité`);
+  if((l.grudges||[]).length){
+    facts.push("Rancunes léguées : " + l.grudges.map(g=>g.name).join(", "));
+  }
+  facts.forEach(f => { h += `<li>${f}</li>`; });
+  h += "</ul>";
+
+  const marks = (state.saga||[]).filter(m => ["founding","succession","secret","office","claim","developer"].includes(m.kind));
+  if(marks.length){
+    h += "<h3 class=\"section-head\">Les tournants</h3><ol class=\"saga\">";
+    marks.slice(-10).forEach(m => {
+      const k = SAGA_KINDS[m.kind] || SAGA_KINDS.arc;
+      h += `<li class="saga-item"><div class="saga-art">${eventArtSVG(m.art)}</div>`
+        + `<div class="saga-body"><div class="saga-date">${k.icon} ${m.year}</div>`
+        + `<div class="saga-title">${m.title}</div>`
+        + (m.detail ? `<div class="saga-detail">${m.detail}</div>` : "")
+        + `</div></li>`;
+    });
+    h += "</ol>";
+  }
+  return h;
+}
+
+function openEpilogue(){
+  const box = $("epilogueContent");
+  if(!box) return;
+  box.innerHTML = epilogueHTML();
+  $("epilogueTitle").textContent = `La famille ${state.familyName}, ${(state.lineage&&state.lineage[0]?state.lineage[0].startYear:1885)}–${state.year}`;
+  $("epilogueModal").classList.remove("hidden");
+}
+
 function showGameOver(title,text){
   // Une dynastie qui tombe laisse une trace : la partie suivante pourra
   // relever le nom, avec son crédit ou son ardoise.
@@ -9802,6 +10183,13 @@ function showGameOver(title,text){
   $("eventText").style.whiteSpace = "pre-line";
   setEventArt({art:"family", image:"La chronique de la famille s’achève"});
   $("eventChoices").innerHTML = "";
+
+  // L'épilogue d'abord : c'est la page qu'on garde.
+  const epi = document.createElement("button");
+  epi.className = "choice";
+  epi.textContent = "🖼️ L'épilogue de la dynastie";
+  epi.onclick = () => openEpilogue();
+  $("eventChoices").appendChild(epi);
 
   // Relire la saga est la vraie conclusion : on l'offre avant de recommencer.
   const saga = document.createElement("button");
@@ -9980,16 +10368,20 @@ document.querySelectorAll(".action").forEach(btn =>
 <script>
 function renderFamily(){
  if(!state)return;
+ ensureFaces();
  let h="<h3>"+state.familyName+"</h3>";
- h+="<p><b>"+(state.founder.sex==="f"?"Cheffe":"Chef")+" de famille :</b> "+state.founder.name+" ("+state.founder.age+" ans)</p>";
+ h+="<div class=\"who\">"+portraitTag(state.founder)+"<div><p style=\"margin:0\"><b>"
+   +(state.founder.sex==="f"?"Cheffe":"Chef")+" de famille :</b> "+state.founder.name
+   +" ("+state.founder.age+" ans)</p></div></div>";
  if(state.spouse.alive){
-   h+="<p><b>"+(state.spouse.sex==="f"?"Épouse":"Époux")+" :</b> "+state.spouse.name+" ("+state.spouse.age+" ans)<br>";
+   h+="<div class=\"who\">"+portraitTag(state.spouse)+"<div>";
+   h+="<p style=\"margin:0\"><b>"+(state.spouse.sex==="f"?"Épouse":"Époux")+" :</b> "+state.spouse.name+" ("+state.spouse.age+" ans)<br>";
    h+="Affectation : <select id=\"spouseRole\" onchange=\"setSpouseRole()\">";
    Object.keys(CHILD_ROLES).forEach(k=>{
      const sel = (state.spouse.role||"none")===k ? " selected" : "";
      h+="<option value=\""+k+"\""+sel+">"+CHILD_ROLES[k].label+"</option>";
    });
-   h+="</select><br><small>"+CHILD_ROLES[state.spouse.role||"none"].desc+"</small></p>";
+   h+="</select><br><small>"+CHILD_ROLES[state.spouse.role||"none"].desc+"</small></p></div></div>";
  } else {
    h+="<p><b>Conjoint :</b> <i>décédé</i></p>";
  }
@@ -10015,7 +10407,7 @@ function renderFamily(){
      if(!c.trait)c.trait=["Travailleur","Ambitieux","Calme","Impulsif","Charismatique"][Math.floor(Math.random()*5)];
      if(!c.goal)c.goal=["Reprendre le ranch","Devenir riche","Partir en ville","Élever des chevaux"][Math.floor(Math.random()*4)];
    const isHeir = heir && heir.cid===c.cid;
-   h+="<li><b>"+c.name+"</b> "+(c.sex==="f"?"♀":"♂")+(isHeir?" 👑":"")+" - "+c.age+" ans"+(c.married?" ("+married(c)+" à "+c.spouseName+")":"")+(c.parentName?" — enfant de "+c.parentName:"")+"<br><input type=\"text\" id=\"childNameInput"+i+"\" value=\""+c.name.replace(/"/g,"&quot;")+"\" style=\"width:130px;\"> <button class=\"choice\" onclick=\"renameChild("+i+")\">Renommer</button><br>Trait : "+c.trait+"<br>Ambition personnelle : "+c.goal;
+   h+="<li><div class=\"who\">"+portraitTag(c,{size:"small"})+"<div><b>"+c.name+"</b> "+(c.sex==="f"?"♀":"♂")+(isHeir?" 👑":"")+" - "+c.age+" ans"+(c.married?" ("+married(c)+" à "+c.spouseName+")":"")+(c.parentName?" — enfant de "+c.parentName:"")+"<br><input type=\"text\" id=\"childNameInput"+i+"\" value=\""+c.name.replace(/"/g,"&quot;")+"\" style=\"width:130px;\"> <button class=\"choice\" onclick=\"renameChild("+i+")\">Renommer</button><br>Trait : "+c.trait+"<br>Ambition personnelle : "+c.goal;
      if(c.age>=18 && c.alive!==false){
        const res = c.resentment||0;
        const mood = res>=70?"prêt·e à tout":(res>=45?"amer·ère":(res>=20?"contrarié·e":"en paix"));
@@ -10034,7 +10426,7 @@ function renderFamily(){
      } else {
        h+="<br><small><i>Trop jeune pour être affecté à une tâche (16 ans requis)</i></small>";
      }
-   h+="</li>";
+   h+="</div></div></li>";
    });
    h+="</ul>";
  }
@@ -10115,6 +10507,16 @@ document.getElementById("familyBtn").addEventListener("click",()=>{renderFamily(
 <button class="choice" onclick="illegalModal.classList.add('hidden')">Renoncer pour cette fois</button>
 </div></div>
 
+<div id="epilogueModal" class="modal hidden"><div class="modal-card">
+<h2 id="epilogueTitle">L'épilogue</h2>
+<div id="epilogueContent"></div>
+<div class="saga-export">
+<button class="mini-btn" onclick="exportSagaImage()">🖼️ Exporter l'affiche</button>
+<button class="mini-btn" onclick="exportSaga()">📜 Exporter la chronique</button>
+</div>
+<button class="choice" onclick="epilogueModal.classList.add('hidden')">Fermer</button>
+</div></div>
+
 <div id="squadModal" class="modal hidden"><div class="modal-card">
 <h2 id="squadTitle">Qui part ?</h2>
 <p class="modal-intro" id="squadIntro"></p>
@@ -10155,8 +10557,8 @@ function renderCowboys(){
  state.cowboys.forEach((c,i)=>{
    const anc = c.years>=15?"Vétéran du ranch":(c.years>=5?"Confirmé":"Nouveau");
    const loyLabel = c.loyalty>70?"Dévoué":(c.loyalty>45?"Loyal":(c.loyalty>25?"Distant":"Sur le départ"));
-   h+="<li><b>"+c.name+"</b> — <i>"+c.trait+"</i><br><small>"+anc+" · "+c.years+" an"+(c.years>1?"s":"")+" de service · "+loyLabel+"</small>"
-     +"<br><small><i>"+(c.from||"")+" ; "+(c.quirk||"")+".</i></small><br><input type=\"text\" id=\"cowboyNameInput"+i+"\" value=\""+c.name.replace(/"/g,"&quot;")+"\" style=\"width:130px;\"> <button class=\"choice\" onclick=\"renameCowboy("+i+")\">Renommer</button> <button class=\"choice\" onclick=\"fireCowboy("+i+")\">Renvoyer</button><br>Tir:"+c.shoot+" Equitation:"+c.ride+" Loyauté:"+c.loyalty+" Salaire:"+c.salary+"$/trimestre</li>";
+   h+="<li><div class=\"who\">"+portraitTag(c,{size:"small"})+"<div><b>"+c.name+"</b> — <i>"+c.trait+"</i><br><small>"+anc+" · "+c.years+" an"+(c.years>1?"s":"")+" de service · "+loyLabel+"</small>"
+     +"<br><small><i>"+(c.from||"")+" ; "+(c.quirk||"")+".</i></small><br><input type=\"text\" id=\"cowboyNameInput"+i+"\" value=\""+c.name.replace(/"/g,"&quot;")+"\" style=\"width:130px;\"> <button class=\"choice\" onclick=\"renameCowboy("+i+")\">Renommer</button> <button class=\"choice\" onclick=\"fireCowboy("+i+")\">Renvoyer</button><br>Tir:"+c.shoot+" Equitation:"+c.ride+" Loyauté:"+c.loyalty+" Salaire:"+c.salary+"$/tour</div></div></li>";
  });
  h+="</ul>";
  const totalSalary = state.cowboys.reduce((s,c)=>s+c.salary,0);
@@ -10541,14 +10943,40 @@ function harmFaction(i){
  render();
 }
 function renderLineage(){
+ ensureFaces();
  const lineage = state.lineage || [];
- let h = "<ul>";
- lineage.forEach(l=>{
-   const end = l.endYear ? l.endYear : (state.founder.alive ? "aujourd'hui" : l.endYear);
+ // L'arbre : une génération par rang, reliées entre elles, avec le visage de
+ // celui ou celle qui tenait le ranch. Le dernier rang est le foyer actuel.
+ let h = "<div class=\"tree\">";
+ lineage.forEach((l,i)=>{
+   const end = l.endYear ? l.endYear : (state.founder.alive ? "aujourd'hui" : "…");
    const era = getEra(l.startYear);
-   h += "<li><b>"+l.name+"</b> "+state.familyName+" — "+l.role+"<br>"+l.startYear+" – "+(end||"...")+" ("+era.name.split(" (")[0]+")</li>";
+   const current = i === lineage.length - 1 && !l.endYear;
+   // Le chef en poste a son visage vivant ; les prédécesseurs, un portrait figé.
+   const who = current ? state.founder
+     : {name:l.name, sex:guessSex(l.name), age:Math.max(28, (l.endYear||l.startYear) - l.startYear + 30),
+        alive:false, cid:"anc"+i};
+   h += "<div class=\"tree-gen"+(current?" tree-now":"")+"\">"
+      + portraitTag(who, {eraId:era.id})
+      + "<div><div class=\"tree-role\">"+l.role+"</div>"
+      + "<div class=\"tree-name\">"+l.name+" "+state.familyName+"</div>"
+      + "<div class=\"tree-dates\">"+l.startYear+" – "+end+" · "+era.name.split(" (")[0]+"</div>"
+      + "</div></div>";
+   if(i < lineage.length - 1) h += "<div class=\"tree-link\"></div>";
  });
- h += "</ul>";
+ h += "</div>";
+ // Le foyer d'aujourd'hui, sous le dernier rang.
+ const household = [];
+ if(state.spouse && state.spouse.alive) household.push({p:state.spouse, note:married(state.spouse)});
+ (state.children||[]).filter(c=>c.alive!==false).forEach(c=>household.push({p:c, note:c.age+" ans"}));
+ if(household.length){
+   h += "<div class=\"tree-link\"></div><div class=\"kin\">";
+   household.forEach(k=>{
+     h += "<figure>"+portraitTag(k.p,{size:"small"})
+        + "<figcaption>"+k.p.name+"<br><span class=\"tree-dates\">"+k.note+"</span></figcaption></figure>";
+   });
+   h += "</div>";
+ }
  if(state.rival){
    const currentEra = ERAS.find(e=>e.id===state.eraId) || getEra(state.year);
    const leader = ensureRivalLeader();

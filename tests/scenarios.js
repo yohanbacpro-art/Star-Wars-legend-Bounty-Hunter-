@@ -1940,6 +1940,148 @@ section("La pègre et les fusillades");
   check("toutes ses issues s'appliquent sans erreur", threw === false, threw);
 }
 
+// ------------------------------------------------- Les visages
+section("Les visages de la dynastie");
+{
+  const s = freshGame();
+  check("le fondateur a un visage", !!G.faceOf(ST().founder));
+  check("le conjoint aussi", !!G.faceOf(ST().spouse));
+  const f = G.faceOf(ST().founder);
+  check("un visage porte tous ses traits",
+    ["skin","hair","eye","jaw","nose","mouth","brow","style","beard","ears"].every(k => f[k] !== undefined),
+    Object.keys(f).join(","));
+  check("les traits sont rangés sur la personne", !!ST().founder.face);
+
+  // Stabilité : le même être humain a toujours le même visage.
+  const again = G.faceOf(ST().founder);
+  check("le visage ne change pas d'un appel à l'autre",
+    JSON.stringify(again) === JSON.stringify(f));
+  const svg1 = G.portraitSVG(ST().founder);
+  const svg2 = G.portraitSVG(ST().founder);
+  check("le portrait est reproductible", svg1 === svg2);
+
+  // Variété : deux personnes différentes ne se ressemblent pas.
+  const faces = new Set();
+  for(let i = 0; i < 40; i++){
+    faces.add(JSON.stringify(G.faceOf({name:"P"+i, sex:i%2?"f":"m", cid:500+i, age:30})));
+  }
+  check("quarante personnes donnent des visages variés", faces.size >= 35, faces.size + "/40");
+
+  // Un enfant tient de ses parents.
+  const s2 = freshGame();
+  s2.founder.face = {skin:"#f2d3b4", hair:"#2b1d14", eye:"#4a3323", jaw:0, nose:0, mouth:0, brow:0, style:0, beard:0, ears:0};
+  s2.spouse.face  = {skin:"#6f4a2f", hair:"#d9c08a", eye:"#3d5a7a", jaw:2, nose:2, mouth:2, brow:2, style:3, beard:0, ears:1};
+  let inherited = 0;
+  for(let i = 0; i < 30; i++){
+    const kid = G.addChild("Enfant"+i, {sex:i%2?"f":"m"});
+    const kf = kid.face;
+    if([ST().founder.face.skin, ST().spouse.face.skin].indexOf(kf.skin) >= 0) inherited++;
+  }
+  check("un enfant tient la peau d'un de ses parents", inherited >= 25, inherited + "/30");
+
+  // Le visage vieillit.
+  const young = G.portraitSVG({name:"Ada", sex:"f", cid:900, age:25});
+  const old   = G.portraitSVG({name:"Ada", sex:"f", cid:900, age:80});
+  check("un visage âgé diffère d'un visage jeune", young !== old);
+  check("les cheveux blanchissent avec l'âge",
+    G.greyed("#2b1d14", 25) === "#2b1d14" && G.greyed("#2b1d14", 85) !== "#2b1d14",
+    G.greyed("#2b1d14", 85));
+
+  // Le portrait est un SVG autonome, sans requête extérieure.
+  check("le portrait est un SVG", svg1.indexOf("<svg") === 0);
+  check("il est bien fermé", svg1.trim().slice(-6) === "</svg>");
+  check("il n'appelle aucune ressource externe", !/https?:\/\/[^"]*\.(png|jpg|svg)/.test(svg1));
+  check("il porte un texte alternatif", /aria-label=/.test(svg1));
+  check("les couleurs ont un repli hors CSS",
+    /var\(--surface-2, #/.test(svg1) && /var\(--line, #/.test(svg1));
+
+  // Un mort se voit.
+  const gone = G.portraitSVG({name:"Feu", sex:"m", cid:901, age:70, alive:false});
+  check("un défunt est rendu différemment", gone !== G.portraitSVG({name:"Feu", sex:"m", cid:901, age:70}));
+
+  // Les panneaux affichent les visages.
+  const s3 = freshGame();
+  G.addChild("Alice", {sex:"f"}).age = 20;
+  G.ensureFaces();
+  G.renderFamily();
+  check("le panneau famille montre des portraits",
+    ($el("familyContent").innerHTML.match(/portrait-svg/g)||[]).length >= 3,
+    ($el("familyContent").innerHTML.match(/portrait-svg/g)||[]).length);
+  G.renderCowboys();
+  check("le panneau équipe aussi", /portrait-svg/.test($el("cowboyContent").innerHTML));
+
+  // L'arbre généalogique.
+  const s4 = freshGame();
+  s4.lineage = [
+    {name:"William", role:"Fondateur", startYear:1885, endYear:1912},
+    {name:"Sarah", role:"Héritière désignée", startYear:1912, endYear:1944},
+    {name:"Yohan", role:"Héritier désigné", startYear:1944, endYear:null}
+  ];
+  s4.year = 1960; s4.eraId = "industrial"; s4.costModifier = 2.5;
+  G.addChild("Nora", {sex:"f"}).age = 12;
+  G.renderLineage();
+  const tree = $el("lineageContent").innerHTML;
+  check("l'arbre dessine une génération par rang",
+    (tree.match(/tree-gen/g)||[]).length === 3, (tree.match(/tree-gen/g)||[]).length);
+  check("il relie les générations", (tree.match(/tree-link/g)||[]).length >= 2);
+  check("il marque la génération en poste", /tree-now/.test(tree));
+  check("il montre le foyer d'aujourd'hui", /kin/.test(tree));
+  check("chaque rang porte un visage",
+    (tree.match(/portrait-svg/g)||[]).length >= 3, (tree.match(/portrait-svg/g)||[]).length);
+  check("l'arbre n'appelle aucune ressource externe", !/https?:\/\//.test(tree));
+
+  // L'épilogue.
+  const s5 = freshGame();
+  s5.lineage = [
+    {name:"William", role:"Fondateur", startYear:1885, endYear:1930},
+    {name:"Sarah", role:"Héritière désignée", startYear:1930, endYear:null}
+  ];
+  s5.year = 2026; s5.eraId = "modern"; s5.costModifier = 16;
+  s5.legacy.honor = 5; s5.politics.held = ["cattleCommission","sheriff"];
+  s5.institutions = {cattleCommission:{since:1890}};
+  s5.protectedLand = 300;
+  G.recordSaga("succession", "Sarah reprend le ranch", "family", "À 32 ans.");
+  const epi = G.epilogueHTML();
+  check("l'épilogue nomme la famille", epi.indexOf(ST().familyName) >= 0);
+  check("il donne un verdict", /dynastie|empire/i.test(epi));
+  check("il montre la lignée en portraits",
+    (epi.match(/portrait-svg/g)||[]).length >= 2, (epi.match(/portrait-svg/g)||[]).length);
+  check("il chiffre ce qu'il reste", /hectares/.test(epi));
+  check("il rappelle les charges exercées", /Commission du bétail/.test(epi));
+  check("il rappelle les terres classées", /300 hectares classés/.test(epi));
+  check("il liste les tournants", /saga-item/.test(epi));
+  check("il n'appelle aucune ressource externe", !/https?:\/\/[^"]*\.(png|jpg)/.test(epi));
+
+  G.openEpilogue();
+  check("le panneau d'épilogue s'ouvre", !$el("epilogueModal")._classes.has("hidden"));
+  check("son titre porte les dates", /1885–2026/.test($el("epilogueTitle").textContent),
+    $el("epilogueTitle").textContent);
+
+  // La fin de partie l'offre.
+  G.showGameOver("Fin de test", "Texte.");
+  const labels = Array.prototype.map.call($el("eventChoices").children, b => b.textContent);
+  check("la fin de partie propose l'épilogue",
+    labels.some(l => /épilogue/i.test(l)), labels.join(" | "));
+
+  // L'affiche exportée porte aussi les visages.
+  const poster = G.sagaPosterSVG();
+  check("l'affiche montre la lignée en médaillons",
+    (poster.match(/portrait-svg/g)||[]).length >= 2, (poster.match(/portrait-svg/g)||[]).length);
+  check("les médaillons de l'affiche ont des couleurs en dur",
+    poster.indexOf("#2a2016") >= 0);
+  check("l'affiche reste bien formée", poster.trim().slice(-6) === "</svg>");
+
+  // Migration : une partie d'avant les visages en reçoit.
+  const s6 = freshGame();
+  delete ST().founder.face; delete ST().spouse.face;
+  (ST().children||[]).forEach(c => delete c.face);
+  (ST().cowboys||[]).forEach(c => delete c.face);
+  G.ensureProgress();
+  check("une partie ancienne reçoit des visages",
+    !!ST().founder.face && !!ST().spouse.face
+    && (ST().cowboys||[]).every(c => !!c.face));
+}
+
 // ------------------------------------------------- Exporter la chronique
 section("Exporter la chronique");
 {
@@ -3268,6 +3410,10 @@ section("Montants et inflation");
   s.reputation = 100; s.cattle = 40; s.land = 200; s.money = 500000;
   s.feed = 50000; s.rival.relation = 0; s.rival2 && (s.rival2.relation = 0);
   s.factions.forEach(f => f.relation = 0);
+  // Le sujet du test est l'érosion, pas les événements : plusieurs d'entre eux
+  // rendent de la réputation et pouvaient la maintenir au plafond, ce qui
+  // faisait échouer la mesure une fois sur trois.
+  s.eventModifier = 0;
   for(let i = 0; i < 80; i++){
     G.endTurn();
     let guard = 0;

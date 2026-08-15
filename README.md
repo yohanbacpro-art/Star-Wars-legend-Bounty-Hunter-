@@ -1,4 +1,4 @@
-# Ranch Dynasty — V3.9
+# Ranch Dynasty — V4.0
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -314,6 +314,57 @@ vérifie aussi qu'aucune illustration n'écrase les autres.
 `refreshStartMode()` tient l'écran de création à jour : elle verrouille l'option
 `legacy` tant qu'aucune dynastie n'est tombée, réécrit la note explicative et le
 libellé du bouton de départ.
+
+## Les visages de la dynastie
+
+On passe 141 ans avec Yohan, Élise, Alice, Jake Morgan — et jusqu'en V3.9 ce
+n'étaient que des prénoms dans des listes. C'était le dernier endroit où le jeu
+restait un tableur alors qu'il raconte une saga de famille.
+
+Chaque personne porte désormais un **portrait dessiné en SVG dans la page** :
+aucune ressource extérieure, et un rendu stable.
+
+- `faceOf(p, parents)` tire les traits **une seule fois** puis les range dans
+  `p.face` — ils sont donc sauvegardés avec la partie, et un même être humain a
+  toujours le même visage. Le tirage est déterministe (`hashStr` + sel).
+- **Un enfant hérite de ses deux parents** : peau, cheveux et yeux sont repris
+  de l'un ou de l'autre selon un tirage stable. Mesuré : 25 enfants sur 30
+  portent la peau d'un parent.
+- **Le visage vieillit** : `greyed()` décolore les cheveux à partir de 40 ans,
+  les rides apparaissent à 62, les proportions d'un enfant sont différentes
+  (tête plus ronde, yeux plus grands, pas de couvre-chef).
+- **Le couvre-chef suit l'époque** (`HATS`) : stetson et bonnet sous la
+  Fondation, fedora sous la Prohibition, casquette plate dans les années 30,
+  casquette moderne aujourd'hui.
+- Un défunt est rendu en gris, les yeux fermés.
+
+⚠️ Deux pièges rencontrés en les intégrant :
+
+- `var()` **ne fonctionne pas dans un attribut de présentation SVG**. Les
+  couleurs passent par `style="fill:var(--surface-2, #f2e4c4)"`, avec une valeur
+  de repli — indispensable pour l'affiche exportée, qui n'a aucune feuille de
+  style derrière elle.
+- **Un `<svg>` imbriqué sans `width`/`height` occupe tout le cadre parent.**
+  Les médaillons de l'affiche passent par `portraitSVG(p, {x, y, size})` qui
+  pose une géométrie explicite ; un `<g transform="scale()">` ne suffit pas.
+
+### L'arbre généalogique
+
+`renderLineage()` dessine une génération par rang, reliées entre elles, chacune
+avec le visage de qui tenait le ranch — grisé pour les prédécesseurs, encadré
+d'or pour la génération en poste. Le foyer d'aujourd'hui (conjoint et enfants)
+pend sous le dernier rang.
+
+### L'épilogue
+
+`epilogueHTML()` compose la page qu'on garde après 141 ans : le verdict, les
+visages de toute la lignée, la maison au dernier jour, ce qu'il reste (terres,
+troupeau, jauges, objectifs, charges exercées, institutions fondées, terres
+classées, état de la ville, héritage moral, rancunes léguées), et les tournants
+du récit. Elle s'ouvre depuis l'écran de fin de partie et s'exporte.
+
+L'affiche exportée porte elle aussi les **médaillons des six dernières
+générations**, avec leurs couleurs en dur pour survivre hors du navigateur.
 
 ## La politique : un éden qui est un piège
 
@@ -779,7 +830,8 @@ sans aucune dépendance :
 # tour annuel, investisseurs immobiliers.
 # chute d'une dynastie établie, quarantaine, partage, alertes, libellés.
 # politique et charges publiques, ville qui pousse.
-# 672 vérifications, sortie non nulle en cas d'échec.
+# visages, héritage des traits, arbre généalogique, épilogue.
+# 721 vérifications, sortie non nulle en cas d'échec.
 node tests/scenarios.js index.html
 
 # Simulation de masse.
