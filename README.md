@@ -1,4 +1,4 @@
-# Ranch Dynasty — V4.1
+# Ranch Dynasty — V4.2
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -337,6 +337,16 @@ premier chapitre devient l'adulte du troisième.
 Le portrait reste un `<svg>` contenant une `<image>` en `data:` découpée en
 rond. C'est ce qui permet aux mêmes appels de servir les panneaux, l'affiche
 exportée et sa conversion en PNG.
+
+**Le cadrage est calculé par tuile**, pas au jugé : un masque de teintes de peau
+donne la boîte de la tête dans les deux tiers supérieurs de la case, on remonte
+d'un tiers de la hauteur du visage pour englober cheveux et couvre-chef, puis on
+centre le carré là-dessus. Les cadrages à décalage fixe rognaient un chapeau sur
+deux.
+
+⚠️ **Le rond est garanti deux fois** : par le `clip-path` du SVG, et par
+`border-radius:50%; overflow:hidden` sur `.portrait`. Un moteur qui ignorerait
+le premier afficherait sinon la photo en carré.
 
 ⚠️ **Limites du fonds fourni**, assumées : il ne contient aucune femme âgée
 (elles empruntent la série adulte), et tous les sujets ont le même type
