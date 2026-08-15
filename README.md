@@ -1,4 +1,4 @@
-# Ranch Dynasty — V4.3
+# Ranch Dynasty — V4.4
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -314,6 +314,43 @@ vérifie aussi qu'aucune illustration n'écrase les autres.
 `refreshStartMode()` tient l'écran de création à jour : elle verrouille l'option
 `legacy` tant qu'aucune dynastie n'est tombée, réécrit la note explicative et le
 libellé du bouton de départ.
+
+## La troisième génération
+
+Les petits-enfants naissaient déjà, mais ils étaient rangés à plat dans
+`state.children` avec un simple `parentName` : indistinguables des enfants du
+chef, et prétendants au ranch face à leur propre père.
+
+- **`parentCid`** remplace le lien par prénom — le joueur peut renommer un
+  enfant, et deux enfants peuvent être homonymes. `ensureProgress()` rétablit
+  le lien des parties antérieures tant que le prénom est reconnaissable.
+- **`directChildren()` / `grandChildren(parentCid)`** séparent enfin les deux
+  générations.
+- **`adultHeirs()`** ne retient que les enfants directs ; un petit-fils ne
+  devient prétendant que si plus aucun enfant direct ne peut reprendre.
+- Le visage d'un petit-enfant **hérite de son parent**, pas du chef de famille.
+- Ils apparaissent sous leur parent dans le panneau Famille, sur leur propre
+  rang dans l'arbre généalogique, et dans l'épilogue. La première naissance
+  entre dans la chronique.
+
+## L'interface
+
+Passe de modernisation, en gardant le thème d'époque :
+
+- **Deux familles de caractères** : la serif pour le récit, une linéale système
+  pour les chiffres, les libellés et les commandes. C'est ce qui distingue le
+  plus une interface d'aujourd'hui d'une interface de 2005.
+- **Plus une seule `border:3px double`** : un filet d'un pixel
+  (`--hair`, dérivé de `--line` par `color-mix`) et deux ombres douces
+  (`--shadow-1`, `--shadow-2`).
+- **Les chiffres du domaine en tuiles** sur deux colonnes au lieu de lignes
+  pointillées ; la dernière tuile impaire occupe toute la largeur.
+- **Jauges de 7 px arrondies**, libellés en capitales discrètes.
+- **Navigation en pastilles**, actions avec titre plus fort, description
+  discrète et coût en pastille.
+- ⚠️ Le coût des actions est en `display:block; width:fit-content` : en
+  `inline-block`, un `<div>` ne force plus de retour à la ligne et la pastille
+  coulait dans la description qui la précède.
 
 ## Les visages de la dynastie
 
@@ -896,7 +933,8 @@ sans aucune dépendance :
 # visages, héritage des traits, arbre généalogique, épilogue.
 # catalogue photographique, bandes d'époque, stabilité de l'allure.
 # vues du domaine, motifs et scènes, vue d'hiver réservée au froid.
-# 757 vérifications, sortie non nulle en cas d'échec.
+# troisième génération, lien parent stable, ordre de succession.
+# 775 vérifications, sortie non nulle en cas d'échec.
 node tests/scenarios.js index.html
 
 # Simulation de masse.

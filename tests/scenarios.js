@@ -1940,6 +1940,91 @@ section("La pègre et les fusillades");
   check("toutes ses issues s'appliquent sans erreur", threw === false, threw);
 }
 
+// ------------------------------------------------- Les petits-enfants
+section("La troisième génération");
+{
+  const s = freshGame();
+  const fils = addAdult(s, "Aîné", {age:26, sex:"m"});
+  fils.married = true; fils.spouseName = "Clara";
+  check("un enfant direct n'a pas de parent déclaré", fils.parentCid === undefined);
+  check("il compte comme enfant direct", G.directChildren().some(c => c.cid === fils.cid));
+  check("aucun petit-enfant au départ", G.grandChildren().length === 0);
+
+  // Naissance d'un petit-enfant.
+  const bebe = G.addChild("Petit", {sex:"m", parentName:fils.name, parentCid:fils.cid});
+  check("un petit-enfant porte le lien vers son parent", bebe.parentCid === fils.cid);
+  check("il n'est pas compté comme enfant direct",
+    !G.directChildren().some(c => c.cid === bebe.cid));
+  check("il est compté comme petit-enfant", G.grandChildren().some(c => c.cid === bebe.cid));
+  check("on peut lister ceux d'un parent donné",
+    G.grandChildren(fils.cid).length === 1, G.grandChildren(fils.cid).length);
+
+  // Il ne dispute pas le ranch à son propre père.
+  bebe.age = 25;
+  const heirs = G.adultHeirs();
+  check("un petit-fils adulte ne concurrence pas son père",
+    heirs.length === 1 && heirs[0].cid === fils.cid,
+    heirs.map(h=>h.name).join(","));
+
+  // Mais il reprend si la génération du dessus s'éteint.
+  fils.alive = false;
+  const heirs2 = G.adultHeirs();
+  check("il devient prétendant si la génération du dessus s'éteint",
+    heirs2.some(h => h.cid === bebe.cid), heirs2.map(h=>h.name).join(","));
+
+  // Les naissances de petits-enfants se produisent réellement.
+  let born = 0;
+  for(let run = 0; run < 25 && !born; run++){
+    const t = freshGame();
+    const k = addAdult(t, "Marié", {age:24, sex:"f"});
+    k.married = true; k.spouseName = "Samuel";
+    for(let y = 0; y < 12; y++){
+      t.founder.age = 70; t.spouse.alive = false;   // écarte les naissances du foyer
+      G.ageFamily();
+      if(G.grandChildren().length) { born = 1; break; }
+    }
+  }
+  check("des petits-enfants naissent au fil des années", born === 1);
+
+  // Le visage tient du parent, pas du chef de famille.
+  const s2 = freshGame();
+  s2.familySkin = 2;
+  const mere = addAdult(s2, "Mère", {age:26, sex:"f"});
+  mere.married = true; mere.spouseName = "Paul";
+  const petit = G.addChild("Enfant", {sex:"f", parentName:mere.name, parentCid:mere.cid});
+  delete petit.face; G.faceOf(petit, [mere, null]);
+  check("un petit-enfant a bien un visage", !!petit.face);
+  check("son teint reste dans la bande de la maison",
+    Math.abs(petit.face.skinIx - 2) <= 1, petit.face.skinIx);
+
+  // Migration : un petit-enfant d'avant n'avait que le prénom de son parent.
+  const s3 = freshGame();
+  const p1 = addAdult(s3, "Parent", {age:30});
+  const vieux = G.addChild("Ancien", {sex:"m", parentName:"Parent"});
+  delete vieux.parentCid;
+  G.ensureProgress();
+  check("le lien est rétabli pour une partie ancienne",
+    ST().children.find(c=>c.name==="Ancien").parentCid === p1.cid);
+
+  // Les panneaux les montrent.
+  const s4 = freshGame();
+  const fille = addAdult(s4, "Fille", {age:28, sex:"f"});
+  fille.married = true; fille.spouseName = "Léon";
+  G.addChild("Lucie", {sex:"f", parentName:fille.name, parentCid:fille.cid}).age = 4;
+  G.ensureFaces();
+  G.renderFamily();
+  check("le panneau famille montre la troisième génération",
+    /grandkids/.test($el("familyContent").innerHTML));
+  check("il nomme le petit-enfant", $el("familyContent").innerHTML.indexOf("Lucie") >= 0);
+  G.renderLineage();
+  check("l'arbre lui donne son propre rang",
+    /Petit-enfant/.test($el("lineageContent").innerHTML));
+  const epi = G.epilogueHTML();
+  check("l'épilogue aussi", /petit-enfant/i.test(epi));
+  check("la maison au dernier jour ne les mélange plus aux enfants",
+    epi.indexOf("La maison au dernier jour") < epi.indexOf("Lucie"));
+}
+
 // ------------------------------------------------- Les visages
 section("Les visages de la dynastie");
 {
