@@ -580,6 +580,33 @@
   }
   .parcels small{color:var(--muted)}
 
+  /* ---- La carte du domaine : une mosaïque de photographies ---- */
+  .map-grid{display:grid;gap:6px;margin:12px 0 4px}
+  .map-row{display:flex;gap:6px;min-height:96px}
+  .parcel-tile{
+    position:relative;flex:1 1 0;min-width:64px;
+    border:1px solid var(--hair);border-radius:var(--r-sm);
+    overflow:hidden;background:var(--surface-2);
+    display:flex;align-items:flex-end;
+  }
+  .parcel-shot{position:absolute;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat}
+  .parcel-scrim{
+    position:absolute;inset:0;
+    background:linear-gradient(0deg,rgba(14,10,6,.86) 0%,rgba(14,10,6,.30) 52%,rgba(14,10,6,.06) 100%);
+  }
+  .parcel-label{
+    position:relative;z-index:1;padding:8px 10px;color:#f6ead2;
+    display:grid;gap:2px;text-shadow:0 1px 3px rgba(0,0,0,.85);
+  }
+  .parcel-label b{font-size:.88rem;line-height:1.2}
+  .parcel-label span{font-size:.72rem;color:#e3d3b2;font-family:var(--sans)}
+  .parcel-guard{position:absolute;top:6px;right:7px;z-index:1;font-size:1rem;
+    filter:drop-shadow(0 1px 2px rgba(0,0,0,.8))}
+  @media(max-width:520px){
+    .map-row{flex-wrap:wrap;min-height:0}
+    .parcel-tile{flex:1 1 44%;min-height:86px}
+  }
+
   /* ---- La chronique de la saga ---- */
   .saga{list-style:none;padding:0;margin:0;display:grid;gap:10px;counter-reset:saga}
   .saga-item{
@@ -1649,6 +1676,28 @@ function pickExposedParcel(){
 }
 
 // Vue cartographique : des rectangles proportionnés, dessinés dans la page.
+// À chaque type de terrain ses vues. Le fonds n'a pas de canyon ni de bois :
+// on s'en approche avec la route et la vue aérienne plutôt que de laisser un
+// rectangle gris.
+const PARCEL_SCENE = {
+  pasture:["troupeau","plaine"],
+  bottom: ["plaine","troupeau"],
+  ridge:  ["aerien","route"],
+  canyon: ["route","aerien"],
+  creek:  ["plaine","route"],
+  wood:   ["route","plaine"]
+};
+function parcelPhoto(p){
+  if(typeof SCENES === "undefined" || !SCENES) return null;
+  const band = SCENES[String(photoBand(state.eraId))] || SCENES["0"];
+  if(!band) return null;
+  // En hiver, tout le domaine est sous la neige : c'est la saison qui commande.
+  if(state.season === 3 && band.hiver && !annualTurns()) return band.hiver;
+  const keys = (PARCEL_SCENE[p.kind] || ["plaine"]).filter(k => band[k]);
+  if(!keys.length) return null;
+  return band[keys[hashStr(p.name + ":" + p.id) % keys.length]];
+}
+
 function renderMap(){
   ensureParcels();
   const box = $("mapContent");
@@ -1656,29 +1705,41 @@ function renderMap(){
   const parcels = state.parcels;
   if(!parcels.length){ box.innerHTML = "<p><i>Le domaine ne compte aucune parcelle.</i></p>"; return; }
 
-  // Découpage en bandes, chaque parcelle occupant une part de sa bande.
+  // La carte : une mosaïque de photographies, chaque parcelle occupant une
+  // surface proportionnelle à ses hectares. Elle remplace le diagramme de
+  // rectangles gris, qui était le dernier écran du jeu sans image.
   const perRow = Math.ceil(Math.sqrt(parcels.length));
   const rows = [];
   for(let i = 0; i < parcels.length; i += perRow) rows.push(parcels.slice(i, i + perRow));
-  const rowH = 100 / rows.length;
+  const hands0 = state.cowboys || [];
 
-  let svg = `<svg class="map" viewBox="0 0 200 120" role="img" aria-label="Carte du domaine">`
-    + `<rect width="200" height="120" fill="var(--panel)"/>`;
-  rows.forEach((row, r) => {
-    const rowTotal = row.reduce((s,p)=>s+p.ha,0) || 1;
-    let x = 4;
-    const y = 4 + r * (112 / rows.length);
-    const h = (112 / rows.length) - 4;
+  let svg = `<div class="map-grid">`;
+  rows.forEach(row => {
+    svg += `<div class="map-row">`;
     row.forEach(p => {
-      const w = (p.ha / rowTotal) * 192;
-      const shade = p.kind === "wood" || p.kind === "canyon" ? ".65" : (p.kind === "ridge" ? ".3" : ".45");
-      svg += `<g><rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(4,w-2).toFixed(1)}" height="${h.toFixed(1)}"`
-        + ` fill="var(--line)" fill-opacity="${shade}" stroke="var(--dark)" stroke-width=".8"/>`
-        + `<title>${p.name} — ${PARCEL_KINDS[p.kind].label}, ${p.ha} ha</title></g>`;
-      x += w;
+      const k = PARCEL_KINDS[p.kind];
+      const posted = hands0.filter(c => c.post === p.id).length;
+      const shot = parcelPhoto(p);
+      svg += `<div class="parcel-tile" style="flex-grow:${Math.max(1, p.ha)}"`
+        + (shot ? ` data-shot="1"` : "")
+        + `>`
+        + (shot ? `<div class="parcel-shot" style="background-image:url('${shot}');`
+            // Le fonds ne compte que quelques paysages pour six terrains : on
+            // décale le cadrage de chaque parcelle pour que deux voisines ne
+            // montrent pas exactement la même vue.
+            + `background-position:${20 + hashStr(p.name+"px") % 61}% ${25 + hashStr(p.name+"py") % 51}%;`
+            + `background-size:${112 + hashStr(p.name+"pz") % 34}% auto"></div>` : "")
+        + `<div class="parcel-scrim"></div>`
+        + `<div class="parcel-label">`
+        + `<b>${k.icon} ${p.name}</b>`
+        + `<span>${k.label} · ${p.ha} ha${posted ? ` · ${posted} homme${posted>1?"s":""}` : ""}</span>`
+        + `</div>`
+        + (posted ? `<span class="parcel-guard" title="Homme posté">🤠</span>` : "")
+        + `</div>`;
     });
+    svg += `</div>`;
   });
-  svg += `</svg>`;
+  svg += `</div>`;
 
   let h = `<p class="modal-intro">${state.land} hectares en ${parcels.length} parcelle${parcels.length>1?"s":""}. `
     + `Les terrains difficiles — canyons et bois — se font razzier plus souvent ; les crêtes se surveillent seules.</p>`;

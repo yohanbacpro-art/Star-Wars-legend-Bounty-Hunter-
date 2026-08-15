@@ -1,4 +1,4 @@
-# Ranch Dynasty — V4.4
+# Ranch Dynasty — V4.5
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -463,6 +463,21 @@ donc sortie que si le texte parle vraiment de froid (`WINTER_RE`) ; sinon
 se jouait sous la neige.
 
 `DARK_MOTIFS` assombrit les scènes nocturnes : aucune vue de nuit dans le fonds.
+
+### La carte du domaine
+
+Le panneau **Domaine** était le dernier écran sans image : un diagramme de
+rectangles gris. C'est désormais une **mosaïque photographique**, chaque
+parcelle occupant une surface proportionnelle à ses hectares, avec son nom, son
+terrain, sa superficie et un marqueur si un homme y est posté.
+
+`PARCEL_SCENE` associe chaque type de terrain aux vues qui lui conviennent, et
+**en hiver tout le domaine passe sous la neige** — la saison commande.
+
+⚠️ Le fonds n'a ni canyon, ni bois, ni crête : six terrains se partagent quatre
+paysages. Pour que deux parcelles voisines ne montrent pas exactement la même
+vue, le **cadrage de chaque tuile est décalé** (`background-position` et
+`background-size` tirés du nom de la parcelle).
 
 Le générateur vectoriel reste le secours, et garde ses couleurs d'époque.
 
@@ -934,7 +949,8 @@ sans aucune dépendance :
 # catalogue photographique, bandes d'époque, stabilité de l'allure.
 # vues du domaine, motifs et scènes, vue d'hiver réservée au froid.
 # troisième génération, lien parent stable, ordre de succession.
-# 775 vérifications, sortie non nulle en cas d'échec.
+# carte du domaine en photographies, cadrage par parcelle.
+# 783 vérifications, sortie non nulle en cas d'échec.
 node tests/scenarios.js index.html
 
 # Simulation de masse.

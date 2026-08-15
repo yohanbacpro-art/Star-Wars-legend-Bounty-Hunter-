@@ -3032,7 +3032,29 @@ section("Carte du domaine");
   let threw = false;
   try{ G.renderMap(); }catch(e){ threw = e.message; }
   check("la carte s'affiche", threw === false, threw);
-  check("la carte est dessinée dans la page", $el("mapContent").innerHTML.includes("<svg"));
+  const map = $el("mapContent").innerHTML;
+  check("la carte est une mosaïque de parcelles",
+    (map.match(/parcel-tile/g)||[]).length === ST().parcels.length,
+    (map.match(/parcel-tile/g)||[]).length + " tuiles pour " + ST().parcels.length + " parcelles");
+  check("chaque parcelle porte une photographie",
+    (map.match(/parcel-shot/g)||[]).length === ST().parcels.length);
+  check("chaque tuile est nommée et chiffrée", /ha<\/span>|ha<\/|ha /.test(map) && map.indexOf("Pâturage") + map.indexOf("Crête") > -2);
+  check("la surface commande la taille de la tuile", /flex-grow:\d+/.test(map));
+  // Le terrain choisit sa vue.
+  const s2b = freshGame();
+  s2b.season = 0;
+  const kinds = ev("Object.keys(PARCEL_KINDS)");
+  check("chaque type de terrain a ses vues",
+    kinds.every(k => (ev("PARCEL_SCENE")[k]||[]).length > 0),
+    kinds.filter(k => !(ev("PARCEL_SCENE")[k]||[]).length).join(","));
+  check("une parcelle reçoit une photo",
+    (G.parcelPhoto(ST().parcels[0])||"").indexOf("data:image/") === 0);
+  check("la même parcelle garde la sienne",
+    G.parcelPhoto(ST().parcels[0]) === G.parcelPhoto(ST().parcels[0]));
+  // En hiver, tout le domaine passe sous la neige.
+  s2b.season = 3; s2b.year = 1900; s2b.eraId = "foundation";
+  check("l'hiver couvre tout le domaine de neige",
+    G.parcelPhoto(ST().parcels[0]) === ev('SCENES["0"].hiver'));
   check("la carte n'appelle aucune ressource externe",
     !/https?:\/\//.test($el("mapContent").innerHTML));
   const s3 = freshGame();
@@ -3675,9 +3697,11 @@ section("Montants et inflation");
   // rendent de la réputation et pouvaient la maintenir au plafond, ce qui
   // faisait échouer la mesure une fois sur trois.
   s.eventModifier = 0;
+  // Trois sources rendent de la réputation en dehors de l'érosion mesurée ici :
+  // les événements (coupés par `eventModifier`), les arcs, et les brèves de fin
+  // de trimestre. On vide le catalogue de brèves le temps de la mesure.
+  const briefsBackup = ev("BRIEFS.splice(0, BRIEFS.length)");
   for(let i = 0; i < 80; i++){
-    // Les arcs ne passent pas par `eventModifier` et rendent de la réputation :
-    // on les tient à l'écart aussi, le sujet du test étant la seule érosion.
     ST().arcCooldown = 99999;
     ST().arc = null;
     G.endTurn();
@@ -3690,6 +3714,9 @@ section("Montants et inflation");
     }
     if(ST().gameOver) break;
   }
+  briefsBackup.forEach(b => ev("BRIEFS").push(b));
+  check("le catalogue de brèves est rendu intact", ev("BRIEFS").length === briefsBackup.length,
+    ev("BRIEFS").length + " / " + briefsBackup.length);
   check("une réputation non entretenue redescend", ST().reputation < 100, ST().reputation);
   check("elle ne s'effondre pas non plus", ST().reputation > 20, ST().reputation);
 }
