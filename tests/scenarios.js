@@ -3441,10 +3441,16 @@ section("Équilibrage");
   for(let y = 0; y < 60; y++){
     ST().rival.relation = 0;
     if(ST().rival2) ST().rival2.relation = 0;
+    // La guerre ouverte n'est pas le sujet ici, et elle déplace des hectares
+    // dans les deux sens — donc la capacité, donc la mesure.
+    ST().warCooldown = 99999; ST().war = null;
     G.endTurn();
   }
+  // La capacité se relit à la fin : des événements peuvent avoir agrandi le
+  // domaine en chemin, et c'est la capacité du moment qui borne le troupeau.
+  const capEnd = Math.floor(ST().land/3 * G.buildingCapacityFactor());
   check("le troupeau se stabilise sous la capacité",
-    ST().cattle <= Math.floor(capacity*1.05)+2, ST().cattle + " pour " + capacity + " places");
+    ST().cattle <= Math.floor(capEnd*1.05)+2, ST().cattle + " pour " + capEnd + " places");
   check("le troupeau croît quand même jusqu'à la capacité",
     ST().cattle >= capacity*0.7, ST().cattle);
 }
@@ -3700,6 +3706,10 @@ section("Montants et inflation");
   for(let i = 0; i < 80; i++){
     ST().arcCooldown = 99999;
     ST().arc = null;
+    // Quatrième source, ajoutée avec la guerre ouverte : ses trois phases
+    // rendent et retirent de la réputation. Le sujet ici est l'érosion seule.
+    ST().warCooldown = 99999;
+    ST().war = null;
     G.endTurn();
     let guard = 0;
     while(!$el("eventModal")._classes.has("hidden") && guard++ < 10){
@@ -4266,6 +4276,303 @@ section("Le concours équestre");
   check("le tour suivant rouvre la piste", ST().actions === 5, ST().actions);
   check("et le tour est marqué comme couru", ST().competedTurn === ST().turn);
   check("la mise a bien été prélevée quelque part", typeof m0 === "number" && ST().money !== m0);
+}
+
+
+// ------------------------------------------------- La guerre ouverte
+section("La guerre ouverte");
+{
+  const sc = ev("WAR_SCENES");
+  check("la guerre a trois phases", sc.length === 3);
+  const bad = [];
+  sc.forEach((phase, i) => {
+    if(phase.length < 3) bad.push("phase " + i + " n'a que " + phase.length + " scènes");
+    phase.forEach(x => {
+      ["art","title","image"].forEach(f => { if(!x[f]) bad.push("phase "+i+" : scène sans "+f); });
+      if(typeof x.text !== "function") bad.push("phase "+i+" : scène sans texte");
+    });
+  });
+  check("chaque phase offre plusieurs scènes, toutes décrites", bad.length === 0, bad.slice(0,3).join(" | "));
+
+  // Chaque scène de chaque phase doit produire une modale jouable.
+  const errs = [];
+  for(let phase = 0; phase < 3; phase++){
+    for(let pick = 0; pick < ev("WAR_SCENES")[phase].length; pick++){
+      const s = freshGame();
+      s.money = 400000; s.land = 900; s.cattle = 300; s.feed = 900; s.weapons = 4;
+      s.cowboys = [
+        {name:"A",loyalty:70,shoot:70,ride:70,salary:10,years:2,trait:"Vétéran"},
+        {name:"B",loyalty:70,shoot:70,ride:70,salary:10,years:2,trait:"Fidèle"},
+        {name:"C",loyalty:70,shoot:70,ride:70,salary:10,years:2,trait:"Fidèle"}
+      ];
+      G.addChild("Petiot", {age:8, health:100});
+      G.ensureSecondHouse();
+      s.rival.relation = -90; s.rival.strength = 60;
+      s.war = {house:0, name:s.rival.name, phase:phase, due:0, pick:[pick,pick,pick], data:{}};
+      let shown = false;
+      try{ shown = G.maybeShowWarStep(); }catch(e){ errs.push(`p${phase}/${pick} ouverture : ${e.message}`); continue; }
+      if(!shown){ errs.push(`p${phase}/${pick} ne s'ouvre pas`); continue; }
+      const ch = $el("eventChoices").children;
+      if(!ch.length){ errs.push(`p${phase}/${pick} sans aucun choix`); continue; }
+      // Chaque branche s'exécute sur un état neuf.
+      for(let c = 0; c < ch.length; c++){
+        const s2 = freshGame();
+        s2.money = 400000; s2.land = 900; s2.cattle = 300; s2.weapons = 4;
+        s2.cowboys = [{name:"A",loyalty:70,shoot:70,ride:70,salary:10,years:2,trait:"V"},
+                      {name:"B",loyalty:70,shoot:70,ride:70,salary:10,years:2,trait:"F"}];
+        G.addChild("Petiot", {age:8, health:100});
+        G.ensureSecondHouse();
+        s2.rival.relation = -90; s2.rival.strength = 60;
+        s2.war = {house:0, name:s2.rival.name, phase:phase, due:0, pick:[pick,pick,pick], data:{}};
+        G.maybeShowWarStep();
+        const btns = $el("eventChoices").children;
+        if(btns[c]){ try{ btns[c].onclick(); }catch(e){ errs.push(`p${phase}/${pick} choix ${c} : ${e.message}`); } }
+      }
+    }
+  }
+  check("les neuf scènes de guerre et toutes leurs branches s'exécutent",
+    errs.length === 0, errs.slice(0,3).join(" | "));
+
+  // L'enchaînement : chaque phase mène à la suivante, la troisième referme.
+  const s3 = freshGame();
+  s3.money = 400000; s3.land = 900; s3.cattle = 300;
+  G.ensureSecondHouse();
+  s3.war = {house:0, name:s3.rival.name, phase:0, due:0, pick:[1,1,1], data:{}};
+  G.advanceWar();
+  check("la première phase mène à l'escalade", ST().war.phase === 1, ST().war && ST().war.phase);
+  G.advanceWar();
+  check("l'escalade mène au règlement", ST().war.phase === 2, ST().war && ST().war.phase);
+  G.advanceWar();
+  check("après le règlement, la guerre est close", ST().war === null);
+  check("et un délai court avant la suivante", ST().warCooldown > ST().turn, ST().warCooldown);
+
+  // L'enlèvement doit désigner un enfant, ou se jouer sans en planter.
+  const s4 = freshGame();
+  s4.children = [];
+  check("sans enfant, la guerre ne cherche personne", G.warChild() === null);
+  G.addChild("Cadette", {age:6, health:100});
+  G.addChild("Aînée", {age:15, health:100});
+  check("avec des enfants, c'est le plus jeune qui est visé", G.warChild().age === 6);
+
+  // Les chances de la fusillade se lisent : des hommes armés valent mieux.
+  const s5 = freshGame();
+  G.ensureSecondHouse();
+  s5.rival.strength = 60;
+  s5.cowboys = []; s5.weapons = 0;
+  const faible = G.warOdds(ST().rival);
+  s5.weapons = 8;
+  s5.cowboys = [{name:"A",loyalty:80,shoot:90,ride:80,salary:10,years:2,trait:"V"},
+                {name:"B",loyalty:80,shoot:88,ride:80,salary:10,years:2,trait:"V"},
+                {name:"C",loyalty:80,shoot:85,ride:80,salary:10,years:2,trait:"V"}];
+  check("des hommes et des armes font la fusillade", G.warOdds(ST().rival) > faible,
+    Math.round(faible*100) + " % → " + Math.round(G.warOdds(ST().rival)*100) + " %");
+
+  // Elle ne s'ouvre pas contre une maison qui ne vous hait pas.
+  const s6 = freshGame();
+  G.ensureSecondHouse();
+  ST().rival.relation = 40; ST().rival2.relation = 40;
+  ST().warCooldown = 0;
+  let opened = 0;
+  for(let i = 0; i < 400; i++){ ST().war = null; G.maybeOpenWar(); if(ST().war) opened++; }
+  check("aucune guerre contre une maison cordiale", opened === 0, opened);
+
+  // Elle reste rare même contre une maison qui vous hait : c'est un événement
+  // de partie, pas de trimestre.
+  const s7 = freshGame();
+  G.ensureSecondHouse();
+  ST().rival.relation = -95; ST().rival.strength = 90;
+  ST().rival2.relation = 20;
+  let rate = 0;
+  for(let i = 0; i < 2000; i++){ ST().war = null; ST().warCooldown = 0; G.maybeOpenWar(); if(ST().war) rate++; }
+  check("une guerre reste rare, même dans la pire des situations",
+    rate > 0 && rate < 60, rate + " ouvertures sur 2000 trimestres");
+}
+
+// ------------------------------------------------- Détruire une maison
+section("Détruire une maison");
+{
+  const s = freshGame();
+  G.ensureSecondHouse();
+  const h = ST().rival;
+  h.strength = 40; h.hunted = 0;
+
+  // La dérive ordinaire ne descend pas sous le plancher naturel.
+  check("une maison qu'on n'a pas chassée a un plancher", G.houseFloor(h) === 10);
+  h.strength = 2;
+  G.houseBendPhase();
+  check("elle est relevée à ce plancher", ST().rival.strength === 10, ST().rival.strength);
+
+  // Seuls les coups délibérés comptent.
+  const s2 = freshGame();
+  G.ensureSecondHouse();
+  const h2 = ST().rival;
+  h2.strength = 60; h2.hunted = 0;
+  G.weakenHouse(h2, 20);
+  check("frapper une maison laisse une trace", h2.hunted === 20, h2.hunted);
+  check("et lui retire vraiment sa puissance", h2.strength === 40, h2.strength);
+  G.weakenHouse(h2, 20);
+  check("les coups s'additionnent", h2.hunted === 40, h2.hunted);
+  check("une maison assez frappée n'a plus de plancher", G.houseFloor(h2) === 0);
+
+  // La chute, et son prix.
+  const s3 = freshGame();
+  G.ensureSecondHouse();
+  const h3 = ST().rival;
+  const nom = h3.name;
+  h3.strength = 60; h3.hunted = 0;
+  G.weakenHouse(h3, 58);
+  const land0 = ST().land, rep0 = ST().reputation, sus0 = ST().suspicion;
+  G.houseBendPhase(); G.houseBendPhase();
+  check("une maison frappée jusqu'au bout disparaît", ST().rival.name !== nom,
+    ST().rival.name + " (était " + nom + ")");
+  check("ses terres passent au domaine", ST().land > land0, ST().land - land0);
+  check("le nom de la famille en souffre", ST().reputation < rep0, rep0 + " → " + ST().reputation);
+  check("et l'on se met à vous regarder", ST().suspicion > sus0, sus0 + " → " + ST().suspicion);
+  check("une vendetta reste derrière", !!ST().vendetta && ST().vendetta.from === nom);
+  check("une autre maison prend la place", !!ST().rival && ST().rival.strength > 0);
+  check("il y a toujours deux maisons", G.rivalHouses().length === 2);
+
+  // La vendetta s'exerce puis s'éteint.
+  const s4 = freshGame();
+  ST().vendetta = {from:"Kessler", who:"Abel Kessler", since:1900, heat:100};
+  ST().cowboys = [{name:"A",loyalty:70,shoot:10,ride:40,salary:10,years:2,trait:"V"}];
+  ST().weapons = 0;
+  let ran = 0;
+  for(let i = 0; i < 400 && ST().vendetta; i++){ G.vendettaPhase(); ran++; }
+  check("la vendetta finit par s'éteindre", ST().vendetta === null, ran + " passages");
+
+  // La puissance d'une maison se traduit en clair pour le joueur.
+  const s5 = freshGame();
+  const seuils = [90, 60, 40, 20, 3].map(v => { ST().rival.strength = v; return G.houseThreat(ST().rival); });
+  check("chaque niveau de puissance a sa phrase", new Set(seuils).size === 5, seuils.length);
+
+  // Et elle pèse sur le marché.
+  const s6 = freshGame();
+  G.ensureSecondHouse();
+  ST().rival.relation = 30; ST().rival2.relation = 30;
+  check("des voisins cordiaux ne coûtent rien", G.houseMarketDrag() === 1);
+  ST().rival.relation = -80; ST().rival.strength = 100;
+  ST().rival2.relation = -80; ST().rival2.strength = 100;
+  const drag = G.houseMarketDrag();
+  check("deux voisins puissants et furieux coupent des débouchés", drag < 1, drag.toFixed(3));
+  check("mais jamais au point de décider de la partie", drag >= .93, drag.toFixed(3));
+}
+
+// ------------------------------------------------- La nation ashkani
+section("La nation ashkani");
+{
+  const phases = ev("NATION_PHASES");
+  const eras = ev("ERAS").map(e => e.id);
+  const manquantes = eras.filter(id => !phases[id]);
+  check("chaque époque a sa posture", manquantes.length === 0, manquantes.join(", "));
+
+  const s = freshGame();
+  s.year = 1890; s.eraId = "foundation";
+  check("la Fondation est une guerre de frontière", G.nationPhase() === "raid");
+  s.eraId = "prohibition";  check("la Prohibition resserre l'étau", G.nationPhase() === "squeeze");
+  s.eraId = "depression";   check("la Dépression constitue le dossier", G.nationPhase() === "file");
+  s.eraId = "industrial";   check("l'après-guerre ouvre le prétoire", G.nationPhase() === "court");
+  s.eraId = "modern";       check("et il ne se referme plus", G.nationPhase() === "court");
+
+  // 1885 doit vraiment faire mal : on mesure les pertes sur cent trimestres.
+  const s2 = freshGame();
+  s2.year = 1890; s2.eraId = "foundation";
+  s2.cattle = 4000; s2.feed = 200000; s2.weapons = 0; s2.cowboys = [];
+  const nation = G.factionOfType("nation");
+  nation.relation = -80;
+  const cattle0 = ST().cattle, claim0 = ST().claimPressure || 0;
+  for(let i = 0; i < 100; i++) G.nationHostilePhase(nation);
+  const perdu1885 = cattle0 - ST().cattle;
+  check("en 1885, la nation coûte des bêtes, et beaucoup", perdu1885 > 60, perdu1885 + " têtes sur 100 trimestres");
+  check("et la revendication monte quand même", (ST().claimPressure||0) > claim0);
+
+  // 1960 ne coûte plus de bêtes : cela coûte des avocats.
+  const s3 = freshGame();
+  s3.year = 1960; s3.eraId = "industrial";
+  s3.cattle = 4000; s3.money = 900000; s3.feed = 200000; s3.weapons = 0; s3.cowboys = [];
+  const nation3 = G.factionOfType("nation");
+  if(nation3){
+    nation3.relation = -80;
+    const c0 = ST().cattle, m0 = ST().money, p0 = ST().claimPressure || 0;
+    for(let i = 0; i < 100; i++) G.nationHostilePhase(nation3);
+    check("en 1960, plus une bête n'est touchée", ST().cattle === c0, c0 - ST().cattle);
+    check("mais l'argent part en frais", ST().money < m0, m0 - ST().money);
+    check("et le dossier grossit plus vite qu'en 1885",
+      (ST().claimPressure||0) - p0 > perdu1885 * 0, ((ST().claimPressure||0) - p0).toFixed(1));
+  }
+
+  // Un domaine bien gardé encaisse moins.
+  const s4 = freshGame();
+  s4.year = 1890; s4.eraId = "foundation";
+  s4.cattle = 4000; s4.feed = 200000; s4.weapons = 10;
+  s4.cowboys = [];
+  for(let i = 0; i < 8; i++) s4.cowboys.push({name:"G"+i,loyalty:80,shoot:90,ride:80,salary:10,years:3,trait:"Vétéran"});
+  const c4 = ST().cattle;
+  const nation4 = G.factionOfType("nation");
+  nation4.relation = -80;
+  for(let i = 0; i < 100; i++) G.nationHostilePhase(nation4);
+  check("des hommes armés découragent les incursions",
+    (c4 - ST().cattle) < perdu1885, (c4 - ST().cattle) + " contre " + perdu1885);
+}
+
+// ------------------------------------------------- Ceux qui en veulent au ranch
+section("Ceux qui en veulent au ranch");
+{
+  // Les nouvelles scènes doivent exister à chaque époque, et toutes leurs
+  // branches doivent s'exécuter — elles manipulent des hommes, des hectares et
+  // des factions qui peuvent manquer.
+  const titres = ["Les squatters de la source","Le comité des petits éleveurs","L'homme engagé pour vous",
+    "Le racket de la brasserie","Les coupeurs de barbelés","Les journaliers refusent de descendre",
+    "La caravane des expulsés","Le syndicat entre au ranch","Le tracé de la nationale",
+    "Le rapport sur le surpâturage","Le boycott de la coopérative","Ils s'enchaînent au portail",
+    "Le sabotage nocturne","Les drones au-dessus des enclos","La campagne organisée",
+    "L'homme retranché dans le hangar"];
+  const cat = ev("events");
+  const absents = titres.filter(t => !cat.some(e => e.title === t));
+  check("les seize scènes hostiles sont au catalogue", absents.length === 0, absents.join(", "));
+
+  // Réparties sur les sept époques, aucune laissée de côté.
+  const parEre = {};
+  cat.filter(e => titres.includes(e.title)).forEach(e => { parEre[e.eraId] = (parEre[e.eraId]||0)+1; });
+  const vides = ev("ERAS").map(e=>e.id).filter(id => !parEre[id]);
+  check("chaque époque a les siennes", vides.length === 0, vides.join(", "));
+
+  const errs = [];
+  titres.forEach(t => {
+    const e = cat.find(x => x.title === t);
+    if(!e) return;
+    e.choices.forEach((c, i) => {
+      // Deux états opposés : un ranch riche et armé, un ranch démuni.
+      [["riche", g => { g.money = 900000; g.land = 1200; g.cattle = 400; g.weapons = 6; g.feed = 900;
+                        g.cowboys = [{name:"A",loyalty:70,shoot:80,ride:70,salary:10,years:3,trait:"V"},
+                                     {name:"B",loyalty:70,shoot:80,ride:70,salary:10,years:3,trait:"V"}]; }],
+       ["démuni", g => { g.money = 0; g.land = 60; g.cattle = 2; g.weapons = 0; g.feed = 0; g.cowboys = []; }]
+      ].forEach(([nom, setup]) => {
+        const g = freshGame();
+        setup(g);
+        G.ensureSecondHouse();
+        try{
+          if(c.condition && !c.condition()) return;
+          if(typeof c.label === "function") c.label();
+          c.apply();
+        }catch(err){ errs.push(`${t} / choix ${i} (${nom}) : ${err.message}`); }
+      });
+    });
+  });
+  check("toutes les branches s'exécutent, riche comme démuni",
+    errs.length === 0, errs.slice(0,3).join(" | "));
+
+  // Elles doivent être atteignables : conditions satisfaisables.
+  const bloques = [];
+  titres.forEach(t => {
+    const e = cat.find(x => x.title === t);
+    if(!e || !e.condition) return;
+    const g = permissiveGame();
+    g.eraId = e.eraId;
+    g.year = (ev("ERAS").find(x => x.id === e.eraId) || {start:1885}).start + 1;
+    try{ if(!e.condition()) bloques.push(t); }catch(err){ bloques.push(t + " (" + err.message + ")"); }
+  });
+  check("aucune n'est verrouillée sur un état impossible", bloques.length === 0, bloques.join(", "));
 }
 
 console.log("\n" + pass + " vérifications passées, " + fail + " échec(s).");

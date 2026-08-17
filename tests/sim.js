@@ -153,6 +153,9 @@ for(let run = 0; run < RUNS; run++){
   resolveModal(rng);
 
   let turns = 0;
+  if(process.env.WARLOG){ let was=false; const t=setInterval?null:null;
+    globalThis.__warTick = ()=>{ const w=ST().war; if(w&&!was){ globalThis.__WARS=(globalThis.__WARS||0)+1; } was=!!w; };
+  }
   if(process.env.ACTLOG){ const od=G.doAction; G.doAction=function(t){ const b=ST().actions; od(t); if(ST().actions<b) (globalThis.__ACTLOG=globalThis.__ACTLOG||[]).push(ST().year+":"+t); }; }
   while(!ST().gameOver && turns++ < 700){
     if(POLICY === "passive"){
@@ -317,6 +320,7 @@ for(let run = 0; run < RUNS; run++){
     }
 
     G.endTurn();
+    if(globalThis.__warTick) globalThis.__warTick();
     resolveModal(rng);
 
     if(process.env.TRACE && (process.env.TRACE === "all" || turns % 16 === 1)){
@@ -372,6 +376,7 @@ for(let run = 0; run < RUNS; run++){
 }
 
 if(process.env.ACTLOG){ const m={}; (globalThis.__ACTLOG||[]).forEach(x=>{const i=x.indexOf(':');(m[x.slice(0,i)]=m[x.slice(0,i)]||[]).push(x.slice(i+1))}); Object.keys(m).slice(0,26).forEach(y=>console.log(y, m[y].join(' ')));}
+if(process.env.WARLOG) console.log("guerres ouvertes :", globalThis.__WARS||0);
 console.log("Politique :", POLICY, "— départ :", $el("startMode").value,
             "— parties simulées :", RUNS, "— rendus d'interface :", uiCalls);
 const ys=summary.years.slice().sort((a,b)=>a-b);

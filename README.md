@@ -1,4 +1,4 @@
-# Ranch Dynasty — V4.6
+# Ranch Dynasty — V4.7
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -882,6 +882,130 @@ Trois de ces opérations — rachat de dette (900), procès de bornage (1 400),
 rachat aux enchères (4 500, en dollars de 1885) — comptent parmi les **plus
 grosses dépenses du jeu**, et deux d'entre elles rapportent des hectares.
 
+## Ce que vaut la puissance d'une maison
+
+`strength` ne servait qu'à une chose : la fréquence des raids nocturnes. On
+pouvait donc « affaiblir la maison rivale » pendant cent quarante et un ans sans
+jamais voir à quoi cela correspondait. Cinq effets lisibles maintenant :
+
+1. **Les raids** — fréquence et ampleur des incursions (déjà en place) ;
+2. **Le marché** — `houseMarketDrag()` : une maison forte qui vous hait détourne
+   les acheteurs, jusqu'à −7 % de revenus chaque trimestre ;
+3. **Les hommes** — elle débauche les vôtres, avec leur nom ;
+4. **La guerre** — c'est la statistique qui décide de la fusillade finale, et
+   la phase 3 l'affiche en clair : « vos hommes valent 90 au fusil ; les
+   Hargrove pèsent 60 » ;
+5. **Sa survie** — sous `HOUSE_BEND` (15) la maison plie, sous `HOUSE_BREAK` (8)
+   elle disparaît.
+
+Le panneau annonce la traduction du chiffre (`houseThreat()`) et les deux seuils.
+
+⚠️ **`houseMarketDrag()` a été calibré deux fois.** La première version
+(−18 % au plafond, dès −40 de relation) coûtait plus que tout le reste réuni :
+les deux maisons dérivent d'elles-mêmes vers l'hostilité, la pénalité était donc
+permanente, et la marge du ranch est mince par construction (revenu ≈ 3 $/tête,
+entretien ≈ 2,75 $/tête). Mesuré : patrimoine final divisé par deux et fin de
+partie médiane ramenée à 2001. Elle ne mord plus qu'au-delà de −40 de relation
+et plafonne à −7 %.
+
+## Détruire une maison
+
+Le juste milieu demandé : c'est possible, mais jamais gratuit, et jamais par
+accident.
+
+- `weakenHouse(h, n)` est le **seul** chemin des coups délibérés — opérations,
+  guerre, événements où le joueur frappe. Il tient le compte dans `h.hunted`.
+- ⚠️ **La dérive ordinaire ne passe pas par là et garde son plancher de 10**
+  (`houseFloor()`). Sans cette séparation, les deux maisons se broyaient l'une
+  l'autre toutes seules — la querelle `feudPhase()` leur retire 2 à 6 points par
+  an — s'effondraient sans que le joueur y soit pour rien, et emportaient sa
+  réputation au passage : mesuré à 4/100 en quatre-vingts trimestres.
+- Il faut `HOUSE_HUNTED` (30 points de coups portés) **et** une puissance sous 8
+  pendant deux ans pour que `breakHouse()` s'exécute.
+
+`breakHouse()` : le domaine gagne 60 à 180 hectares — puis −16 à −28 de
+réputation, +14 à +26 de soupçons, `legacy.greed += 3`, le voisinage et la loi
+qui se ferment, et une **vendetta** (`state.vendetta`) qui rôde le reste de la
+partie : bêtes égorgées sans rien emporter, coups de feu depuis la crête, le nom
+qui revient dans les conversations. `vendettaPhase()` la fait décroître sur
+quelques décennies, et un ranch bien gardé la tient à distance.
+
+Une vallée ne reste pas vide : une autre maison rachète ce qui restait, arrive
+hostile, et sait tout.
+
+## La guerre ouverte — trois phases
+
+Quand une maison passe sous −60 de relation avec au moins 30 de puissance, ce ne
+sont plus des incidents : `state.war` s'ouvre et se déroule en trois temps, tirés
+chacun d'un jeu de trois scènes pour qu'une seconde guerre ne soit pas la
+première.
+
+1. **Le premier sang** — la grange qui brûle, l'homme rendu à cheval, la
+   sommation clouée à la porte. On peut encore reculer : céder la bande
+   contestée met fin à la guerre, contre des hectares et de la réputation.
+   Porter plainte peut l'arrêter — selon la loi, la charge exercée et le nom.
+2. **L'escalade** — l'**enlèvement d'un enfant**, l'embuscade au défilé, l'homme
+   abattu au puits. Sur l'enlèvement : payer la rançon (et les armer), monter
+   une expédition avec les hommes qu'on a (l'enfant peut ne pas revenir), ou
+   attendre le marshal (l'enfant s'en souviendra).
+3. **Le règlement** — ils viennent au ranch, on chevauche chez eux, ou les deux
+   chefs se retrouvent seuls dans la rue. `warOdds()` oppose `ranchGunStrength()`
+   à la puissance de la maison, **affichée avant de décider**. Une victoire nette
+   sur une maison déjà affaiblie la brise sur place.
+
+La guerre n'utilise pas `ARCS` : les arcs sont uniques et exclusifs, une guerre
+doit pouvoir revenir, contre l'une ou l'autre maison, sans bloquer le fil
+narratif en cours.
+
+⚠️ **`maybeOpenWar()` tourne à chaque trimestre**, les trois trimestres
+enchaînés d'une année comprise. Une probabilité qui a l'air modeste donne
+quarante guerres par partie : la première version (plafond 30 %) en produisait
+4,2 par partie et ramenait la fin médiane de 2027 à 1904. Le plafond est à
+**0,8 %**, pour une à deux guerres en cent quarante et un ans, et le délai entre
+deux est de 40 à 80 trimestres.
+
+⚠️ **Les pertes de terres sont proportionnelles** (`warLandLoss(part, min, max)`).
+Un forfait fixe était dérisoire pour un empire et fatal pour un début.
+
+## La nation ashkani — quatre postures
+
+Le grief ne change pas : la cession de 1871 a été signée sous la contrainte, et
+le domaine est planté dessus. Ce qui change, c'est ce qu'ils peuvent en faire.
+`NATION_PHASES` associe une posture à chaque époque, `nationHostilePhase()` la
+joue.
+
+| Époque | Posture | Ce que ça fait |
+|---|---|---|
+| 1885–1919 | **Guerre de frontière** | 6 à 18 bêtes rabattues en plein jour, camps de piste attaqués (hommes tués), meules brûlées et clôtures à terre. Jusqu'à 34 % de chances par trimestre. |
+| 1920–1932 | **L'étau** | L'allotement les serre : campements qui ne bougent pas, bêtes abattues et débitées sur place. |
+| 1933–1945 | **Le dossier** | Rien ne se passe — et c'est le sujet : un jeune homme photographie et fait parler les anciens. La revendication monte deux fois plus vite. |
+| 1946–2026 | **Le prétoire** | Plus une bête touchée : des frais d'avocat, et un dossier qui grossit. |
+
+La Fondation est donc devenue la posture la plus dangereuse du jeu, ce qu'elle
+aurait dû être depuis le début. Un domaine gardé — `ranchGunStrength()` et les
+enfants affectés à la sécurité — encaisse nettement moins.
+
+## Ceux qui en veulent au ranch
+
+Un ranch n'a pas qu'une maison rivale en face. **Seize scènes réparties sur les
+sept époques**, où quelqu'un vient chercher la famille — au fusil en 1885, en
+justice en 2020 :
+
+- **Fondation** : les squatters de la source, le comité des petits éleveurs
+  (quarante hommes contre six fusils), l'homme engagé pour vous ;
+- **Prohibition** : le racket de la brasserie (armes automatiques), les coupeurs
+  de barbelés ;
+- **Dépression** : les journaliers qui refusent de descendre, la caravane des
+  expulsés ;
+- **Après-guerre** : le syndicat qui entre au ranch, le tracé de la nationale ;
+- **Années 70-80** : le rapport sur le surpâturage, le boycott de la coopérative ;
+- **Mondialisation** : les militants enchaînés au portail, le sabotage nocturne ;
+- **Aujourd'hui** : les drones au-dessus des enclos, la campagne de dénigrement
+  organisée, l'homme retranché dans le hangar.
+
+Chacune offre trois issues, et plusieurs se règlent au fusil : `ranchGunStrength()`
+décide, `hurtCowboys()` et `casualtyLine()` paient l'addition en visages.
+
 ## Le concours équestre, une fois par tour
 
 ⚠️ Avec 8 actions par année, le concours était devenu **la meilleure affaire du
@@ -920,6 +1044,12 @@ chargement et à l'import. **Toute nouvelle propriété de `state` doit y être 
   l'échelle de l'époque). `presentEvent` doit le passer par `evalField` : sans
   cela le bouton affiche le code source de la fonction. Un test balaie tous les
   événements pour s'en assurer.
+- ⚠️ **Toute mesure d'une jauge sur la durée doit neutraliser QUATRE sources**,
+  pas trois : les événements (`state.eventModifier = 0`), les arcs
+  (`state.arcCooldown = 99999`), les brèves (vider `BRIEFS`) — et désormais la
+  **guerre ouverte** (`state.warCooldown = 99999`), dont les trois phases
+  déplacent réputation, hectares, bétail et hommes. Le test d'érosion de la
+  réputation est tombé une quatrième fois sur exactement ce motif.
 - ⚠️ **Un arc qui désigne une personne doit la retrouver par un accesseur, pas
   refiltrer la liste.** Une année complète s'écoule entre l'ouverture d'un arc
   et la réponse du joueur : l'enfant repéré par `canStart()` peut avoir vieilli
@@ -934,13 +1064,13 @@ chargement et à l'import. **Toute nouvelle propriété de `state` doit y être 
 
 Courbe mesurée sur 30 parties par profil (`node tests/sim.js index.html 30 <profil>`) :
 
-| Profil | Fin médiane | Tours | Trésorerie finale* | Terres | Troupeau |
-|---|---|---|---|---|---|
-| `passive` | 1893 | 9 | 763 | 220 | 33 |
-| `outlaw` | 1976 | 100 | 37 681 | 2 775 | 1 067 |
-| `honest` | 2026 | 142 | 382 555 | 4 057 | 1 425 |
-| `mixed` | 2026 | 142 | 251 968 | 2 547 | 933 |
-| `policy` | 2026 | 142 | 254 418 | 4 392 | 1 543 |
+| Profil | Fin médiane | Tours | Trésorerie finale* | Chutes après 1950 |
+|---|---|---|---|---|
+| `passive` | 1892 | 9 | 479 | — |
+| `outlaw` | 1951 | 66 | 3 541 | 10 / 25 |
+| `mixed` | 2026 | 142 | 256 364 | 2 / 7 |
+| `policy` | 2026 | 142 | 313 211 | 3 / 8 |
+| `honest` | 2026 | 142 | 316 460 | 3 / 13 |
 
 \* en dollars de 1885, seule façon de comparer d'une époque à l'autre.
 
@@ -1093,9 +1223,12 @@ profils : il compare facilement deux versions du fichier
 - **La chute d'une dynastie établie vient encore presque toujours de la banque** ;
   le partage successoral et l'expropriation fiscale se déclenchent moins souvent
   qu'ils ne le devraient
-- **Les opérations contre une maison rivale ne changent pas son comportement** :
-  une maison saignée à répétition devrait finir par plier, s'allier, ou partir —
-  elle se contente de perdre des points de puissance
+- **La vendetta ne se combat pas** : elle s'exerce, elle décroît, mais le joueur
+  n'a aucune action pour aller la chercher — retrouver le survivant, l'acheter,
+  ou faire la paix avec lui manquerait moins s'il avait un nom qu'on voit
+- **La guerre ouverte ne peut pas être déclenchée par le joueur** : on la subit
+  quand la relation s'effondre, alors que déclarer la guerre soi-même après
+  quinze ans d'opérations serait la conclusion logique du panneau « nuire »
 - **Les ouvrages bâtis ne se voient nulle part** hors du panneau : ils
   mériteraient une trace sur la carte du domaine et dans l'épilogue
 - **La carrière politique se joue rarement en entier** : atteindre le
