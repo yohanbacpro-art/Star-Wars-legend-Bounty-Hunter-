@@ -336,6 +336,10 @@ for(let run = 0; run < RUNS; run++){
     }
   }
 
+  if(process.env.CRISLOG){ globalThis.__CRIS=globalThis.__CRIS||{};
+    (ST().crisesDone||[]).forEach(id=>globalThis.__CRIS[id]=(globalThis.__CRIS[id]||0)+1);
+    globalThis.__SIEGE=Math.max(globalThis.__SIEGE||0, Math.round(ST().siege||0)); }
+
   // Sauvegarde / rechargement en fin de partie
   G.saveGame();
   const before = JSON.stringify(ST());
@@ -377,6 +381,7 @@ for(let run = 0; run < RUNS; run++){
 
 if(process.env.ACTLOG){ const m={}; (globalThis.__ACTLOG||[]).forEach(x=>{const i=x.indexOf(':');(m[x.slice(0,i)]=m[x.slice(0,i)]||[]).push(x.slice(i+1))}); Object.keys(m).slice(0,26).forEach(y=>console.log(y, m[y].join(' ')));}
 if(process.env.WARLOG) console.log("guerres ouvertes :", globalThis.__WARS||0);
+if(process.env.CRISLOG) console.log("crises de famille :", globalThis.__CRIS||{}, "| sièges max :", globalThis.__SIEGE||0);
 console.log("Politique :", POLICY, "— départ :", $el("startMode").value,
             "— parties simulées :", RUNS, "— rendus d'interface :", uiCalls);
 const ys=summary.years.slice().sort((a,b)=>a-b);

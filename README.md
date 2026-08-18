@@ -1,4 +1,4 @@
-# Ranch Dynasty — V4.7
+# Ranch Dynasty — V5.0
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -1006,6 +1006,82 @@ justice en 2020 :
 Chacune offre trois issues, et plusieurs se règlent au fusil : `ranchGunStrength()`
 décide, `hurtCowboys()` et `casualtyLine()` paient l'addition en visages.
 
+## Les choix impossibles — le conseil de famille
+
+Tout le reste du jeu se joue contre l'extérieur : la banque, le comté, la maison
+d'en face, le fisc, les promoteurs. Il manquait ce qui déchire réellement les
+dynasties, et qui n'a rien à voir avec l'argent.
+
+`FAMILY_CRISES` — **dix crises, trois issues chacune, aucune bonne**. C'est la
+règle du catalogue, et un test la fait respecter : chaque issue porte un champ
+`cost` décrivant ce qu'elle coûte d'irréversible, et **le test échoue si une
+branche est vide**.
+
+| Crise | Ce qu'il faut trancher |
+|---|---|
+| Ce que votre fils a fait | Le livrer (il est pendu), le couvrir (le mensonge à porter), prendre sa place (le chef de famille y reste) |
+| Le médecin n'a qu'une dose | Deux malades, un remède. Le troisième choix les tue peut-être tous les deux |
+| Un ranch, deux héritiers | Choisir, c'est perdre l'autre. Ne pas choisir, c'est perdre le domaine |
+| L'enfant qui sait | L'acheter, tout avouer publiquement, ou le briser devant les autres |
+| Le vieux ne lâche rien | L'écarter (il n'y survit pas), attendre (l'héritier s'en va), commander à deux |
+| Ce qu'il vous demande | Le patriarche demande qu'on l'aide à mourir |
+| La part que votre frère a vendue | Racheter, plaider, ou vivre avec un actionnaire dans la maison |
+| Le ranch ou moi | L'ultimatum du conjoint |
+| L'accident qu'on peut taire | Un héritier a renversé quelqu'un de nuit |
+| La branche qui fait sécession | Refuser, céder 38 % du domaine, ou tout donner à celui qui menaçait |
+
+Quatre d'entre elles peuvent **tuer une personne nommée de la maison** par la
+décision du joueur. `killKin()` et `exileKin()` inscrivent le nom dans la
+chronique et l'épilogue.
+
+Elles ne passent pas par `events` : file propre (`state.crisis`), une seule à la
+fois, jamais deux fois la même, et **dix ans minimum entre deux** (`CRISIS_GAP`).
+Une maison divisée s'en attire trois fois plus qu'une maison unie — c'est le seul
+levier du joueur dessus. Mesuré : les dix crises se déclenchent sur trente
+parties simulées.
+
+## La scission — deux fois le même nom
+
+Le pire résultat du conseil de famille. `splitFamily()` : la branche dissidente
+part avec **38 % des terres, 38 % du troupeau et 30 % de la caisse**, et devient
+une **maison rivale qui porte votre propre nom**.
+
+Elle remplace la plus faible des deux maisons d'en face, ce qui retourne contre
+vous toute la mécanique construite en V4.6 et V4.7 — raids, puissance, panneau
+« nuire », guerre ouverte — avec vos propres cousins dedans. Et elle compte comme
+force du siège final.
+
+## Le dernier assaut — 2012 à 2026
+
+La dernière décennie était la plus calme du jeu : le domaine bâti, la caisse
+pleine, quinze clics à faire. Or c'est le moment où les grands ranchs tombent
+réellement — pas sous un coup, mais sous la convergence de tout ce qui les vise
+en même temps.
+
+`state.siege` monte chaque année. `siegeForces()` rend la liste des forces, et le
+bandeau d'alertes les affiche nommément **des années à l'avance** :
+
+- **ce qui pousse** : appétit des promoteurs, revendication foncière, pouvoirs
+  locaux hostiles, enquête sur la charge exercée, dette bancaire, maison divisée,
+  soupçons accumulés, une branche de la famille contre vous ;
+- **ce qui retient** : un nom qu'on n'attaque pas, la charge exercée, les terres
+  classées en réserve, les pouvoirs locaux acquis, une maison qui parle d'une
+  seule voix.
+
+Trois épreuves échelonnées (`SIEGE_TRIALS`) s'ouvrent aux paliers 25, 45 et 65 :
+le classement en zone constructible, la coupure d'eau, et la coalition — où le
+choix « tout ouvrir : registres, comptes, archives » ne se joue pas au hasard
+mais sur `legacy.honor` contre `legacy.greed`, c'est-à-dire sur cent quarante ans
+de décisions.
+
+**À 100, le préfet signe la déclaration d'utilité publique** et la partie s'arrête
+là. Mesuré : 5 parties sur 40 en jeu compétent.
+
+S'y ajoutent quatre événements de fin de partie plus durs que tout le reste : la
+classe d'action de quatre cents riverains, le fonds de pension qui rachète vos
+prêteurs, l'incendie de l'été (les pompiers protègent le lotissement d'abord),
+et le référendum local.
+
 ## Le concours équestre, une fois par tour
 
 ⚠️ Avec 8 actions par année, le concours était devenu **la meilleure affaire du
@@ -1044,12 +1120,13 @@ chargement et à l'import. **Toute nouvelle propriété de `state` doit y être 
   l'échelle de l'époque). `presentEvent` doit le passer par `evalField` : sans
   cela le bouton affiche le code source de la fonction. Un test balaie tous les
   événements pour s'en assurer.
-- ⚠️ **Toute mesure d'une jauge sur la durée doit neutraliser QUATRE sources**,
+- ⚠️ **Toute mesure d'une jauge sur la durée doit neutraliser CINQ sources**,
   pas trois : les événements (`state.eventModifier = 0`), les arcs
   (`state.arcCooldown = 99999`), les brèves (vider `BRIEFS`) — et désormais la
-  **guerre ouverte** (`state.warCooldown = 99999`), dont les trois phases
-  déplacent réputation, hectares, bétail et hommes. Le test d'érosion de la
-  réputation est tombé une quatrième fois sur exactement ce motif.
+  **guerre ouverte** (`state.warCooldown = 99999`) et les **crises de famille**
+  (`state.crisisCooldown = 99999`), qui déplacent réputation, hectares, bétail,
+  hommes — et tuent des personnes nommées. Le test d'érosion de la réputation
+  est tombé quatre fois sur exactement ce motif, une fois par système ajouté.
 - ⚠️ **Un arc qui désigne une personne doit la retrouver par un accesseur, pas
   refiltrer la liste.** Une année complète s'écoule entre l'ouverture d'un arc
   et la réponse du joueur : l'enfant repéré par `canStart()` peut avoir vieilli
@@ -1064,13 +1141,13 @@ chargement et à l'import. **Toute nouvelle propriété de `state` doit y être 
 
 Courbe mesurée sur 30 parties par profil (`node tests/sim.js index.html 30 <profil>`) :
 
-| Profil | Fin médiane | Tours | Trésorerie finale* | Chutes après 1950 |
-|---|---|---|---|---|
-| `passive` | 1892 | 9 | 479 | — |
-| `outlaw` | 1951 | 66 | 3 541 | 10 / 25 |
-| `mixed` | 2026 | 142 | 256 364 | 2 / 7 |
-| `policy` | 2026 | 142 | 313 211 | 3 / 8 |
-| `honest` | 2026 | 142 | 316 460 | 3 / 13 |
+| Profil | Fin médiane | Trésorerie finale* | Fins observées sur 40 parties |
+|---|---|---|---|
+| `passive` | 1891 | 629 | faillite quasi certaine |
+| `outlaw` | 1915 | 697 | faillite, saisie fiscale |
+| `mixed` | 2026 | 132 181 | — |
+| `honest` | 2026 | 123 195 | — |
+| `policy` | 2020 | 146 239 | 12× 2026, 8× dernier troupeau, 7× fin de lignée, **5× utilité publique**, 4× faillite, 4× vendu, 3× saisie fiscale |
 
 \* en dollars de 1885, seule façon de comparer d'une époque à l'autre.
 
@@ -1186,6 +1263,8 @@ sans aucune dépendance :
 # arcs, rival incarné, tournants d'époque, carte du domaine.
 # variété du catalogue, arcs d'époque, triangle, absence d'impasse.
 # doctrines couplées aux arcs, siège et mariage rival.
+# guerre ouverte en trois phases, chute d'une maison, nation ashkani.
+# choix impossibles, scission de la famille, dernier assaut.
 # chronique de la saga, tournant fondateur.
 # export de la chronique, variantes de départ.
 # affaires d'époque, fiscalité, escouade, revendication foncière, pègre.
@@ -1197,7 +1276,7 @@ sans aucune dépendance :
 # vues du domaine, motifs et scènes, vue d'hiver réservée au froid.
 # troisième génération, lien parent stable, ordre de succession.
 # carte du domaine en photographies, cadrage par parcelle.
-# 783 vérifications, sortie non nulle en cas d'échec.
+# 931 vérifications, sortie non nulle en cas d'échec.
 node tests/scenarios.js index.html
 
 # Simulation de masse.
@@ -1217,32 +1296,27 @@ profils : il compare facilement deux versions du fichier
 
 ## Pistes ouvertes
 
-- Quelques objectifs restent des jalons plus que des défis (`united`, `oldHand`
-  sont atteints par ~98 % des parties bien menées)
+Le jeu est complet à la V5.0 : sept époques, 141 ans, et chaque système a son
+contrepoids. Ce qui suit n'est plus une liste de manques, mais ce qu'on ferait
+si l'on repartait dessus.
 
-- **La chute d'une dynastie établie vient encore presque toujours de la banque** ;
-  le partage successoral et l'expropriation fiscale se déclenchent moins souvent
-  qu'ils ne le devraient
-- **La vendetta ne se combat pas** : elle s'exerce, elle décroît, mais le joueur
-  n'a aucune action pour aller la chercher — retrouver le survivant, l'acheter,
-  ou faire la paix avec lui manquerait moins s'il avait un nom qu'on voit
-- **La guerre ouverte ne peut pas être déclenchée par le joueur** : on la subit
-  quand la relation s'effondre, alors que déclarer la guerre soi-même après
-  quinze ans d'opérations serait la conclusion logique du panneau « nuire »
-- **Les ouvrages bâtis ne se voient nulle part** hors du panneau : ils
-  mériteraient une trace sur la carte du domaine et dans l'épilogue
-- **La carrière politique se joue rarement en entier** : atteindre le
-  gouvernorat demande trois échelons et plusieurs générations, ce qu'une partie
-  ordinaire ne produit pas. Les objectifs `governor` et `cleanPower` sont
-  vérifiés directement plutôt qu'atteints en simulation
-- **L'ère de la Dépression reste la plus maigre** (5 événements propres), pour
-  la même raison que la Fondation l'était
-- Le départ `established` est nettement plus clément que les deux autres : il
-  mériterait sa propre difficulté, ou un handicap compensatoire (dettes du
-  prédécesseur, rancune héritée)
-- Les maisons rivales **réagissent** mais ne planifient jamais : un rival qui
-  poursuivrait un projet sur vingt ans changerait beaucoup
-- Une galerie des dynasties tombées plutôt qu'une seule entrée `LEGACY_KEY`,
-  pour choisir quel nom relever
-- Faire peser `state.plus` sur la partie elle-même (le comté se souvient des
-  familles qui ont déjà échoué deux fois)
+- **La vendetta n'a pas de visage** : elle s'exerce et décroît, mais le survivant
+  d'une maison effacée n'a ni nom affiché ni panneau. Le retrouver, l'acheter ou
+  faire la paix avec lui serait la suite naturelle
+- **On ne peut pas déclarer la guerre** : on la subit quand la relation
+  s'effondre, alors que la déclarer après quinze ans d'opérations serait la
+  conclusion logique du panneau « nuire »
+- **Les crises de famille ne se rejouent jamais** : dix crises pour 141 ans, une
+  seule fois chacune. Des variantes par époque — la même déchirure en 1890 et en
+  2010 — doubleraient leur durée de vie
+- **La branche dissidente ne se réconcilie pas** : une fois scindée, la famille
+  reste scindée. Un mariage entre cousins, un retour au bercail, un rachat de la
+  branche manquent
+- **Les ouvrages bâtis ne se voient pas sur la carte du domaine** ni dans
+  l'épilogue autrement qu'en liste
+- **La chute d'une dynastie établie vient encore souvent de la banque** ; le
+  partage successoral se déclenche moins souvent qu'il ne le devrait
+- **L'ère de la Dépression reste la plus maigre** en événements propres
+- Le départ `established` est plus clément que les deux autres : il mériterait
+  sa propre difficulté
+- Une galerie des dynasties tombées plutôt qu'une seule entrée `LEGACY_KEY`

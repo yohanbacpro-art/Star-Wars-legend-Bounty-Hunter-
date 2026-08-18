@@ -143,8 +143,11 @@ function permissiveVariants(){
             s.land = 2200; s.money = 20000000;
             s.developer = {name:"Meridian Land Partners", what:"un fonds", pressure:20, since:2012, refusals:0};
             return s; },
+    // Un domaine assiégé de toutes parts : c'est l'état qui ouvre les épreuves
+    // et les événements de la dernière décennie.
     () => { const s = permissiveGame(); s.year = 2022; s.eraId = "modern"; s.costModifier = 16;
             s.land = 3000; s.money = 40000000; s.suspicion = 50; s.claimPressure = 25;
+            s.siege = 55;
             s.developer = {name:"Caldera Resorts", what:"un groupe hôtelier", pressure:85, since:2011, refusals:2};
             return s; },
     () => { const s = permissiveGame(); s.year = 1998; s.eraId = "globalization"; s.land = 1400;
@@ -4573,6 +4576,247 @@ section("Ceux qui en veulent au ranch");
     try{ if(!e.condition()) bloques.push(t); }catch(err){ bloques.push(t + " (" + err.message + ")"); }
   });
   check("aucune n'est verrouillée sur un état impossible", bloques.length === 0, bloques.join(", "));
+}
+
+
+// ------------------------------------------------- Les choix impossibles
+section("Les choix impossibles");
+{
+  const cat = ev("FAMILY_CRISES");
+  check("dix crises de famille au moins", cat.length >= 10, cat.length);
+  check("identifiants uniques", new Set(cat.map(c=>c.id)).size === cat.length);
+
+  const bad = [];
+  cat.forEach(c => {
+    ["id","title","art","image"].forEach(f => { if(!c[f]) bad.push(c.id + " sans " + f); });
+    ["canStart","who","text"].forEach(f => { if(typeof c[f] !== "function") bad.push(c.id + " sans " + f); });
+    if(!Array.isArray(c.choices) || c.choices.length < 3) bad.push(c.id + " a moins de trois issues");
+    // LA RÈGLE DU CATALOGUE : aucune issue n'a le droit d'être gratuite.
+    (c.choices||[]).forEach((ch,i) => {
+      if(!ch.cost) bad.push(c.id + " : l'issue " + i + " ne coûte rien");
+      if(typeof ch.apply !== "function") bad.push(c.id + " : l'issue " + i + " n'agit pas");
+    });
+  });
+  check("chaque crise a trois issues, toutes décrites et toutes coûteuses",
+    bad.length === 0, bad.slice(0,4).join(" | "));
+
+  // Chaque crise doit pouvoir s'ouvrir sur un état de famille plausible, et
+  // chacune de ses branches s'exécuter sans planter.
+  const errs = [];
+  const jamais = [];
+  cat.forEach(c => {
+    // Un état de maison riche en personnes : c'est ce que les crises exigent.
+    const setup = () => {
+      const g = freshGame();
+      g.money = 900000; g.land = 1200; g.cattle = 400; g.unity = 30;
+      g.suspicion = 45; g.legacy.greed = 4; g.legacy.honor = 1;
+      g.year = 1980; g.eraId = "corporate";
+      g.founder.age = 78; g.founder.health = 40;
+      g.children = [];
+      addAdult(g, "Aîné", {age:44, ambition:80, resentment:65});
+      addAdult(g, "Cadet", {age:38, ambition:70, resentment:40});
+      G.addChild("Benjamin", {age:15, health:100});
+      G.ensureSecondHouse();
+      return g;
+    };
+    const g0 = setup();
+    let ok = false;
+    try{ ok = c.canStart() && !!c.who(); }catch(e){ errs.push(c.id + " canStart : " + e.message); }
+    if(!ok){ jamais.push(c.id); return; }
+    c.choices.forEach((ch, i) => {
+      setup();
+      let sujet = null;
+      try{ sujet = c.who(); }catch(e){ errs.push(c.id + "/" + i + " who : " + e.message); return; }
+      try{ if(typeof c.text === "function") c.text(sujet); }catch(e){ errs.push(c.id + "/" + i + " texte : " + e.message); }
+      try{ if(typeof ch.label === "function") ch.label(sujet); }catch(e){ errs.push(c.id + "/" + i + " libellé : " + e.message); }
+      try{ if(ch.condition && !ch.condition()) return; }catch(e){ errs.push(c.id + "/" + i + " condition : " + e.message); return; }
+      try{ ch.apply(sujet); }catch(e){ errs.push(c.id + "/" + i + " : " + e.message); }
+    });
+  });
+  check("toutes les branches de toutes les crises s'exécutent", errs.length === 0, errs.slice(0,4).join(" | "));
+  check("chaque crise s'ouvre sur une maison plausible", jamais.length <= 2, jamais.join(", "));
+
+  // Le libellé doit citer la personne : c'est ce qui rend le choix insoutenable.
+  {
+    const g = freshGame();
+    g.children = [];
+    addAdult(g, "Aîné", {age:40, ambition:80});
+    addAdult(g, "Cadet", {age:35, ambition:60});
+    const c = cat.find(x => x.id === "twoHeirs");
+    const h = c.who();
+    check("le choix entre deux héritiers les nomme",
+      /Aîné/.test(c.choices[0].label(h)) && /Cadet/.test(c.choices[1].label(h)),
+      c.choices[0].label(h));
+  }
+
+  // La file : une seule à la fois, jamais deux fois la même.
+  {
+    const g = freshGame();
+    g.unity = 25; g.turn = 200; g.crisisCooldown = 0;
+    g.children = [];
+    addAdult(g, "Aîné", {age:40, ambition:80, resentment:70});
+    addAdult(g, "Cadet", {age:35, ambition:60, resentment:50});
+    let opened = 0;
+    for(let i = 0; i < 200 && !ST().crisis; i++){ G.maybeStartCrisis(); if(ST().crisis) opened++; }
+    check("une crise finit par s'ouvrir sur une maison divisée", opened === 1, opened);
+    const id = ST().crisis.id;
+    G.maybeStartCrisis();
+    check("une seule crise à la fois", ST().crisis.id === id);
+    G.closeCrisis(id);
+    check("la crise close est enregistrée", (ST().crisesDone||[]).indexOf(id) >= 0);
+    check("et un long délai court avant la suivante",
+      ST().crisisCooldown >= ST().turn + 40, ST().crisisCooldown - ST().turn);
+    ST().crisisCooldown = 0;
+    let same = 0;
+    for(let i = 0; i < 400; i++){ ST().crisis = null; G.maybeStartCrisis(); if(ST().crisis && ST().crisis.id === id) same++; }
+    check("jamais deux fois la même crise", same === 0, same);
+  }
+
+  // Une maison unie en essuie moins qu'une maison divisée.
+  {
+    const mesure = (unity) => {
+      const g = freshGame();
+      g.unity = unity; g.turn = 500;
+      g.children = [];
+      addAdult(g, "Aîné", {age:40, ambition:80, resentment:70});
+      addAdult(g, "Cadet", {age:35, ambition:60, resentment:50});
+      let n = 0;
+      for(let i = 0; i < 3000; i++){ ST().crisis = null; ST().crisisCooldown = 0; G.maybeStartCrisis(); if(ST().crisis) n++; }
+      return n;
+    };
+    const divisee = mesure(25), unie = mesure(90);
+    check("une maison divisée s'attire plus de crises", divisee > unie * 1.5,
+      divisee + " contre " + unie + " sur 3000 essais");
+  }
+}
+
+// ------------------------------------------------- La scission
+section("La scission de la famille");
+{
+  const s = freshGame();
+  s.land = 1000; s.cattle = 400; s.money = 100000;
+  s.children = [];
+  addAdult(s, "Dissident", {age:40, ambition:90, resentment:80});
+  addAdult(s, "Fidèle", {age:35, ambition:40, resentment:10});
+  G.ensureSecondHouse();
+  const land0 = ST().land, cattle0 = ST().cattle, kids0 = ST().children.length;
+  const dissident = ST().children.find(c => c.name === "Dissident");
+  G.splitFamily(dissident, "test");
+
+  check("la branche part avec une part du domaine", ST().land < land0, land0 + " → " + ST().land);
+  check("et une part du troupeau", ST().cattle < cattle0, cattle0 + " → " + ST().cattle);
+  check("elle quitte la maisonnée", ST().children.length === kids0 - 1);
+  check("elle devient une maison rivale",
+    G.rivalHouses().some(h => h.kin === true));
+  check("qui porte votre propre nom",
+    G.rivalHouses().some(h => h.kin && h.name === ST().familyName), ST().familyName);
+  check("menée par le dissident",
+    G.rivalHouses().some(h => h.kin && h.leader && h.leader.name === "Dissident"));
+  check("et qui vous en veut", G.rivalHouses().find(h=>h.kin).relation < 0);
+  check("il reste deux maisons en face", G.rivalHouses().length === 2);
+  check("l'unité s'effondre", ST().unity < 100);
+  check("la scission est comptée", ST().familySplit === 1);
+
+  // La branche dissidente doit se comporter comme n'importe quelle maison :
+  // c'est tout l'intérêt de la faire passer par le même système.
+  const branche = G.rivalHouses().find(h => h.kin);
+  branche.relation = -80; branche.strength = 60;
+  ST().rivalTarget = 0;
+  check("on peut lui nuire comme aux autres", G.rivalOps().length > 0);
+  const avant = branche.strength;
+  G.weakenHouse(branche, 15);
+  check("et l'affaiblir", branche.strength === avant - 15, branche.strength);
+}
+
+// ------------------------------------------------- Le dernier assaut
+section("Le dernier assaut");
+{
+  const s = freshGame();
+  s.year = 2000;
+  check("le siège n'existe pas avant 2012", G.siegeActive() === false);
+  s.year = 2015;
+  check("il court à partir de 2012", G.siegeActive() === true);
+
+  // Ce qui pousse et ce qui retient sont tous deux nommés.
+  const s2 = freshGame();
+  s2.year = 2016; s2.eraId = "modern";
+  s2.unity = 20; s2.suspicion = 70; s2.debt = 5000;
+  s2.reputation = 10;
+  (s2.factions||[]).forEach(f => f.relation = -60);
+  G.ensureDeveloper(); if(ST().developer) ST().developer.pressure = 70;
+  const f1 = G.siegeForces();
+  check("les forces qui poussent sont nommées", f1.pour.length >= 3, f1.pour.map(x=>x.label).join(", "));
+  const avant = ST().siege || 0;
+  G.siegePhase();
+  check("et le siège monte", (ST().siege||0) > avant, (ST().siege||0).toFixed(1));
+
+  // Une maison irréprochable le fait redescendre.
+  const s3 = freshGame();
+  s3.year = 2016; s3.eraId = "modern";
+  s3.unity = 90; s3.suspicion = 0; s3.reputation = 100; s3.debt = 0;
+  s3.protectedLand = 400;
+  (s3.factions||[]).forEach(f => f.relation = 70);
+  s3.politics = {office:"governor", scrutiny:0, terms:1};
+  ST().siege = 50;
+  const f2 = G.siegeForces();
+  check("ce qui retient est nommé aussi", f2.contre.length >= 3, f2.contre.map(x=>x.label).join(", "));
+  G.siegePhase();
+  check("une maison irréprochable fait redescendre le siège", (ST().siege||0) < 50, (ST().siege||0).toFixed(1));
+
+  // Les trois épreuves, dans l'ordre, chacune une seule fois.
+  const trials = ev("SIEGE_TRIALS");
+  check("trois épreuves échelonnées", trials.length === 3);
+  check("elles montent en difficulté",
+    trials[0].at < trials[1].at && trials[1].at < trials[2].at,
+    trials.map(t=>t.at).join(" < "));
+
+  const errs = [];
+  trials.forEach(t => {
+    t.choices.forEach((ch, i) => {
+      [["riche", 9000000], ["démuni", 0]].forEach(([nom, argent]) => {
+        const g = freshGame();
+        g.year = 2018; g.eraId = "modern"; g.money = argent;
+        g.land = 2000; g.cattle = 800; g.siege = t.at;
+        G.ensureDeveloper();
+        try{
+          if(typeof t.text === "function") t.text();
+          if(typeof ch.label === "function") ch.label();
+          if(ch.condition && !ch.condition()) return;
+          ch.apply();
+        }catch(e){ errs.push(`${t.id}/${i} (${nom}) : ${e.message}`); }
+      });
+    });
+  });
+  check("toutes les branches des épreuves s'exécutent", errs.length === 0, errs.slice(0,3).join(" | "));
+
+  // L'épreuve s'ouvre au bon palier, une seule fois.
+  const s4 = freshGame();
+  s4.year = 2018; s4.eraId = "modern"; s4.money = 900000; s4.siege = 10;
+  check("sous le premier palier, rien ne s'ouvre", G.maybeShowSiegeTrial() === false);
+  ST().siege = 30;
+  check("au premier palier, l'épreuve s'ouvre", G.maybeShowSiegeTrial() === true);
+  check("le panneau s'affiche", !$el("eventModal")._classes.has("hidden"));
+  check("elle ne se rejoue pas", G.maybeShowSiegeTrial() === false);
+
+  // La fin par expropriation.
+  const s5 = freshGame();
+  s5.year = 2020; s5.eraId = "modern"; s5.siege = 99;
+  check("à 99, la partie continue", G.checkSiegeEnd() === false);
+  ST().siege = 100;
+  check("à 100, le comté exproprie", G.checkSiegeEnd() === true);
+  check("et la partie s'arrête", ST().gameOver === true);
+  check("avec sa propre fin", $el("eventTitle").textContent === "Déclaré d'utilité publique",
+    $el("eventTitle").textContent);
+
+  // Rien n'arrive par surprise : le bandeau d'alertes le dit des années avant.
+  const s6 = freshGame();
+  s6.year = 2016; s6.eraId = "modern"; s6.siege = 40;
+  const al = G.alarms();
+  check("le siège figure au bandeau d'alertes", al.some(a => /visé/.test(a.title)),
+    al.map(a=>a.title).join(" | "));
+  const ligne = al.find(a => /visé/.test(a.title));
+  check("il dit ce qui pousse et ce qui retient",
+    /pousse/.test(ligne.what) && /retient/.test(ligne.what));
 }
 
 console.log("\n" + pass + " vérifications passées, " + fail + " échec(s).");

@@ -4076,6 +4076,808 @@ function warReckoning(scene, h){
   };
 }
 
+// ============================================================================
+// LES CHOIX IMPOSSIBLES — LE CONSEIL DE FAMILLE
+// ----------------------------------------------------------------------------
+// Tout le reste du jeu se joue contre l'extérieur : la banque, le comté, la
+// maison d'en face, le fisc, les promoteurs. Il manquait ce qui déchire
+// réellement les dynasties, et qui n'a rien à voir avec l'argent : ce qu'on se
+// fait entre soi.
+//
+// Une crise de famille n'a PAS de bonne issue. C'est la règle du catalogue :
+// chaque branche coûte quelque chose d'irréversible — un nom rayé de la lignée,
+// une part du domaine, la réputation, ou quelqu'un qui meurt. Un test refuse
+// toute crise dont une branche serait gratuite.
+//
+// Elles ne passent pas par `events` : elles ont leur propre file, leur propre
+// délai, et elles priment sur l'événement du trimestre. Une seule à la fois,
+// jamais deux fois la même, et jamais moins de dix ans entre deux.
+// ============================================================================
+
+// ---- Les outils de la famille ----
+function livingKin(){
+  const out = [];
+  if(state.founder && state.founder.alive !== false) out.push(state.founder);
+  if(state.spouse && state.spouse.alive !== false) out.push(state.spouse);
+  (state.children||[]).forEach(c => { if(c.alive !== false) out.push(c); });
+  return out;
+}
+// Faire mourir quelqu'un de la maison, nommément, et laisser une trace.
+function killKin(p, why, motif){
+  if(!p || p.alive === false) return;
+  p.alive = false;
+  if(state.heirId === p.cid) state.heirId = null;
+  state.unity = clamp(state.unity - rand(10,20));
+  recordSaga("hardship", p.name, motif || "family", `${state.year}. ${why}`);
+  addLog(`${p.name} ${state.familyName} — ${why}`, "bad");
+}
+// Rayer quelqu'un de la maison sans le tuer : il part, et il ne revient pas.
+function exileKin(c, why){
+  if(!c) return;
+  state.children = (state.children||[]).filter(x => x.cid !== c.cid);
+  if(state.heirId === c.cid) state.heirId = null;
+  state.unity = clamp(state.unity - rand(8,16));
+  state.legacy.grudges = state.legacy.grudges || [];
+  recordSaga("succession", `${c.name} quitte la maison`, "family", `${state.year}. ${why}`);
+  addLog(`${c.name} quitte le domaine. ${why}`, "bad");
+}
+
+// ---- La scission ----
+// Le pire de tous : la maison se coupe en deux, et la moitié qui part devient
+// une maison rivale QUI PORTE VOTRE NOM. Toute la mécanique des maisons d'en
+// face — raids, puissance, guerre ouverte — se retourne alors contre vous, avec
+// vos propres cousins dedans.
+function splitFamily(c, why){
+  if(!c) return;
+  const shareLand = Math.round(state.land * .38);
+  const shareCattle = Math.round(state.cattle * .38);
+  const shareMoney = Math.round(Math.max(0, state.money) * .30);
+  state.land = Math.max(40, state.land - shareLand);
+  state.cattle = Math.max(0, state.cattle - shareCattle);
+  state.money -= shareMoney;
+  ensureParcels();
+
+  const branche = {
+    name: state.familyName,
+    relation: rand(-70, -45),
+    strength: clamp(28 + Math.round(shareLand/40), 0, 100),
+    leader: {name:c.name, trait:(c.ambition||50) > 65 ? "orgueilleux" : "calculateur", age:c.age, alive:true},
+    lineage: [{name:c.name, trait:"orgueilleux", from:state.year, to:null}],
+    kin: true
+  };
+  // La branche dissidente remplace la maison rivale la plus faible : le jeu
+  // tient à deux maisons, et celle-ci est bien plus intéressante.
+  const houses = rivalHouses();
+  const faible = houses.reduce((a,b) => b.strength < a.strength ? b : a, houses[0]);
+  if(state.rival2 === faible) state.rival2 = branche; else state.rival = branche;
+
+  state.children = (state.children||[]).filter(x => x.cid !== c.cid);
+  if(state.heirId === c.cid) state.heirId = null;
+  state.unity = clamp(state.unity - rand(20,32));
+  state.reputation = clamp(state.reputation - rand(6,14));
+  state.partitioned = (state.partitioned || 0) + 1;
+  state.familySplit = (state.familySplit || 0) + 1;
+
+  addLog(`${c.name} part avec ${shareLand} hectares, ${shareCattle} bêtes et sa part de la caisse. `
+    + `Il y a désormais deux ${state.familyName} dans la vallée, et ils ne se parlent plus.`, "bad");
+  recordSaga("succession", `La maison se coupe en deux`, "family",
+    `${state.year}. ${why} ${c.name} fonde sa propre branche sur les terres du domaine. `
+    + `Ce qui suivra ne se réglera pas en famille.`);
+  checkAchievements();
+}
+
+// ---- Le catalogue ----
+// `cost` documente, pour le test, ce que chaque branche coûte : aucune n'a le
+// droit d'être vide.
+var FAMILY_CRISES = [
+  {
+    id:"sonKilled",
+    title:"Ce que votre fils a fait",
+    art:"night", image:"Une chemise trempée qu'on brûle dans le fourneau",
+    canStart:()=>adultHeirs().length >= 1 && state.year < 1975,
+    who:()=>adultHeirs().sort((a,b)=>(b.resentment||0)-(a.resentment||0))[0] || null,
+    text:(k)=>`${k.name} est rentré à trois heures du matin, les mains en sang, et n'a pas voulu `
+      + `s'asseoir. Un homme est mort au bout du chemin des ${state.rival.name} — une dispute, `
+      + `un couteau, personne d'autre. Le marshal sera là après-demain, et il posera la question `
+      + `directement. Ce que la famille répondra, elle le répondra une seule fois.`,
+    choices:[
+      {label:()=>`Le livrer`, cost:"un fils perdu",
+       apply:(k)=>{
+         state.reputation = clamp(state.reputation + rand(10,18));
+         state.legacy.honor++;
+         const l = factionOfType("law"); if(l) l.relation = clamp(l.relation + 25, -100, 100);
+         if(chance(.55)){
+           killKin(k, `pendu au chef-lieu du comté, à ${k.age} ans, sur la parole de sa propre famille.`, "law");
+         } else {
+           exileKin(k, `Vingt ans de bagne. On n'a plus jamais parlé de lui à table.`);
+         }
+         state.unity = clamp(state.unity - rand(18,30));
+       }},
+      {label:()=>`Le couvrir et mentir au marshal`, cost:"les soupçons et le mensonge",
+       apply:(k)=>{
+         state.suspicion = clamp(state.suspicion + rand(25,40));
+         state.legacy.greed += 2;
+         k.resentment = clamp((k.resentment||0) - 25);
+         k.bond = clamp((k.bond||50) + 15);
+         state.unity = clamp(state.unity + rand(4,10));
+         state.reputation = clamp(state.reputation - rand(6,12));
+         addLog(`Toute la maison dit la même chose au marshal, au mot près. Il n'en croit pas un seul.`, "bad");
+         // Le mensonge se paie plus tard : c'est ce qui le rend cher.
+         state.legacy.grudges = state.legacy.grudges || [];
+         state.legacy.grudges.push({name:"le comté", why:"un mort couvert"});
+       }},
+      {label:()=>`Prendre sa place et se dénoncer`, cost:"le chef de famille",
+       condition:()=>state.founder.alive !== false,
+       apply:(k)=>{
+         state.reputation = clamp(state.reputation + rand(14,24));
+         state.legacy.honor += 2;
+         k.bond = clamp((k.bond||50) + 30);
+         k.resentment = 0;
+         state.unity = clamp(state.unity + rand(8,16));
+         if(chance(.45)){
+           killKin(state.founder, `mort en cellule avant le procès, pour un couteau qu'il n'avait pas tenu.`, "law");
+         } else {
+           state.founder.health = clamp(state.founder.health - rand(35,60));
+           addLog(`${state.founder.name} passe six ans en prison à la place de son fils, et en ressort ruiné de santé.`, "bad");
+         }
+         state.money -= Math.min(state.money, sc(rand(300,700)));
+       }}
+    ]
+  },
+
+  {
+    id:"twoSick",
+    title:"Le médecin n'a qu'une dose",
+    art:"family", image:"Deux portes fermées dans le même couloir",
+    canStart:()=>livingKin().length >= 3 && state.year < 1955,
+    who:()=>{ const k = livingKin(); return k.length >= 2 ? k : null; },
+    text:(k)=>{
+      const a = k[0], b = k[1];
+      return `La fièvre a pris ${a.name} et ${b.name} la même semaine. Le médecin est venu de la ville `
+        + `avec ce qu'il fallait — pour un seul. Il ne choisira pas à votre place, et il repart `
+        + `au train du soir. Il attend dans la cuisine.`;
+    },
+    choices:[
+      {label:(k)=>`Sauver ${k[0].name}`, cost:"l'autre meurt",
+       apply:(k)=>{
+         k[0].health = clamp((k[0].health||60) + 30);
+         killKin(k[1], `emporté par la fièvre pendant qu'on soignait l'autre chambre.`, "family");
+         state.unity = clamp(state.unity - rand(8,16));
+       }},
+      {label:(k)=>`Sauver ${k[1].name}`, cost:"l'autre meurt",
+       apply:(k)=>{
+         k[1].health = clamp((k[1].health||60) + 30);
+         killKin(k[0], `emporté par la fièvre pendant qu'on soignait l'autre chambre.`, "family");
+         state.unity = clamp(state.unity - rand(8,16));
+       }},
+      {label:()=>`Partager la dose entre les deux`, cost:"les deux risquent d'y passer",
+       apply:(k)=>{
+         const s0 = chance(.5), s1 = chance(.5);
+         if(s0) k[0].health = clamp((k[0].health||60) + 12);
+         else killKin(k[0], `la demi-dose n'a pas suffi.`, "family");
+         if(s1) k[1].health = clamp((k[1].health||60) + 12);
+         else killKin(k[1], `la demi-dose n'a pas suffi.`, "family");
+         if(s0 && s1){
+           state.unity = clamp(state.unity + rand(10,20));
+           state.legacy.honor++;
+           addLog("Les deux ont tenu. On n'a jamais su comment.", "good");
+         }
+       }}
+    ]
+  },
+
+  {
+    id:"twoHeirs",
+    title:"Un ranch, deux héritiers",
+    art:"family", image:"Deux chaises tirées de part et d'autre d'une table",
+    canStart:()=>adultHeirs().length >= 2,
+    who:()=>{ const h = adultHeirs(); return h.length >= 2 ? h.slice(0,2) : null; },
+    text:(h)=>`${h[0].name} et ${h[1].name} ne se parlent plus depuis les foins. Chacun a fait `
+      + `venir un notaire. Ils veulent une réponse maintenant, devant tout le monde : `
+      + `à qui revient le ${state.ranchName}. Il n'y a pas de réponse qui ne coûte pas un enfant.`,
+    choices:[
+      {label:(h)=>`Trancher pour ${h[0].name}`, cost:"l'autre part avec sa part",
+       apply:(h)=>{ crisisChooseHeir(h[0], h[1]); }},
+      {label:(h)=>`Trancher pour ${h[1].name}`, cost:"l'autre part avec sa part",
+       apply:(h)=>{ crisisChooseHeir(h[1], h[0]); }},
+      {label:()=>`Ne pas choisir et les laisser s'arranger`, cost:"le domaine coupé en deux",
+       apply:(h)=>{
+         const rebelle = h.reduce((a,b)=>(b.ambition||50)>(a.ambition||50)?b:a, h[0]);
+         splitFamily(rebelle, "Personne n'a tranché, alors la table s'est fendue toute seule.");
+       }}
+    ]
+  },
+
+  {
+    id:"childKnows",
+    title:"L'enfant qui sait",
+    art:"night", image:"Un carnet trouvé sous un matelas",
+    canStart:()=>directChildren().some(c=>c.age>=14) && (state.legacy.greed >= 2 || state.suspicion >= 30),
+    who:()=>directChildren().filter(c=>c.age>=14).sort((a,b)=>a.age-b.age)[0] || null,
+    text:(k)=>`${k.name} a tout noté. Des dates, des noms, ce qui a été fait la nuit et par qui. `
+      + `Le carnet était sous le matelas, et il ne nie rien : il dit qu'il ira le porter lui-même `
+      + `s'il le faut. Il a ${k.age} ans et il vous regarde en face.`,
+    choices:[
+      {label:()=>`Lui acheter le silence et l'envoyer étudier loin`, cost:"il ne revient jamais",
+       apply:(k)=>{
+         state.money -= Math.min(state.money, sc(rand(600,1400)));
+         state.legacy.greed++;
+         exileKin(k, `Une pension sur la côte est, payée d'avance jusqu'au diplôme. Il n'est pas revenu aux enterrements.`);
+       }},
+      {label:()=>`Tout reconnaître publiquement`, cost:"le nom de la famille",
+       apply:(k)=>{
+         state.reputation = clamp(state.reputation - rand(22,36));
+         state.suspicion = clamp(state.suspicion + rand(15,28));
+         state.legacy.honor += 2;
+         state.legacy.greed = Math.max(0, state.legacy.greed - 2);
+         k.bond = clamp((k.bond||50) + 30);
+         state.unity = clamp(state.unity + rand(10,20));
+         const l = factionOfType("law"); if(l) l.relation = clamp(l.relation - 20, -100, 100);
+         state.money -= Math.min(state.money, sc(rand(400,1000)));
+         addLog(`Le père monte à la tribune du comté et dit tout. La famille en sort sale et debout.`, "info");
+       }},
+      {label:()=>`Le briser devant les autres`, cost:"ce qu'on devient en le faisant",
+       apply:(k)=>{
+         k.resentment = clamp((k.resentment||0) + 60);
+         k.bond = clamp((k.bond||50) - 40);
+         state.unity = clamp(state.unity - rand(18,30));
+         state.legacy.greed += 2;
+         (state.children||[]).forEach(c => { if(c.cid !== k.cid) c.bond = clamp((c.bond||50) - 12); });
+         addLog(`Le carnet brûle dans le fourneau devant lui, et personne ne dit rien pendant le dîner. `
+           + `Ce soir-là, la maison a changé de nature.`, "bad");
+       }}
+    ]
+  },
+
+  {
+    id:"oldManHolds",
+    title:"Le vieux ne lâche rien",
+    art:"family", image:"Un fauteuil tourné vers la fenêtre",
+    canStart:()=>state.founder.alive !== false && state.founder.age >= 72 && adultHeirs().some(c=>c.age>=42),
+    who:()=>adultHeirs().filter(c=>c.age>=42).sort((a,b)=>b.age-a.age)[0] || null,
+    text:(k)=>`${state.founder.name} a ${state.founder.age} ans et signe encore chaque bon de livraison. `
+      + `${k.name} en a ${k.age} et attend depuis vingt-cinq ans. Hier, il a fait annuler devant les `
+      + `hommes un ordre que son père avait donné. Ils ne peuvent plus tenir le domaine à deux.`,
+    choices:[
+      {label:()=>`Écarter le vieux, de force s'il le faut`, cost:"il ne s'en relèvera pas",
+       apply:(k)=>{
+         designateHeir(k.cid);
+         k.resentment = 0;
+         state.unity = clamp(state.unity - rand(12,22));
+         state.reputation = clamp(state.reputation - rand(4,10));
+         state.founder.health = clamp(state.founder.health - rand(30,55));
+         addLog(`On lui a retiré les clés du bureau un jeudi matin. Il n'a plus dit un mot de l'année.`, "bad");
+       }},
+      {label:()=>`Tenir bon : c'est encore son ranch`, cost:"l'héritier s'en va",
+       apply:(k)=>{
+         state.founder.health = clamp(state.founder.health + rand(4,10));
+         exileKin(k, `À cinquante ans passés, il a pris un travail en ville et n'a pas laissé d'adresse.`);
+       }},
+      {label:()=>`Couper le domaine en deux directions`, cost:"deux capitaines, un navire",
+       apply:(k)=>{
+         state.unity = clamp(state.unity - rand(6,12));
+         state.eventModifier = state.eventModifier;
+         k.resentment = clamp((k.resentment||0) - 15);
+         state.money -= Math.min(state.money, sc(rand(300,800)));
+         state.doubleCommand = (state.doubleCommand||0) + 1;
+         addLog(`Deux bureaux, deux carnets de comptes, deux façons de faire. Les hommes ne savent plus `
+           + `à qui obéir, et cela se voit dans les chiffres.`, "bad");
+       }}
+    ]
+  },
+
+  {
+    id:"lastRequest",
+    title:"Ce qu'il vous demande",
+    art:"family", image:"Une main posée sur un drap",
+    canStart:()=>state.founder.alive !== false && state.founder.age >= 76 && state.founder.health <= 45,
+    who:()=>state.founder,
+    text:()=>`${state.founder.name} ne se lève plus depuis l'hiver et les douleurs ne cèdent à rien. `
+      + `Cette nuit, il a demandé qu'on l'aide à en finir. Il l'a demandé clairement, deux fois, `
+      + `en tenant la main de son héritier. Il n'y a pas de bonne réponse et il le sait.`,
+    choices:[
+      {label:()=>`Faire ce qu'il demande`, cost:"ce qu'on porte après",
+       apply:()=>{
+         killKin(state.founder, `parti dans son lit, un matin de février, avec l'aide des siens. On n'en a jamais reparlé.`, "family");
+         state.unity = clamp(state.unity - rand(4,10));
+         (state.children||[]).forEach(c => c.bond = clamp((c.bond||50) + 8));
+         state.legacy.honor++;
+         if(chance(.25)){
+           state.suspicion = clamp(state.suspicion + rand(15,25));
+           addLog("Le médecin a signé sans regarder. Quelqu'un, quelque part, a trouvé cela rapide.", "bad");
+         }
+       }},
+      {label:()=>`Refuser et rester près de lui`, cost:"des mois à le regarder",
+       apply:()=>{
+         state.unity = clamp(state.unity - rand(10,18));
+         state.money -= Math.min(state.money, sc(rand(200,600)));
+         state.founder.health = clamp(state.founder.health - rand(10,20));
+         (state.children||[]).forEach(c => c.resentment = clamp((c.resentment||0) + rand(3,9)));
+         addLog(`Onze mois. La maison entière a vieilli avec lui.`, "bad");
+       }},
+      {label:()=>`Le faire hospitaliser en ville`, cost:"il meurt seul, et cela coûte",
+       apply:()=>{
+         state.money -= Math.min(state.money, sc(rand(900,2000)));
+         state.unity = clamp(state.unity - rand(8,14));
+         killKin(state.founder, `mort dans une chambre d'hôpital à quatre-vingts kilomètres, sans avoir revu ses terres.`, "city");
+       }}
+    ]
+  },
+
+  {
+    id:"brotherSold",
+    title:"La part que votre frère a vendue",
+    art:"money", image:"Un acte notarié qu'on découvre trop tard",
+    canStart:()=>state.year >= 1970 && adultHeirs().length >= 2,
+    who:()=>adultHeirs().sort((a,b)=>(b.resentment||0)-(a.resentment||0))[0] || null,
+    text:(k)=>`${k.name} a vendu sa part indivise. Pas à un voisin : à une société de la côte, `
+      + `qui possède désormais un tiers du ${state.ranchName} sans avoir jamais posé le pied dessus. `
+      + `L'acte est signé, enregistré, et il est venu vous le dire lui-même.`,
+    choices:[
+      {label:()=>`Racheter la part au prix fort (${moneyFmt.format(sc(9000))} $)`,
+       cost:"la caisse vidée pour des années",
+       condition:()=>state.money >= sc(9000),
+       apply:(k)=>{
+         state.money -= sc(9000);
+         exileKin(k, `Il a pris l'argent deux fois, et il est parti pour de bon.`);
+         addLog("Le tiers du domaine revient à la famille, et la caisse est à sec.", "info");
+       }},
+      {label:()=>`L'attaquer en justice`, cost:"la famille étalée au tribunal",
+       apply:(k)=>{
+         state.money -= Math.min(state.money, sc(rand(1200,2600)));
+         state.reputation = clamp(state.reputation - rand(10,20));
+         const m = factionOfType("media"); if(m) m.relation = clamp(m.relation - 25, -100, 100);
+         if(chance(.45)){
+           exileKin(k, `Le tribunal annule la vente pour vice de forme. Il n'est jamais revenu.`);
+           addLog("La vente est annulée. Trois ans de procédure et le nom traîné dans le journal.", "good");
+         } else {
+           const ha = Math.round(state.land * .3);
+           state.land = Math.max(40, state.land - ha); ensureParcels();
+           if(state.developer) addDeveloperPressure(25);
+           addLog(`Le tribunal confirme la vente. ${ha} hectares appartiennent à des gens qu'on ne verra jamais.`, "bad");
+         }
+       }},
+      {label:()=>`Laisser faire et cohabiter`, cost:"un actionnaire dans la maison",
+       apply:(k)=>{
+         const ha = Math.round(state.land * .3);
+         state.land = Math.max(40, state.land - ha); ensureParcels();
+         state.money += Math.round(sc(30) * ha);
+         if(state.developer) addDeveloperPressure(30);
+         k.resentment = clamp((k.resentment||0) - 20);
+         state.unity = clamp(state.unity - rand(10,18));
+         addLog(`${ha} hectares passent à la société, avec un droit de regard sur tout le reste. `
+           + `On travaille désormais sous surveillance.`, "bad");
+       }}
+    ]
+  },
+
+  {
+    id:"spouseUltimatum",
+    title:"Le ranch ou moi",
+    art:"family", image:"Une valise ouverte sur un lit fait",
+    canStart:()=>state.spouse && state.spouse.alive !== false && state.unity <= 45,
+    who:()=>state.spouse,
+    text:()=>`${state.spouse.name} a fait ses valises pendant que vous étiez aux enclos. `
+      + `Ce n'est pas une menace, c'est un constat : ${state.spouse.sex==="f"?"elle":"il"} a passé `
+      + `sa vie derrière un domaine qui passait avant tout, et ${state.spouse.sex==="f"?"elle":"il"} `
+      + `part demain, avec ou sans réponse.`,
+    choices:[
+      {label:()=>`Vendre une partie du domaine et partir en voyage un an`,
+       cost:"des hectares, et l'année perdue",
+       apply:()=>{
+         const ha = Math.min(Math.max(0, state.land - 60), Math.round(state.land * .12));
+         if(ha > 0){ state.land -= ha; ensureParcels(); state.money += Math.round(sc(30) * ha); }
+         state.unity = clamp(state.unity + rand(22,36));
+         state.spouse.health = clamp(state.spouse.health + 10);
+         state.cattle = Math.max(0, state.cattle - Math.round(state.cattle * .12));
+         addLog(`Un an sans le ranch. On revient à un troupeau amaigri et à un couple qui tient.`, "info");
+       }},
+      {label:()=>`Rester, et la laisser partir`, cost:"le foyer",
+       apply:()=>{
+         state.spouse.alive = false;
+         state.spouse.left = true;
+         state.unity = clamp(state.unity - rand(20,32));
+         (state.children||[]).forEach(c => { c.bond = clamp((c.bond||50) - 15); c.resentment = clamp((c.resentment||0) + 12); });
+         state.reputation = clamp(state.reputation - rand(4,10));
+         recordSaga("hardship", `${state.spouse.name} s'en va`, "family",
+           `${state.year}. Personne ne l'a retenue, et personne n'a osé le dire.`);
+         addLog(`${state.spouse.name} est partie au petit matin. Les enfants ont vu la voiture.`, "bad");
+       }},
+      {label:()=>`Passer la main à l'héritier`, cost:"on n'est plus chez soi",
+       condition:()=>adultHeirs().length >= 1,
+       apply:()=>{
+         const h = adultHeirs()[0];
+         designateHeir(h.cid);
+         state.unity = clamp(state.unity + rand(12,22));
+         state.doubleCommand = (state.doubleCommand||0) + 1;
+         state.money -= Math.min(state.money, sc(rand(200,500)));
+         addLog(`${h.name} prend les rênes plus tôt que prévu. Le vieux couple reste, mais ne décide plus.`, "info");
+       }}
+    ]
+  },
+
+  {
+    id:"accidentModern",
+    title:"L'accident qu'on peut taire",
+    art:"machine", image:"Un phare cassé qu'on remplace avant l'aube",
+    canStart:()=>state.year >= 1955 && adultHeirs().length >= 1,
+    who:()=>adultHeirs().sort((a,b)=>a.age-b.age)[0] || null,
+    text:(k)=>`${k.name} a renversé quelqu'un sur la départementale en rentrant, de nuit. `
+      + `${k.sex==="f"?"Elle":"Il"} n'a pas freiné tout de suite et n'a prévenu personne avant le matin. `
+      + `Le pick-up est au fond du hangar, phare arraché. L'homme est à l'hôpital et ne se souvient de rien.`,
+    choices:[
+      {label:()=>`Réparer le camion et ne rien dire`, cost:"ce qu'on saura toujours",
+       apply:(k)=>{
+         state.money -= Math.min(state.money, sc(rand(400,900)));
+         state.suspicion = clamp(state.suspicion + rand(18,30));
+         state.legacy.greed += 2;
+         k.resentment = clamp((k.resentment||0) + 20);
+         k.bond = clamp((k.bond||50) - 10);
+         if(chance(.35)){
+           state.reputation = clamp(state.reputation - rand(15,28));
+           const l = factionOfType("law"); if(l) l.relation = clamp(l.relation - 30, -100, 100);
+           addLog(`Un garagiste du comté a reconnu la pièce commandée. L'affaire ressort trois ans plus tard, `
+             + `en pire.`, "bad");
+         } else {
+           addLog("Le camion est réparé en deux jours. Personne n'est venu. C'est le pire.", "bad");
+         }
+       }},
+      {label:()=>`L'emmener se dénoncer`, cost:"il perd des années",
+       apply:(k)=>{
+         state.reputation = clamp(state.reputation + rand(10,20));
+         state.legacy.honor++;
+         state.money -= Math.min(state.money, sc(rand(800,1800)));
+         exileKin(k, `Quatre ans, dont deux fermes. À sa sortie, il n'est pas rentré à la maison.`);
+       }},
+      {label:()=>`Payer la famille de l'homme, en silence`, cost:"cher, et pour toujours",
+       apply:(k)=>{
+         state.money -= Math.min(state.money, sc(rand(2500,5000)));
+         state.suspicion = clamp(state.suspicion + rand(8,16));
+         state.legacy.greed++;
+         k.bond = clamp((k.bond||50) + 10);
+         state.unity = clamp(state.unity - rand(6,12));
+         addLog(`Un virement par an, jusqu'à la fin. La famille de l'homme n'a jamais porté plainte, `
+           + `et n'a jamais dit merci.`, "info");
+       }}
+    ]
+  },
+
+  {
+    id:"secession",
+    title:"La branche qui fait sécession",
+    art:"family", image:"Deux voitures qui quittent la cour dans deux directions",
+    canStart:()=>adultHeirs().length >= 2 && state.unity <= 38,
+    who:()=>adultHeirs().sort((a,b)=>(b.resentment||0)-(a.resentment||0))[0] || null,
+    text:(k)=>`${k.name} n'est pas venu au repas. ${k.sex==="f"?"Elle":"Il"} a réuni les cousins, `
+      + `un avocat et deux des contremaîtres dans la grange basse, et ${k.sex==="f"?"elle":"il"} a `
+      + `demandé sa part maintenant, en terres, pour la travailler à part. La moitié des hommes du `
+      + `ranch attend de voir ce que vous répondrez.`,
+    choices:[
+      {label:()=>`Refuser net`, cost:"la maison se coupe en deux quand même",
+       apply:(k)=>{
+         if(chance(.45)){
+           k.resentment = clamp((k.resentment||0) + 30);
+           state.unity = clamp(state.unity - rand(10,18));
+           const partis = Math.min((state.cowboys||[]).length, rand(1,3));
+           for(let i = 0; i < partis; i++) if(state.cowboys.length) state.cowboys.pop();
+           addLog(`Le refus tient, pour cette fois. ${partis} homme${partis>1?"s partent":" part"} avec `
+             + `${k.name} malgré tout, et la grange basse reste un endroit où l'on chuchote.`, "bad");
+         } else {
+           splitFamily(k, "Le refus n'a pas tenu une saison.");
+         }
+       }},
+      {label:()=>`Lui donner sa part et garder la paix`, cost:"38 % du domaine",
+       apply:(k)=>{ splitFamily(k, "On a préféré une coupure nette à dix ans de guerre de table."); }},
+      {label:()=>`Le désigner héritier et écarter les autres`, cost:"tous les autres",
+       apply:(k)=>{
+         designateHeir(k.cid);
+         k.resentment = 0;
+         const autres = adultHeirs().filter(c => c.cid !== k.cid);
+         autres.forEach(c => { c.resentment = clamp((c.resentment||0) + 45); c.bond = clamp((c.bond||50) - 25); });
+         state.unity = clamp(state.unity - rand(8,16));
+         if(autres.length && chance(.5)) exileKin(autres[0], `Il n'a pas attendu la lecture du testament pour partir.`);
+         addLog(`Celui qui menaçait de partir hérite de tout. Les autres ont compris la leçon, `
+           + `et ils ne l'oublieront pas.`, "bad");
+       }}
+    ]
+  }
+];
+
+// Trancher entre deux héritiers : celui qu'on écarte ne reste jamais.
+function crisisChooseHeir(gagnant, perdant){
+  designateHeir(gagnant.cid);
+  gagnant.resentment = 0;
+  gagnant.bond = clamp((gagnant.bond||50) + 15);
+  perdant.resentment = clamp((perdant.resentment||0) + 45);
+  state.unity = clamp(state.unity - rand(10,18));
+  if((perdant.ambition||50) > 60 && chance(.5)){
+    splitFamily(perdant, `${perdant.name} n'a pas accepté d'être le second.`);
+  } else {
+    const ha = Math.min(Math.max(0, state.land - 60), Math.round(state.land * .18));
+    if(ha > 0){ state.land -= ha; ensureParcels(); }
+    exileKin(perdant, `Il est parti avec ${ha} hectares et le silence de son frère.`);
+  }
+}
+
+// ---- La file des crises ----
+// Une seule à la fois, jamais deux fois la même, et jamais moins de dix ans
+// entre deux : c'est ce qui les garde graves.
+const CRISIS_GAP = 40;   // en trimestres
+
+function crisisById(id){ return FAMILY_CRISES.find(c => c.id === id); }
+
+function maybeStartCrisis(){
+  if(state.crisis || state.gameOver) return;
+  if(state.turn < (state.crisisCooldown || 0)) return;
+  const done = state.crisesDone || [];
+  const pool = FAMILY_CRISES.filter(c => {
+    if(done.includes(c.id)) return false;
+    try{ return c.canStart() && !!c.who(); }catch(e){ return false; }
+  });
+  if(!pool.length) return;
+  // Une maison désunie s'en attire davantage : c'est le seul levier du joueur.
+  const p = state.unity < 40 ? .16 : (state.unity < 65 ? .09 : .05);
+  if(!chance(p)) return;
+  state.crisis = {id: pool[rand(0,pool.length-1)].id, due: state.turn + rand(0,1)};
+}
+
+function maybeShowCrisis(){
+  if(!state.crisis) return false;
+  const c = crisisById(state.crisis.id);
+  if(!c){ state.crisis = null; return false; }
+  if(state.turn < state.crisis.due) return false;
+  let subject = null;
+  try{ subject = c.who(); }catch(e){ subject = null; }
+  if(!subject){ closeCrisis(c.id); return false; }
+  try{
+    presentEvent({
+      title: c.title, art: c.art, image: c.image,
+      text: () => c.text(subject),
+      choices: c.choices.map(ch => ({
+        label: () => evalField(ch.label, "Décider", subject),
+        condition: ch.condition,
+        apply: () => {
+          // Le sujet est relu au moment d'agir : une année a pu passer.
+          let now = subject;
+          try{ now = c.who() || subject; }catch(e){}
+          ch.apply(now);
+          closeCrisis(c.id);
+        }
+      }))
+    });
+    return true;
+  }catch(e){
+    closeCrisis(c.id);
+    return false;
+  }
+}
+
+function closeCrisis(id){
+  if(!state.crisesDone) state.crisesDone = [];
+  if(id && state.crisesDone.indexOf(id) < 0) state.crisesDone.push(id);
+  state.crisis = null;
+  state.crisisCooldown = state.turn + CRISIS_GAP + rand(0, 20);
+  checkAchievements();
+}
+
+// Deux bureaux, deux carnets : commander à deux coûte des points de rendement,
+// et cela se voit dans les chiffres du trimestre.
+function doubleCommandFactor(){
+  return 1 - Math.min(.12, (state.doubleCommand || 0) * .06);
+}
+
+// ============================================================================
+// LE DERNIER ASSAUT — 2012 À 2026
+// ----------------------------------------------------------------------------
+// La dernière décennie était la plus calme du jeu : le domaine était bâti, la
+// caisse pleine, et il ne restait qu'à cliquer quinze fois. Or c'est le moment
+// où les grands ranchs tombent réellement — pas sous un coup, mais sous la
+// convergence de tout ce qui les vise en même temps.
+//
+// `state.siege` agrège ce qui pousse : l'appétit des promoteurs, la
+// revendication foncière, les pouvoirs locaux hostiles, la lumière braquée sur
+// la charge exercée, la dette, la désunion. Il monte chaque année et ouvre des
+// épreuves de plus en plus dures. Au maximum, le comté déclare le domaine
+// d'utilité publique et la partie s'arrête là.
+//
+// Il se combat : réputation, charge publique, terres classées, voisinage acquis
+// et unité de la maison le font redescendre. Rien n'est fatal — mais rien n'est
+// gratuit non plus.
+// ============================================================================
+const SIEGE_FROM = 2012;
+
+function siegeActive(){ return state.year >= SIEGE_FROM && !state.gameOver; }
+function siegeLevel(){ return Math.round(state.siege || 0); }
+
+// Ce qui pousse, moins ce qui retient. Tout est lisible dans le panneau.
+function siegeForces(){
+  const pour = [], contre = [];
+  const dev = developerPressure();
+  if(dev > 20) pour.push({label:"Appétit des promoteurs", n:(dev-20)/16});
+  const claim = claimStrength();
+  if(claim > 10) pour.push({label:"Revendication foncière", n:(claim-10)/12});
+  const hostiles = (state.factions||[]).filter(f => f.relation < -25).length;
+  if(hostiles) pour.push({label:"Pouvoirs locaux hostiles", n:hostiles * .55});
+  const scr = (state.politics && state.politics.scrutiny) || 0;
+  if(scr > 30) pour.push({label:"Enquête sur la charge exercée", n:(scr-30)/25});
+  if((state.debt||0) > 0) pour.push({label:"Dette bancaire", n:.6});
+  if(state.unity < 45) pour.push({label:"Maison divisée", n:(45-state.unity)/25});
+  if(state.suspicion > 45) pour.push({label:"Soupçons accumulés", n:(state.suspicion-45)/30});
+  if(state.familySplit) pour.push({label:"Une branche de la famille contre vous", n:.9});
+
+  if(state.reputation > 60) contre.push({label:"Un nom qu'on n'attaque pas", n:(state.reputation-60)/22});
+  if(currentOffice()) contre.push({label:"La charge que vous exercez", n:1.1});
+  if((state.protectedLand||0) > 0) contre.push({label:"Terres classées en réserve", n:.9});
+  const amis = (state.factions||[]).filter(f => f.relation > 40).length;
+  if(amis) contre.push({label:"Pouvoirs locaux acquis", n:amis * .45});
+  if(state.unity > 75) contre.push({label:"Une maison qui parle d'une seule voix", n:.6});
+  return {pour, contre};
+}
+
+function siegePhase(){
+  if(!siegeActive()) return;
+  const f = siegeForces();
+  const up = f.pour.reduce((s,x)=>s+x.n, 0);
+  const down = f.contre.reduce((s,x)=>s+x.n, 0);
+  // Une pente de fond : même une maison irréprochable voit le monde se refermer.
+  state.siege = Math.max(0, Math.min(100, (state.siege||0) + .8 + up - down));
+}
+
+// Les épreuves du siège : trois paliers, de plus en plus durs, chacune tirée
+// une seule fois. Elles ne remplacent pas les événements : elles priment.
+var SIEGE_TRIALS = [
+  {id:"zoning", at:25, art:"city", title:"Le classement en zone constructible",
+   image:"Un plan d'urbanisme punaisé à la mairie",
+   text:()=>`Le conseil du comté a reclassé neuf cents hectares — dont les vôtres — en zone `
+     + `d'urbanisation future. L'impôt foncier sera calculé sur la valeur constructible, pas `
+     + `agricole. Le vote a lieu dans six semaines.`,
+   choices:[
+     {label:()=>`Faire classer le domaine en réserve agricole (${moneyFmt.format(sc(2600))} $)`,
+      condition:()=>state.money >= sc(2600),
+      apply:()=>{
+        state.money -= sc(2600);
+        state.protectedLand = (state.protectedLand||0) + Math.round(state.land * .4);
+        state.siege = Math.max(0, (state.siege||0) - 14);
+        addLog(`Quarante pour cent du domaine est classé : l'impôt retombe, et ces terres ne se `
+          + `vendront plus jamais. C'est le prix, et il est définitif.`, "good");
+      }},
+     {label:()=>`Faire campagne contre le reclassement`,
+      apply:()=>{
+        const odds = .30 + state.reputation/300 + (currentOffice()?.25:0)
+          + ((state.factions||[]).filter(f=>f.relation>40).length * .06);
+        if(chance(Math.min(.85, odds))){
+          state.siege = Math.max(0, (state.siege||0) - 10);
+          state.reputation = clamp(state.reputation + 8);
+          addLog("Le reclassement est rejeté par une voix. La salle était pleine de vos voisins.", "good");
+        } else {
+          state.siege = Math.min(100, (state.siege||0) + 10);
+          addLog("Le reclassement passe. L'avis d'imposition suivant sera d'une autre nature.", "bad");
+        }
+      }},
+     {label:()=>`Ne rien faire et payer`,
+      apply:()=>{
+        state.siege = Math.min(100, (state.siege||0) + 8);
+        state.taxRelief = 0;
+        addLog("L'impôt foncier est désormais calculé sur ce que vaudrait un lotissement.", "bad");
+      }}
+   ]},
+
+  {id:"waterCut", at:45, art:"land", title:"On vous coupe l'eau",
+   image:"Une vanne cadenassée sur un canal",
+   text:()=>`L'agence de l'eau réduit votre droit de prélèvement de moitié : la ville en aval a `
+     + `grandi, et il faut bien la servir. Sans irrigation, la moitié des pâtures ne vaut plus rien `
+     + `en juillet.`,
+   choices:[
+     {label:()=>`Forer et pomper en profondeur (${moneyFmt.format(sc(6000))} $)`,
+      condition:()=>state.money >= sc(6000),
+      apply:()=>{
+        state.money -= sc(6000);
+        addClaimPressure(6, "Un forage profond réveille toujours quelqu'un.");
+        addLog("Trois cents mètres de forage. L'eau revient, et le dossier ashkani s'épaissit d'autant.", "info");
+      }},
+     {label:()=>`Réduire le troupeau de moitié`,
+      apply:()=>{
+        const perdu = Math.round(state.cattle * .5);
+        state.cattle -= perdu;
+        state.money += Math.round(state.cattlePrice * perdu * .8);
+        state.siege = Math.max(0, (state.siege||0) - 6);
+        addLog(`${perdu} bêtes vendues d'un coup, au prix qu'on veut bien en donner quand tout le `
+          + `monde sait pourquoi vous vendez.`, "bad");
+      }},
+     {label:()=>`Attaquer l'agence`,
+      apply:()=>{
+        state.money -= Math.min(state.money, sc(rand(1500,3200)));
+        if(chance(.4)){
+          state.siege = Math.max(0, (state.siege||0) - 12);
+          addLog("Le tribunal administratif rétablit le droit de prélèvement. Cela aura pris deux ans.", "good");
+        } else {
+          state.siege = Math.min(100, (state.siege||0) + 12);
+          const perdu = Math.round(state.cattle * .3);
+          state.cattle -= perdu;
+          addLog(`Le recours est rejeté avec dépens. ${perdu} bêtes vendues dans l'urgence.`, "bad");
+        }
+      }}
+   ]},
+
+  {id:"coalition", at:65, art:"crowd", title:"Ils se sont mis d'accord contre vous",
+   image:"Une conférence de presse à cinq micros",
+   text:()=>`Le promoteur, deux associations, la maison d'en face et l'adjoint au foncier ont tenu `
+     + `une conférence commune. Ils ont un dossier de trois cents pages sur cent quarante ans de `
+     + `domaine, et ils demandent une enquête publique. Ce qu'il y a dedans, vous le savez mieux `
+     + `qu'eux.`,
+   choices:[
+     {label:()=>`Tout ouvrir : registres, comptes, archives`,
+      apply:()=>{
+        const propre = state.legacy.honor >= state.legacy.greed;
+        if(propre){
+          state.siege = Math.max(0, (state.siege||0) - 22);
+          state.reputation = clamp(state.reputation + rand(12,22));
+          addLog("Cent quarante ans de registres ouverts, et rien à y trouver. La coalition se défait "
+            + "en trois semaines.", "good");
+        } else {
+          state.siege = Math.min(100, (state.siege||0) + 18);
+          state.reputation = clamp(state.reputation - rand(15,28));
+          state.suspicion = clamp(state.suspicion + rand(20,35));
+          addLog("Ils ont trouvé ce qu'ils cherchaient dès la quatrième boîte d'archives.", "bad");
+        }
+      }},
+     {label:()=>`Acheter le maillon faible (${moneyFmt.format(sc(12000))} $)`,
+      condition:()=>state.money >= sc(12000),
+      apply:()=>{
+        state.money -= sc(12000);
+        state.legacy.greed += 2;
+        if(chance(.6)){
+          state.siege = Math.max(0, (state.siege||0) - 16);
+          addLog("Une association se retire « pour des raisons de gouvernance ». La coalition perd sa façade.", "good");
+        } else {
+          state.siege = Math.min(100, (state.siege||0) + 22);
+          state.suspicion = clamp(state.suspicion + rand(25,40));
+          addLog("Le virement est produit en conférence de presse le lendemain. C'était le piège.", "bad");
+        }
+      }},
+     {label:()=>`Céder la moitié du domaine et sauver le reste`,
+      apply:()=>{
+        const ha = Math.round(state.land * .45);
+        state.land = Math.max(60, state.land - ha); ensureParcels();
+        state.money += Math.round(sc(45) * ha);
+        state.cattle = Math.max(0, state.cattle - Math.round(state.cattle * .40));
+        state.siege = Math.max(0, (state.siege||0) - 34);
+        state.reputation = clamp(state.reputation - rand(4,10));
+        recordSaga("developer", `La moitié du domaine cédée`, "city",
+          `${state.year}. ${ha} hectares vendus pour que le reste garde son nom.`);
+        addLog(`${ha} hectares partent au lotissement. Ce qui reste est à vous, et le restera.`, "info");
+      }}
+   ]}
+];
+
+function maybeShowSiegeTrial(){
+  if(!siegeActive()) return false;
+  if(!state.siegeDone) state.siegeDone = [];
+  const t = SIEGE_TRIALS.find(x => siegeLevel() >= x.at && state.siegeDone.indexOf(x.id) < 0);
+  if(!t) return false;
+  state.siegeDone.push(t.id);
+  presentEvent({title:t.title, art:t.art, image:t.image, text:t.text, choices:t.choices});
+  return true;
+}
+
+// La fin du siège : à 100, le comté prononce la déclaration d'utilité publique.
+function checkSiegeEnd(){
+  if(!siegeActive()) return false;
+  if(siegeLevel() < 100) return false;
+  state.gameOver = true;
+  recordSaga("developer", `Le domaine déclaré d'utilité publique`, "city",
+    `${state.year}. Personne n'a porté le coup : ils s'y sont mis à dix.`);
+  showGameOver("Déclaré d'utilité publique",
+    `En ${state.year}, le préfet signe la déclaration d'utilité publique du ${state.ranchName}.\n\n`
+    + `${state.land} hectares expropriés en un trait de plume, indemnisés au prix agricole, `
+    + `pour une zone d'activités et huit cents logements.\n\n`
+    + `Ce n'est pas un homme qui a eu le domaine, ni une banque, ni la maison d'en face : `
+    + `c'est tout le monde à la fois, et pendant quinze ans, personne dans la famille n'a voulu `
+    + `croire que cela finirait comme ça.\n\n`
+    + `${(state.lineage||[]).length} génération(s) auront tenu, de 1885 à ${state.year}.`);
+  return true;
+}
+
 // ---- Les chevaux ----
 // Le ranch a un cheval de tête, nommé et suivi. On l'entraîne, il gagne les
 // concours, il vieillit — et il peut être volé, ou volé à d'autres.
@@ -5384,6 +6186,22 @@ function presentCapitalCall(){
 // qui restent avant la chute et ce qu'il faut faire pour l'éviter.
 function alarms(){
   const list = [];
+  // Le dernier assaut d'abord : c'est la seule menace qui ne se règle pas en
+  // un tour, et le joueur doit voir des années à l'avance qui pousse, et qui
+  // retient.
+  if(siegeActive() && siegeLevel() >= 12){
+    const f = siegeForces();
+    const top = f.pour.sort((a,b)=>b.n-a.n).slice(0,3).map(x=>x.label);
+    const held = f.contre.sort((a,b)=>b.n-a.n).slice(0,2).map(x=>x.label);
+    list.push({
+      level: siegeLevel() >= 60 ? "bad" : "warn", icon:"🏙️",
+      title:`Le domaine est visé — ${siegeLevel()} / 100`,
+      what:`Ce qui pousse : ${top.join(", ") || "rien encore"}. `
+        + (held.length ? `Ce qui retient : ${held.join(", ")}. ` : `Rien ne retient. `)
+        + `À 100, le comté exproprie pour utilité publique. `
+        + `Un nom respecté, une charge publique, des terres classées et une maison unie font redescendre.`
+    });
+  }
   const missed = state.missedPayments || 0;
   if(missed > 0){
     list.push({
@@ -5752,7 +6570,22 @@ const ACHIEVEMENTS = [
      return posts.size >= 3;
    }},
   {id:"twoLines", icon:"⚔️", title:"Deux lignées", desc:"Voir quatre chefs se succéder à la tête du clan rival.",
-   check:()=>((state.rival&&state.rival.lineage)||[]).length >= 4}
+   check:()=>((state.rival&&state.rival.lineage)||[]).length >= 4},
+  {id:"housebreaker", icon:"🪦", title:"La maison qu'on efface",
+   desc:"Pousser une maison rivale jusqu'à sa disparition.",
+   check:()=>!!state.vendetta},
+  {id:"unbroken", icon:"🤝", title:"La maison qui n'a pas cédé",
+   desc:"Traverser cinq crises de famille sans que la lignée se coupe en deux.",
+   check:()=>(state.crisesDone||[]).length >= 5 && !state.familySplit},
+  {id:"twoBranches", icon:"🪓", title:"Deux fois le même nom",
+   desc:"Voir la famille se scinder et sa branche dissidente s'installer en face.",
+   check:()=>(state.familySplit||0) >= 1},
+  {id:"siegeHeld", icon:"🏰", title:"Ils s'y sont mis à dix",
+   desc:"Atteindre 2026 après avoir vu le domaine visé de toutes parts.",
+   check:()=>state.year >= 2026 && (state.siegeDone||[]).length >= 2},
+  {id:"hardChoice", icon:"⚖️", title:"Ce qu'on ne raconte pas",
+   desc:"Trancher trois choix de famille dont aucun n'avait de bonne issue.",
+   check:()=>(state.crisesDone||[]).length >= 3}
 ];
 
 // Complète un `state` neuf ou une vieille sauvegarde avec les champs
@@ -5805,6 +6638,13 @@ function ensureProgress(){
   ensureSecondSecret();
   if(typeof state.arcCooldown !== "number") state.arcCooldown = 0;
   if(typeof state.warCooldown !== "number") state.warCooldown = 0;
+  if(state.crisis === undefined) state.crisis = null;
+  if(typeof state.siege !== "number") state.siege = 0;
+  if(!Array.isArray(state.siegeDone)) state.siegeDone = [];
+  if(!Array.isArray(state.crisesDone)) state.crisesDone = [];
+  if(typeof state.crisisCooldown !== "number") state.crisisCooldown = 24;
+  if(typeof state.doubleCommand !== "number") state.doubleCommand = 0;
+  if(typeof state.familySplit !== "number") state.familySplit = 0;
   if(state.war === undefined) state.war = null;
   if(state.vendetta === undefined) state.vendetta = null;
   if(!Array.isArray(state.buildings)) state.buildings = [];
@@ -6356,6 +7196,13 @@ function baseState() {
     war:null,
     warCooldown:0,
     vendetta:null,
+    crisis:null,
+    crisesDone:[],
+    siege:0,
+    siegeDone:[],
+    crisisCooldown:24,
+    doubleCommand:0,
+    familySplit:0,
     money:1100 + modifiers.money,
     land:160,
     cattle:38,
@@ -7110,7 +7957,7 @@ function endTurn(){
   const workers = roleCount("ranch");
   const accountants = roleCount("business");
   let ranchIncome = Math.round(healthyCattle * rand(2,4) * state.costModifier
-    * (1 + workers*0.08) * handFactor * buildingIncomeFactor());
+    * (1 + workers*0.08) * handFactor * buildingIncomeFactor() * doubleCommandFactor());
   const cowboySalaries = (state.cowboys||[]).reduce((sum,c)=>sum+c.salary,0);
   // Les salaires sont déjà stockés à l'échelle de l'époque (réévalués à chaque
   // transition) : les remultiplier par costModifier les ferait croître au carré.
@@ -7478,9 +8325,16 @@ function endTurn(){
     return;
   }
 
-  // Une guerre ouverte prime sur tout le reste : c'est le fil le plus chaud.
+  // Le dernier assaut prime sur tout : c'est une échéance, pas un hasard.
+  if(maybeShowSiegeTrial()) return;
+
+  // Une guerre ouverte prime ensuite : c'est le fil le plus chaud.
   maybeOpenWar();
   if(maybeShowWarStep()) return;
+
+  // Puis ce qui déchire la maison de l'intérieur, avant ce qui vient du dehors.
+  maybeStartCrisis();
+  if(maybeShowCrisis()) return;
 
   // Un arc en cours prime sur le reste : c'est le fil qu'on veut voir avancer.
   maybeStartArc();
@@ -7591,6 +8445,7 @@ function ageFamily(){
   feudPhase();
   houseBendPhase();
   vendettaPhase();
+  siegePhase();
   [state.founder,state.spouse].forEach(p => {
     if(!p.alive) return;
     p.age++;
@@ -9429,6 +10284,139 @@ const events = [
          state.reputation=clamp(state.reputation-rand(10,20));
          addLog(`Il tire le premier. ${casualtyLine(hit)} On ne se remet pas d'une chose pareille.`,"bad");
        }}}
+   ]},
+
+  // ==========================================================================
+  // LA DERNIÈRE DÉCENNIE
+  // --------------------------------------------------------------------------
+  // Quatre épreuves de fin de partie, plus dures que tout ce qui précède : ce
+  // sont des gens qui ne veulent pas vous nuire mais vous faire disparaître, et
+  // aucune issue n'est confortable.
+  // ==========================================================================
+
+  {eraId:"modern", art:"law", condition:()=>state.year>=2014&&state.land>=500,
+   title:"La classe d'action",
+   text:"Quatre cents riverains attaquent le domaine en nom collectif : nappe phréatique, odeurs, camions, quarante ans de nuisances chiffrées par un cabinet de Denver. Le montant réclamé dépasse la valeur du ranch.",
+   image:"Une salle d'audience pleine à craquer",
+   choices:[
+     {label:()=>`Transiger tout de suite (${moneyFmt.format(sc(9000))} $)`,
+      condition:()=>state.money>=sc(9000),
+      apply:()=>{state.money-=sc(9000);
+       state.siege=Math.max(0,(state.siege||0)-8);
+       state.reputation=clamp(state.reputation-rand(3,8));
+       addLog("La transaction est signée sous clause de confidentialité. Cela coûte une année de bénéfice et referme le dossier.","info");}},
+     {label:"Aller au procès",apply:()=>{
+       const odds=.30+state.reputation/300+(currentOffice()?.18:0)-(state.legacy.greed*.02);
+       if(chance(Math.max(.1,Math.min(.8,odds)))){
+         state.reputation=clamp(state.reputation+rand(8,16));
+         state.siege=Math.max(0,(state.siege||0)-14);
+         addLog("Le tribunal déboute les demandeurs et met les frais à leur charge. Quatre ans de procédure pour ça.","good");
+       } else {
+         const ha=Math.min(Math.max(0,state.land-80),Math.round(state.land*.35));
+         if(ha>0){state.land-=ha;ensureParcels();}
+         state.money-=Math.min(state.money,sc(rand(4000,9000)));
+         state.siege=Math.min(100,(state.siege||0)+16);
+         addLog(`Condamnation. ${ha} hectares vendus pour payer, et le jugement fera jurisprudence dans tout l'État.`,"bad");
+       }}},
+     {label:"Changer complètement de méthode",apply:()=>{
+       state.money-=Math.min(state.money,sc(rand(3000,6000)));
+       const perdu=Math.round(state.cattle*.30); state.cattle-=perdu;
+       state.reputation=clamp(state.reputation+rand(14,24));
+       state.legacy.honor++;
+       state.siege=Math.max(0,(state.siege||0)-18);
+       const c=factionOfType("community"); if(c) c.relation=clamp(c.relation+30,-100,100);
+       addLog(`Effluents traités, camions déviés, ${perdu} bêtes en moins. Les plaignants se retirent un par un.`,"good");}}
+   ]},
+
+  {eraId:"modern", art:"money", condition:()=>state.year>=2016,
+   title:"Le fonds de pension entre au capital",
+   text:"Un fonds a racheté vos deux prêteurs, votre coopérative d'aval et le terrain qui borde votre entrée. Ils ne vous ont rien demandé. Leur directeur régional vous invite à déjeuner.",
+   image:"Un rendez-vous dans un restaurant vide",
+   choices:[
+     {label:"Accepter leur offre de partenariat",apply:()=>{
+       const g=sc(rand(6000,14000)); state.money+=g;
+       if(state.developer) addDeveloperPressure(30);
+       state.siege=Math.min(100,(state.siege||0)+14);
+       addLog(`${g} $ entrent en caisse contre un droit de préemption sur tout le domaine. `
+         + `On travaille désormais pour quelqu'un d'autre sans le savoir.`,"info");}},
+     {label:"Refuser et se désendetter à marche forcée",apply:()=>{
+       const cout=Math.min(state.money,sc(rand(4000,8000)));
+       state.money-=cout; state.debt=0; state.missedPayments=0;
+       const perdu=Math.round(state.cattle*.2); state.cattle-=perdu;
+       state.siege=Math.max(0,(state.siege||0)-12);
+       addLog(`Toutes les dettes soldées d'un coup, ${perdu} bêtes vendues pour y arriver. `
+         + `Ils n'ont plus de prise, et la caisse est vide.`,"good");}},
+     {label:"Les laisser faire et attendre",apply:()=>{
+       if(state.developer) addDeveloperPressure(20);
+       state.siege=Math.min(100,(state.siege||0)+10);
+       addLog("Rien ne se passe pendant deux ans. Puis tous les contrats arrivent à échéance le même mois.","bad");}}
+   ]},
+
+  {eraId:"modern", art:"storm", condition:()=>state.year>=2018,
+   title:"L'incendie de l'été",
+   text:"Le feu est parti de la nationale et remonte le versant ouest à trente kilomètres-heure. Les pompiers protègent le lotissement d'abord — c'est le protocole. Vous avez quatre heures et vos propres hommes.",
+   image:"Une ligne orange derrière la crête",
+   choices:[
+     {label:"Sauver le troupeau",apply:()=>{
+       const hit=hurtCowboys(rand(1,2),true);
+       const ha=Math.min(Math.max(0,state.land-80),Math.round(state.land*.28));
+       if(ha>0){state.land-=ha;ensureParcels();}
+       state.feed=0;
+       addLog(`Le troupeau passe le gué à temps. ${casualtyLine(hit)} `
+         + `${ha} hectares brûlés jusqu'à la roche, et pas un brin de fourrage.`,"bad");}},
+     {label:"Sauver les bâtiments et la maison",apply:()=>{
+       const perdu=Math.round(state.cattle*.45); state.cattle-=perdu;
+       state.unity=clamp(state.unity+rand(6,14));
+       addLog(`La maison de maître et les hangars sont sauvés. ${perdu} bêtes sont restées dans le canyon. `
+         + `On les a entendues.`,"bad");}},
+     {label:()=>`Payer une flotte privée (${moneyFmt.format(sc(11000))} $)`,
+      condition:()=>state.money>=sc(11000),
+      apply:()=>{state.money-=sc(11000);
+       if(chance(.7)){
+         state.reputation=clamp(state.reputation+rand(4,10));
+         addLog("Deux bombardiers d'eau affrétés à l'heure. Le feu s'arrête à la clôture. On a payé le prix d'un troupeau pour ne rien perdre.","good");
+       } else {
+         const perdu=Math.round(state.cattle*.3); state.cattle-=perdu;
+         const ha=Math.min(Math.max(0,state.land-80),Math.round(state.land*.15));
+         if(ha>0){state.land-=ha;ensureParcels();}
+         addLog(`Les avions arrivent trop tard : le vent a tourné. ${perdu} bêtes et ${ha} hectares, `
+           + `plus la facture.`,"bad");
+       }}}
+   ]},
+
+  {eraId:"modern", art:"city", condition:()=>state.year>=2020&&(state.siege||0)>=30,
+   title:"Le référendum local",
+   text:"La commune organise une consultation sur l'avenir des terres de la vallée. Ce n'est pas contraignant. Tout le monde sait que ce sera contraignant.",
+   image:"Des affiches sur un panneau municipal",
+   choices:[
+     {label:"Faire campagne, porte à porte, avec toute la famille",apply:()=>{
+       const odds=.28+state.reputation/280+state.unity/400
+         +((state.factions||[]).filter(f=>f.relation>40).length*.07)-(state.familySplit?.12:0);
+       if(chance(Math.max(.1,Math.min(.88,odds)))){
+         state.siege=Math.max(0,(state.siege||0)-26);
+         state.reputation=clamp(state.reputation+rand(10,18));
+         state.unity=clamp(state.unity+rand(8,16));
+         addLog("Cinquante-quatre pour cent contre l'urbanisation. La famille a fait toutes les portes du canton.","good");
+       } else {
+         state.siege=Math.min(100,(state.siege||0)+18);
+         state.reputation=clamp(state.reputation-rand(4,10));
+         addLog("Soixante et un pour cent pour. Le comté a voté contre vous en connaissance de cause.","bad");
+       }}},
+     {label:()=>`Financer la campagne du non (${moneyFmt.format(sc(15000))} $)`,
+      condition:()=>state.money>=sc(15000),
+      apply:()=>{state.money-=sc(15000);
+       state.legacy.greed++;
+       if(chance(.55)){
+         state.siege=Math.max(0,(state.siege||0)-20);
+         addLog("Le non l'emporte de peu. Les comptes de campagne ne seront jamais publiés.","good");
+       } else {
+         state.siege=Math.min(100,(state.siege||0)+24);
+         state.reputation=clamp(state.reputation-rand(12,22));
+         addLog("Le financement est révélé la veille du scrutin. Le oui passe à soixante-douze pour cent.","bad");
+       }}},
+     {label:"Ne pas y participer",apply:()=>{
+       state.siege=Math.min(100,(state.siege||0)+12);
+       addLog("La famille n'a pas fait campagne. Le comté a conclu qu'elle avait renoncé.","bad");}}
    ]}
 ];
 
@@ -11806,9 +12794,11 @@ function showBrief(){
 // chargement, avant que `state` n'existe.
 // Un texte qui lance ne doit jamais emporter le trimestre : au pire il manque
 // une phrase, la partie continue.
-function evalField(v, fallback){
+// `arg` sert aux crises de famille, dont les libellés citent une personne :
+// « Sauver Margaret » ne peut pas s'écrire sans elle.
+function evalField(v, fallback, arg){
   if(typeof v !== "function") return v;
-  try{ return v(); }catch(e){ return fallback || ""; }
+  try{ return v(arg); }catch(e){ return fallback || ""; }
 }
 
 // ---- Illustrations ----
@@ -12022,6 +13012,8 @@ function finishTurn(){
 }
 
 function checkGameOver(){
+  if(checkSiegeEnd()) return;
+
   if(state.year > 2026){
     state.gameOver = true;
     showDynastyEnding();
@@ -12214,6 +13206,22 @@ function epilogueHTML(){
     facts.push(`${state.protectedLand} hectares classés, qui ne seront jamais bâtis`);
   }
   if(state.town) facts.push(`${state.town.name} est devenue ${townStage().label}`);
+  // Ce qui s'est joué à l'intérieur de la maison compte autant que le domaine :
+  // c'est le seul endroit du jeu où on relit ses propres choix impossibles.
+  const crises = (state.crisesDone||[]).length;
+  if(crises){
+    facts.push(`${crises} choix de famille sans bonne issue : `
+      + state.crisesDone.map(id => { const c = crisisById(id); return c ? c.title.toLowerCase() : id; }).join(" · "));
+  }
+  if(state.familySplit){
+    facts.push(`La famille s'est coupée en deux : il y a désormais deux ${state.familyName} dans la vallée`);
+  }
+  if(state.vendetta){
+    facts.push(`Une maison effacée par vos soins — les ${state.vendetta.from} — et quelqu'un qui s'en souvient`);
+  }
+  if((state.siegeDone||[]).length){
+    facts.push(`${state.siegeDone.length} assaut(s) du dernier siècle repoussés, siège à ${siegeLevel()}/100 au dernier jour`);
+  }
   facts.push(`Héritage moral : ${l.honor} acte(s) d'honneur, ${l.greed} de cupidité`);
   if((l.grudges||[]).length){
     facts.push("Rancunes léguées : " + l.grudges.map(g=>g.name).join(", "));
