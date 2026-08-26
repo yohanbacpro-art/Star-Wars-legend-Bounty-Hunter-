@@ -3724,6 +3724,10 @@ section("Montants et inflation");
     // rendent et retirent de la réputation. Le sujet ici est l'érosion seule.
     ST().warCooldown = 99999;
     ST().war = null;
+    // Sixième source : l'adversaire politique hostile entame la réputation.
+    // Le sujet ici est l'érosion seule, pas la politique.
+    ST().crisisCooldown = 99999;
+    if(ST().rivalPol) ST().rivalPol.relation = 0;
     G.endTurn();
     let guard = 0;
     while(!$el("eventModal")._classes.has("hidden") && guard++ < 10){
