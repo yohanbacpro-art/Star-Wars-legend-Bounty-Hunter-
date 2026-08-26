@@ -3328,9 +3328,15 @@ section("Coups en douce");
   s.eraId = era.id; s.costModifier = era.inflation;
   s.money = 100000; s.actions = 3;
   const before = ST().money;
+  // On force l'échec : une opération réussie rapporte plus que sa mise, et la
+  // caisse remonte — ce qui ne dit rien sur le prélèvement.
+  const vrai = Math.random;
+  Math.random = () => 0.999;
   G.runIllegalOp(withCost.id);
+  Math.random = vrai;
   check("une opération consomme une action", ST().actions === 2, ST().actions);
-  check("la mise est prélevée", ST().money < before);
+  check("la mise est prélevée", ST().money <= before - ST().costModifier * withCost.cost,
+    before + " → " + ST().money);
 
   // Mise insuffisante : rien ne se passe.
   const s2 = freshGame();
@@ -4825,6 +4831,136 @@ section("Le dernier assaut");
   const ligne = al.find(a => /visé/.test(a.title));
   check("il dit ce qui pousse et ce qui retient",
     /pousse/.test(ligne.what) && /retient/.test(ligne.what));
+}
+
+
+// ------------------------------------------------- Le pouvoir concret
+section("Les décrets et l'adversaire politique");
+{
+  const dec = ev("DECREES");
+  const offices = Object.keys(ev("OFFICES"));
+  const sans = offices.filter(id => !dec[id] || !dec[id].length);
+  check("chaque charge ouvre des décrets", sans.length === 0, sans.join(", "));
+
+  const bad = [];
+  Object.keys(dec).forEach(off => dec[off].forEach(d => {
+    ["id","icon","name","what"].forEach(f => { if(!d[f]) bad.push(off+"/"+(d.id||"?")+" sans "+f); });
+    if(!(d.cost > 0)) bad.push(off+"/"+d.id+" gratuit");
+    if(!(d.heat > 0)) bad.push(off+"/"+d.id+" sans coût politique");
+    if(!(d.cooldown > 0)) bad.push(off+"/"+d.id+" sans délai");
+    if(typeof d.run !== "function") bad.push(off+"/"+d.id+" n'agit pas");
+  }));
+  check("chaque décret est chiffré, limité et politiquement coûteux",
+    bad.length === 0, bad.slice(0,4).join(" | "));
+
+  const ids = [];
+  Object.keys(dec).forEach(off => dec[off].forEach(d => ids.push(d.id)));
+  check("identifiants uniques", new Set(ids).size === ids.length, ids.length);
+  check("au moins douze décrets", ids.length >= 12, ids.length);
+
+  // Chaque décret s'exécute, sur un état riche comme démuni.
+  const errs = [];
+  Object.keys(dec).forEach(off => dec[off].forEach(d => {
+    [["riche", 9000000], ["démuni", 0]].forEach(([nom, argent]) => {
+      const g = freshGame();
+      g.money = argent; g.land = 1200; g.cattle = 400; g.year = 1990; g.eraId = "globalization";
+      g.politics = {office:off, until:2000, scrutiny:5, held:[off]};
+      G.ensureSecondHouse();
+      try{ d.run(); }catch(e){ errs.push(`${off}/${d.id} (${nom}) : ${e.message}`); }
+    });
+  }));
+  check("tous les décrets s'exécutent", errs.length === 0, errs.slice(0,3).join(" | "));
+
+  // Un décret coûte une action, de l'argent, et de l'attention publique.
+  {
+    const g = freshGame();
+    g.money = 900000; g.actions = 3; g.year = 1990; g.eraId = "globalization";
+    g.politics = {office:"sheriff", until:2000, scrutiny:5, held:["sheriff"]};
+    const m0 = ST().money, s0 = ST().politics.scrutiny;
+    G.runDecree("closeCase");
+    check("un décret consomme une action", ST().actions === 2, ST().actions);
+    check("il coûte de l'argent", ST().money < m0, m0 - ST().money);
+    check("et il fait monter l'attention publique", ST().politics.scrutiny > s0,
+      s0 + " → " + ST().politics.scrutiny);
+    const s1 = ST().politics.scrutiny;
+    G.runDecree("closeCase");
+    check("il n'est pas renouvelable tout de suite", ST().politics.scrutiny === s1);
+  }
+
+  // Sans charge, aucun décret.
+  {
+    const g = freshGame();
+    g.money = 900000; g.actions = 3;
+    g.politics = {office:null, until:0, scrutiny:0, held:[]};
+    G.runDecree("closeCase");
+    check("sans charge, rien ne se signe", ST().actions === 3, ST().actions);
+  }
+
+  // L'adversaire existe dès qu'on n'exerce pas.
+  {
+    const g = freshGame();
+    g.politics = {office:null, until:0, scrutiny:0, held:[]};
+    const r = G.ensureRivalPol();
+    check("un adversaire occupe la place", !!r && !!r.name, r && r.name);
+    check("il a un caractère", !!ev("POL_TRAITS")[r.trait], r && r.trait);
+    check("et une relation avec vous", typeof r.relation === "number");
+
+    // Les trois façons de traiter avec lui coûtent une action et de l'argent.
+    ["support","bribe","fight"].forEach(k => {
+      const g2 = freshGame();
+      g2.money = 900000; g2.actions = 3;
+      g2.politics = {office:null, until:0, scrutiny:0, held:[]};
+      G.ensureRivalPol();
+      const m = ST().money;
+      G.courtRivalPol(k);
+      check("« " + k + " » engage une action et de l'argent",
+        ST().actions === 2 && ST().money < m, ST().actions + " / " + (m - ST().money));
+    });
+
+    // Financer sa campagne le rapproche, à coup sûr.
+    const g3 = freshGame();
+    g3.money = 900000; g3.actions = 3;
+    g3.politics = {office:null, until:0, scrutiny:0, held:[]};
+    G.ensureRivalPol();
+    ST().rivalPol.relation = 0;
+    G.courtRivalPol("support");
+    check("le financer le rapproche", ST().rivalPol.relation > 0, ST().rivalPol.relation);
+
+    // Un adversaire hostile nuit ; un adversaire acquis sert.
+    const mesure = (rel) => {
+      const g4 = freshGame();
+      g4.money = 900000; g4.suspicion = 50; g4.siege = 30;
+      g4.year = 2015; g4.eraId = "modern";
+      g4.politics = {office:null, until:0, scrutiny:0, held:[]};
+      G.ensureRivalPol();
+      ST().rivalPol.relation = rel;
+      let mal = 0;
+      for(let i = 0; i < 300; i++){
+        const av = ST().suspicion + (ST().siege||0);
+        ST().rivalPol.relation = rel;
+        G.rivalPolPhase();
+        if(ST().suspicion + (ST().siege||0) > av) mal++;
+      }
+      return mal;
+    };
+    const hostile = mesure(-80), ami = mesure(80);
+    check("un adversaire hostile fait du mal", hostile > 0, hostile + " passages sur 300");
+    check("un adversaire acquis n'en fait pas", ami < hostile, ami + " contre " + hostile);
+  }
+
+  // Le panneau montre les décrets quand on exerce, l'adversaire sinon.
+  {
+    const g = freshGame();
+    g.money = 900000; g.year = 1990; g.eraId = "globalization";
+    g.politics = {office:"prosecutor", until:2000, scrutiny:5, held:["prosecutor"]};
+    // renderPolitics rend une chaîne ; c'est renderDiplomacy qui la pose.
+    const html = G.renderPolitics();
+    check("le panneau annonce les décrets", /runDecree\(/.test(html));
+    const g2 = freshGame();
+    g2.politics = {office:null, until:0, scrutiny:0, held:[]};
+    const html2 = G.renderPolitics();
+    check("et l'adversaire quand on n'exerce pas", /courtRivalPol\(/.test(html2));
+  }
 }
 
 console.log("\n" + pass + " vérifications passées, " + fail + " échec(s).");

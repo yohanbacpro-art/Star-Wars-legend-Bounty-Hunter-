@@ -4944,6 +4944,9 @@ var NEIGHBOUR_STATES = {
 function ensureNeighbours(){
   if(!state) return [];
   if(!Array.isArray(state.neighbours)) state.neighbours = [];
+  if(state.rivalPol === undefined) state.rivalPol = null;
+  if(!state.decreeCooldown) state.decreeCooldown = {};
+  if(typeof state.decreesUsed !== "number") state.decreesUsed = 0;
   while(state.neighbours.length < 3) state.neighbours.push(newNeighbour());
   return state.neighbours;
 }
@@ -7209,6 +7212,9 @@ function ensureProgress(){
   if(typeof state.arcCooldown !== "number") state.arcCooldown = 0;
   if(typeof state.warCooldown !== "number") state.warCooldown = 0;
   if(!Array.isArray(state.neighbours)) state.neighbours = [];
+  if(state.rivalPol === undefined) state.rivalPol = null;
+  if(!state.decreeCooldown) state.decreeCooldown = {};
+  if(typeof state.decreesUsed !== "number") state.decreesUsed = 0;
   if(typeof state.boughtNeighbours !== "number") state.boughtNeighbours = 0;
   if(state.crisis === undefined) state.crisis = null;
   if(typeof state.siege !== "number") state.siege = 0;
@@ -7767,6 +7773,9 @@ function baseState() {
     competedTurn:-1,
     neighbours:[],
     boughtNeighbours:0,
+    rivalPol:null,
+    decreeCooldown:{},
+    decreesUsed:0,
     war:null,
     warCooldown:0,
     vendetta:null,
@@ -9030,6 +9039,7 @@ function ageFamily(){
   vendettaPhase();
   siegePhase();
   neighbourPhase();
+  rivalPolPhase();
   [state.founder,state.spouse].forEach(p => {
     if(!p.alive) return;
     p.age++;
@@ -14680,6 +14690,271 @@ function renderDiplomacy(){
 // Le panneau politique : ce qu'on tient, ce qu'on peut viser, et ce que ça
 // coûte de le tenir. Le `scrutiny` est affiché parce qu'il est la contrepartie
 // de tout le reste.
+// ============================================================================
+// LE POUVOIR CONCRET, ET L'ADVERSAIRE
+// ----------------------------------------------------------------------------
+// Une charge publique ne rendait qu'un effet passif par tour. On l'exerce
+// maintenant : chaque charge ouvre des DÉCRETS, actions réservées au titulaire,
+// puissantes, limitées, et qui font monter l'attention publique — c'est
+// précisément ce qui fait tomber ceux qui en abusent.
+//
+// Et hors mandat, la charge est tenue par QUELQU'UN. `state.rivalPol` : un
+// adversaire nommé, avec un trait, qui vous nuit ou vous sert selon la relation
+// qu'on entretient avec lui. On peut le soutenir, l'acheter, ou le combattre.
+// ============================================================================
+var DECREES = {
+  cattleCommission:[
+    {id:"floorPrice", icon:"📈", name:"Fixer un cours plancher",
+     what:"La commission garantit un prix minimum pour la saison. Les petits éleveurs applaudissent, les acheteurs grincent.",
+     cost:200, heat:4, cooldown:8,
+     run:()=>{ state.cattlePriceMin = Math.min(state.cattlePriceMax - 3, state.cattlePriceMin + rand(3,6));
+       const t = factionOfType("trade"); if(t) t.relation = clamp(t.relation - 12, -100, 100);
+       const c = factionOfType("community"); if(c) c.relation = clamp(c.relation + 18, -100, 100);
+       addLog("Le cours plancher est relevé. Personne dans le comté ne vendra plus au rabais cette saison.","good"); }},
+    {id:"brandAudit", icon:"🔥", name:"Ordonner un contrôle des marques",
+     what:"Toutes les bêtes du comté vérifiées au fer. Le vol de bétail devient invivable — pour les autres.",
+     cost:260, heat:6, cooldown:10,
+     run:()=>{ rivalHouses().forEach(h => weakenHouse(h, rand(4,9)));
+       state.suspicion = clamp(state.suspicion - rand(4,10));
+       addLog("Le contrôle des marques passe partout, sauf chez vous. Les maisons d'en face y perdent.","good"); }}
+  ],
+  sheriff:[
+    {id:"deputise", icon:"⭐", name:"Assermenter vos hommes",
+     what:"Vos cow-boys deviennent adjoints. Ce qu'ils font sur vos terres devient légal.",
+     cost:180, heat:7, cooldown:10,
+     run:()=>{ (state.cowboys||[]).forEach(c => { c.loyalty = clamp(c.loyalty + rand(6,14)); c.deputy = true; });
+       state.weapons += 2;
+       addLog("Six étoiles de fer-blanc distribuées au baraquement. Les hommes se tiennent plus droit.","good"); }},
+    {id:"closeCase", icon:"🗄️", name:"Classer un dossier",
+     what:"Il disparaît du greffe, simplement. Personne ne le cherchera avant des années.",
+     cost:120, heat:9, cooldown:6,
+     run:()=>{ state.suspicion = clamp(state.suspicion - rand(20,35));
+       state.legacy.greed++;
+       addLog("Le dossier n'est plus au greffe. Il n'y a jamais été.","good"); }},
+    {id:"posse", icon:"🐎", name:"Lever une milice contre les rôdeurs",
+     what:"Trente hommes assermentés ratissent la vallée. Les incursions cessent — et les maisons d'en face comprennent.",
+     cost:300, heat:6, cooldown:12,
+     run:()=>{ rivalHouses().forEach(h => { weakenHouse(h, rand(6,12));
+         h.relation = clamp(h.relation - rand(4,10), -100, 100); });
+       if(state.vendetta) state.vendetta.heat = Math.max(0, state.vendetta.heat - 40);
+       addLog("La milice tient les cols pendant six semaines. Plus une bête ne disparaît.","good"); }}
+  ],
+  prosecutor:[
+    {id:"dropCharges", icon:"📄", name:"Abandonner les poursuites",
+     what:"Tout ce qui vise la famille s'éteint faute de charges. On ne peut pas se poursuivre soi-même.",
+     cost:260, heat:11, cooldown:10,
+     run:()=>{ state.suspicion = clamp(state.suspicion - rand(28,45));
+       state.claimPressure = Math.max(0, (state.claimPressure||0) - 8);
+       state.legacy.greed += 2;
+       addLog("Trois dossiers classés le même après-midi, dont deux portaient votre nom.","good"); }},
+    {id:"indictRival", icon:"⚖️", name:"Mettre en accusation une maison rivale",
+     what:"Un chef de maison devant le grand jury, deux ans de procédure, et des avocats à payer.",
+     cost:400, heat:13, cooldown:12,
+     run:()=>{ const h = rivalTargetHouse();
+       if(h){ weakenHouse(h, rand(12,22)); h.relation = clamp(h.relation - rand(15,28), -100, 100);
+         addLog(`Le chef des ${h.name} passe devant le grand jury. La maison en sort exsangue.`,"good"); } }},
+    {id:"taxAmnesty", icon:"🧾", name:"Obtenir une amnistie fiscale",
+     what:"Les arriérés du comté sont effacés en bloc. Les vôtres avec.",
+     cost:300, heat:8, cooldown:14,
+     run:()=>{ state.arrears = 0; state.arrearYears = 0;
+       state.taxRelief = Math.min(60, (state.taxRelief||0) + 25);
+       addLog("L'amnistie passe au conseil. Vos arriérés disparaissent avec ceux des autres.","good"); }}
+  ],
+  senator:[
+    {id:"subsidy", icon:"💵", name:"Faire voter une aide à l'élevage",
+     what:"Une ligne budgétaire de l'État, écrite pour des domaines de votre taille exactement.",
+     cost:700, heat:10, cooldown:10,
+     run:()=>{ const g = Math.round(sc(400) + state.land * sc(1.2));
+       state.money += g;
+       addLog(`L'aide est votée : ${moneyFmt.format(g)} $ pour le domaine, et quelques miettes pour les autres.`,"good"); }},
+    {id:"roadAway", icon:"🛣️", name:"Détourner la route et le zonage",
+     what:"Le tracé, les permis, la ligne à haute tension : tout contourne vos terres.",
+     cost:800, heat:12, cooldown:12,
+     run:()=>{ state.siege = Math.max(0, (state.siege||0) - 18);
+       if(state.developer) addDeveloperPressure(-25);
+       addLog("Le plan est redessiné en commission. Tout passe désormais chez le voisin.","good"); }},
+    {id:"grazingLease", icon:"🌾", name:"S'attribuer les baux fédéraux",
+     what:"Les terres fédérales de l'est, en location perpétuelle, à un prix décidé par vous.",
+     cost:900, heat:14, cooldown:14,
+     run:()=>{ const ha = rand(120, 300); state.land += ha; addParcel(ha);
+       addClaimPressure(5); state.legacy.greed += 2;
+       addLog(`${ha} hectares fédéraux passent sous bail à votre nom, pour trois générations.`,"good"); }}
+  ],
+  governor:[
+    {id:"pardon", icon:"🕊️", name:"Gracier les vôtres",
+     what:"Tout ce que la famille a fait et qui pourrait encore être poursuivi cesse de l'être.",
+     cost:900, heat:18, cooldown:16,
+     run:()=>{ state.suspicion = 0;
+       state.missedPayments = 0;
+       state.legacy.greed += 2;
+       addLog("La grâce est signée un vendredi soir. Tout est effacé, et tout le monde le sait.","good"); }},
+    {id:"protectRanch", icon:"🏞️", name:"Classer le domaine en réserve d'État",
+     what:"Une servitude perpétuelle : ces terres ne seront jamais bâties, quoi qu'il arrive après vous.",
+     cost:1200, heat:6, cooldown:20,
+     run:()=>{ const ha = Math.round(state.land * .35);
+       state.protectedLand = (state.protectedLand||0) + ha;
+       state.siege = Math.max(0, (state.siege||0) - 25);
+       state.reputation = clamp(state.reputation + rand(10,18));
+       state.legacy.honor += 2;
+       addLog(`${ha} hectares classés à perpétuité. Vos héritiers ne pourront pas les vendre non plus.`,"good"); }},
+    {id:"stateGuard", icon:"🎖️", name:"Envoyer la garde d'État",
+     what:"Deux compagnies dans la vallée. Ce qui s'appelait une guerre entre maisons devient une opération de maintien de l'ordre.",
+     cost:1400, heat:16, cooldown:16,
+     run:()=>{ rivalHouses().forEach(h => { weakenHouse(h, rand(18,32));
+         h.relation = clamp(h.relation - rand(10,20), -100, 100); });
+       if(state.war) endWar("la garde d'État y a mis fin.");
+       if(state.vendetta) state.vendetta = null;
+       addLog("Les camions kaki remontent la vallée. Personne ne discute avec deux compagnies.","good"); }}
+  ]
+};
+
+function decreesFor(id){ return DECREES[id] || []; }
+function decreeReady(d){
+  const until = (state.decreeCooldown || {})[d.id] || 0;
+  return state.year >= until;
+}
+function runDecree(id){
+  const o = currentOffice();
+  const p = politics();
+  if(!o){ toast("Il faut exercer une charge."); return; }
+  const d = decreesFor(p.office).find(x => x.id === id);
+  if(!d) return;
+  if(state.actions <= 0 || state.gameOver){ toast("Plus d'action disponible ce tour."); return; }
+  if(!decreeReady(d)){ toast("Ce décret n'est pas encore renouvelable."); return; }
+  if(spend(d.cost) === false) return;
+  useAction();
+  if(!state.decreeCooldown) state.decreeCooldown = {};
+  state.decreeCooldown[d.id] = state.year + d.cooldown;
+  // ⚠️ Le pouvoir se paie en attention : c'est le seul contrepoids, et il doit
+  // rester visible. Un décret n'est jamais gratuit politiquement.
+  p.scrutiny = (p.scrutiny || 0) + d.heat;
+  state.decreesUsed = (state.decreesUsed || 0) + 1;
+  try{ d.run(); }catch(e){}
+  addLog(`${d.icon} ${d.name} — l'attention publique monte de ${d.heat} points.`, "info");
+  renderDiplomacy();
+  checkAchievements();
+  render();
+}
+
+// ---- L'adversaire ----
+// Hors mandat, la charge est tenue par quelqu'un. Il a un nom, un trait, et une
+// relation avec vous qui décide de ce qu'il vous fait subir chaque année.
+var POL_TRAITS = {
+  integre:{label:"Intègre", icon:"⚖️",
+    hostile:"Il applique la loi à la lettre, en commençant par vous.",
+    ami:"Il ne vous doit rien, mais il ne vous cherche pas."},
+  venal:{label:"Vénal", icon:"💰",
+    hostile:"Il se vend — à quelqu'un d'autre.",
+    ami:"Il se vend, et c'est vous qui payez."},
+  ambitieux:{label:"Ambitieux", icon:"🎯",
+    hostile:"Il se fera un nom sur votre dos.",
+    ami:"Il monte, et il vous emmène."},
+  populiste:{label:"Populiste", icon:"📣",
+    hostile:"Il désigne le grand domaine à la foule.",
+    ami:"Il vous présente comme l'enfant du pays."}
+};
+
+function ensureRivalPol(){
+  if(!state) return null;
+  if(!state.rivalPol){
+    const keys = Object.keys(POL_TRAITS);
+    const noms = ["Ellis Crane","Marion Whitfield","Otis Grange","Vera Sandoval",
+      "Lyle Beckett","Ada Trumbull","Hollis Vance","Ruth Cardell"];
+    state.rivalPol = {
+      name: noms[rand(0, noms.length-1)],
+      trait: keys[rand(0, keys.length-1)],
+      relation: rand(-25, 15),
+      since: state.year
+    };
+  }
+  return state.rivalPol;
+}
+
+// Chaque année, l'adversaire agit — dans un sens ou dans l'autre.
+function rivalPolPhase(){
+  if(currentOffice()){
+    // Pendant votre mandat, il attend son heure et fourbit ses dossiers.
+    const r = ensureRivalPol();
+    if(chance(.25)){
+      politics().scrutiny = (politics().scrutiny || 0) + rand(1,3);
+    }
+    return;
+  }
+  const r = ensureRivalPol();
+  // Il change de tête de temps en temps, et le suivant ne vous doit rien.
+  if(chance(.06)){
+    state.rivalPol = null;
+    ensureRivalPol();
+    addLog(`${state.rivalPol.name} prend la charge que vous n'occupez pas. On repart de zéro.`, "info");
+    return;
+  }
+  r.relation = clamp(r.relation + rand(-3, 2), -100, 100);
+  if(!chance(.30)) return;
+  const t = POL_TRAITS[r.trait] || POL_TRAITS.integre;
+  if(r.relation <= -30){
+    const roll = rand(1,4);
+    if(roll === 1){ state.suspicion = clamp(state.suspicion + rand(6,14));
+      addLog(`${r.name} rouvre un vieux dossier sur le domaine. ${t.hostile}`, "bad"); }
+    else if(roll === 2){ const c = sc(rand(150,500)); state.money -= Math.min(state.money, c);
+      addLog(`${r.name} fait passer une taxe qui ne vise qu'un domaine du comté : ${c} $.`, "bad"); }
+    else if(roll === 3){ addClaimPressure(2);
+      addLog(`${r.name} demande la révision des titres fonciers de la vallée.`, "bad"); }
+    else { state.siege = Math.min(100, (state.siege||0) + 2);
+      state.reputation = clamp(state.reputation - rand(2,6));
+      addLog(`${r.name} vous cite en exemple de ce qui ne va plus dans le comté.`, "bad"); }
+  } else if(r.relation >= 40){
+    const roll = rand(1,3);
+    if(roll === 1){ state.suspicion = clamp(state.suspicion - rand(5,12));
+      addLog(`${r.name} fait traîner une procédure qui vous visait. ${t.ami}`, "good"); }
+    else if(roll === 2){ const g = sc(rand(120,400)); state.money += g;
+      addLog(`${r.name} oriente un marché public vers le domaine : +${g} $.`, "good"); }
+    else { state.siege = Math.max(0, (state.siege||0) - 2);
+      addLog(`${r.name} défend le domaine en séance publique.`, "good"); }
+  }
+}
+
+// Trois façons de traiter avec lui, chacune avec son prix.
+function courtRivalPol(kind){
+  const r = ensureRivalPol();
+  if(state.actions <= 0 || state.gameOver){ toast("Plus d'action disponible ce tour."); return; }
+  if(kind === "support"){
+    if(spend(260) === false) return;
+    useAction();
+    r.relation = clamp(r.relation + rand(18,32), -100, 100);
+    state.reputation = clamp(state.reputation + rand(1,4));
+    addLog(`La famille finance ouvertement ${r.name}. On sait désormais de quel côté vous êtes.`, "info");
+  } else if(kind === "bribe"){
+    if(spend(500) === false) return;
+    useAction();
+    if(chance(.62 + (POL_TRAITS[r.trait] === POL_TRAITS.venal ? .25 : 0) - state.suspicion/300)){
+      r.relation = clamp(r.relation + rand(30,50), -100, 100);
+      state.legacy.greed++;
+      addLog(`${r.name} accepte l'enveloppe. Il votera comme il faut, et il reviendra en demander.`, "good");
+    } else {
+      r.relation = clamp(r.relation - rand(20,35), -100, 100);
+      state.suspicion = clamp(state.suspicion + rand(15,28));
+      state.reputation = clamp(state.reputation - rand(6,14));
+      addLog(`${r.name} refuse l'enveloppe et la montre au journal du comté.`, "bad");
+    }
+  } else {
+    if(spend(340) === false) return;
+    useAction();
+    const odds = .40 + state.reputation/300 - state.suspicion/250;
+    if(chance(Math.max(.1, Math.min(.85, odds)))){
+      r.relation = clamp(r.relation - rand(10,20), -100, 100);
+      state.rivalPol.weakened = true;
+      state.siege = Math.max(0, (state.siege||0) - 4);
+      addLog(`La campagne contre ${r.name} porte : il ne pèsera plus grand-chose jusqu'aux prochaines élections.`, "good");
+    } else {
+      r.relation = clamp(r.relation - rand(20,32), -100, 100);
+      state.reputation = clamp(state.reputation - rand(4,10));
+      addLog(`La campagne contre ${r.name} se retourne : il en sort renforcé, et il sait qui l'a lancée.`, "bad");
+    }
+  }
+  renderDiplomacy();
+  render();
+}
+
 function renderPolitics(){
  const p = politics();
  const o = currentOffice();
@@ -14713,6 +14988,60 @@ function renderPolitics(){
       + "au-delà, une commission d'enquête s'ouvre.</span></div>";
    h += "<div class=\"faction-acts\"><button class=\"choice\" onclick=\"leaveOffice('retiré de son plein gré', false)\">"
       + "Se retirer de la charge</button></div>";
+   h += "</div>";
+
+   // Les décrets : le pouvoir qu'on exerce, pas celui qu'on subit.
+   const ds = decreesFor(p.office);
+   if(ds.length){
+     h += "<h4 class=\"section-head\">Ce que vous pouvez décider</h4>";
+     h += "<p class=\"modal-intro\">Chaque décret engage une action du tour, coûte de l'argent, "
+        + "et fait monter l'attention publique. C'est le seul contrepoids : un titulaire qui abuse "
+        + "de sa charge finit devant une commission d'enquête.</p>";
+     ds.forEach(d => {
+       const pret = decreeReady(d);
+       const prix = sc(d.cost);
+       const payable = state.money >= prix;
+       const until = (state.decreeCooldown||{})[d.id] || 0;
+       h += "<div class=\"faction\">";
+       h += "<div class=\"faction-head\"><span class=\"faction-name\">" + d.icon + " " + d.name + "</span>"
+          + "<span class=\"fact " + (pret && payable ? "" : "bad") + "\">" + moneyFmt.format(prix) + " $</span>"
+          + "<span class=\"fact bad\">Attention +" + d.heat + "</span></div>";
+       h += "<div class=\"faction-role\">" + d.what + "</div>";
+       h += "<div class=\"faction-acts\">"
+          + (pret
+              ? "<button class=\"choice\" " + (payable ? "" : "disabled") + " onclick=\"runDecree('" + d.id + "')\">"
+                + (payable ? "Signer le décret" : "La caisse ne suit pas") + "</button>"
+              : "<small><i>Renouvelable en " + until + ".</i></small>")
+          + "</div>";
+       h += "</div>";
+     });
+   }
+ }
+
+ // L'adversaire : hors mandat, la charge est tenue par quelqu'un.
+ if(!o){
+   const r = ensureRivalPol();
+   const t = POL_TRAITS[r.trait] || POL_TRAITS.integre;
+   const cls = r.relation <= -30 ? "bad" : (r.relation >= 40 ? "good" : "info");
+   h += "<h4 class=\"section-head\">Celui qui occupe la place</h4>";
+   h += "<div class=\"faction\">";
+   h += "<div class=\"faction-head\"><span class=\"faction-name\">" + t.icon + " " + r.name + "</span>"
+      + "<span class=\"fact " + cls + "\">Relation " + Math.round(r.relation) + "</span>"
+      + "<span class=\"fact\">" + t.label + "</span></div>";
+   h += "<div class=\"faction-role\">"
+      + (r.relation <= -30 ? "<b>" + t.hostile + "</b>"
+        : (r.relation >= 40 ? "<b>" + t.ami + "</b>"
+        : "Il ne vous doit rien et ne vous cherche pas — pour l'instant."))
+      + "<br><span>Un adversaire hostile rouvre des dossiers, fait voter des taxes qui ne visent "
+      + "qu'un domaine, et alimente ceux qui veulent vos terres. Un allié fait l'inverse.</span></div>";
+   h += "<div class=\"faction-acts\">"
+      + "<button class=\"choice\" onclick=\"courtRivalPol('support')\">Financer sa campagne ("
+      + moneyFmt.format(sc(260)) + " $)</button>"
+      + "<button class=\"choice\" onclick=\"courtRivalPol('bribe')\">Lui glisser une enveloppe ("
+      + moneyFmt.format(sc(500)) + " $)</button>"
+      + "<button class=\"choice\" onclick=\"courtRivalPol('fight')\">Faire campagne contre lui ("
+      + moneyFmt.format(sc(340)) + " $)</button>"
+      + "</div>";
    h += "</div>";
  }
 
