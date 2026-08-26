@@ -13545,7 +13545,7 @@ function portraitSVG(p, opts){
     const gone = p.alive === false || o.dead;
     const uid2 = "ph" + hashStr((p.name||"") + ":" + (p.cid!==undefined?p.cid:"") + ":" + p.photoIx);
     const ring2 = o.ring || "var(--line, #745636)";
-    const geom2 = (o.size !== undefined)
+    const geom2 = (typeof o.size === "number")
       ? ` x="${o.x||0}" y="${o.y||0}" width="${o.size}" height="${o.size}"` : "";
     return `<svg class="portrait-svg"${geom2} viewBox="0 0 100 100" role="img"`
       + ` aria-label="Portrait de ${(p.name||"").replace(/"/g,"")}">`
@@ -13822,7 +13822,7 @@ function portraitSVG(p, opts){
 
   const ring = o.ring || "var(--line, #745636)";
   const bg = o.bg || "var(--surface-2, #f2e4c4)";
-  const geom = (o.size !== undefined)
+  const geom = (typeof o.size === "number")
     ? ` x="${o.x||0}" y="${o.y||0}" width="${o.size}" height="${o.size}"` : "";
   return `<svg class="portrait-svg"${geom} viewBox="0 0 100 100" role="img" aria-label="Portrait de ${(p.name||"").replace(/"/g,"")}">`
     + d

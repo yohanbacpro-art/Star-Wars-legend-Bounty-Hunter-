@@ -1,4 +1,4 @@
-# Ranch Dynasty — V5.0
+# Ranch Dynasty — V5.1
 
 Jeu de gestion de ranch multigénérationnel inspiré de *Yellowstone*.
 La partie démarre au printemps **1885** et se poursuit jusqu'en **2026**,
@@ -1082,6 +1082,151 @@ classe d'action de quatre cents riverains, le fonds de pension qui rachète vos
 prêteurs, l'incendie de l'été (les pompiers protègent le lotissement d'abord),
 et le référendum local.
 
+## Le catalogue d'événements
+
+**451 événements**, contre 215 en V5.0. Chacun a deux ou trois issues qui
+portent un bonus ou un malus réel, et beaucoup ont un tirage qui peut tourner
+mal. 123 d'entre eux n'ont pas d'époque et peuvent tomber n'importe quand ;
+chaque période dispose donc de **162 à 183 scènes possibles**.
+
+| Époque | Propres à l'époque | Disponibles au total |
+|---|---|---|
+| Fondation | 60 | 183 |
+| Prohibition | 48 | 171 |
+| Dépression | 39 | 162 |
+| Après-guerre | 44 | 167 |
+| Années d'entreprise | 43 | 166 |
+| Mondialisation | 43 | 166 |
+| Ère moderne | 51 | 174 |
+
+⚠️ **`cattleLoss()` — le garde-fou d'échelle.** Les événements sont écrits pour
+un domaine moyen, mais la Fondation est précisément le moment où le troupeau est
+le plus petit : une perte de trente têtes écrite pour un ranch de trois cents en
+tuait un de soixante. Mesuré, la fin médiane du jeu compétent est tombée de 2027
+à 1911 dès l'ajout du catalogue. **Les 94 pertes de bétail du jeu passent
+désormais par `cattleLoss()`**, qui borne à un cinquième du troupeau : le chiffre
+écrit reste le plafond, jamais le plancher. Tout nouvel événement qui retire des
+bêtes doit passer par là.
+
+## Racheter les voisins
+
+« Acheter 20 hectares » est une ligne de tableur. Racheter le ranch des Whitlock
+parce que le vieux est mort et que ses fils sont partis en ville, c'est une
+décision.
+
+`state.neighbours` : trois voisins toujours en vue, chacun avec un nom, des
+hectares, un troupeau, des hommes, et un **état qui évolue tout seul** —
+prospère (×1,35), ordinaire, en succession (×0,72), endetté (×0,62), saisi
+(×0,48). Le prix suit cet état, et **une bonne réputation le fait baisser** :
+on préfère vendre à quelqu'un dont on sait ce qu'il fera des terres.
+
+Ce qui vient avec est annoncé : un ranch endetté apporte sa dette au domaine, un
+ranch saisi apporte la rancune du comté et un point de revendication foncière.
+Les hommes du voisin restent ou partent selon votre nom. Un voisin sur dix
+disparaît chaque année, vendu à quelqu'un d'autre.
+
+## Les gros coups
+
+Le catalogue clandestin s'arrêtait au vol de dix bêtes. Il compte **71
+opérations** contre 36, et chaque époque a les siennes à grande échelle : le
+grand rabattage de deux cents têtes, la paie du chemin de fer, la banque du
+comté, le wagon frigorifique détourné, la distillerie du canyon, le convoi de
+paie du barrage, le fourgon blindé de la route 9, le carrousel des subventions,
+la spéculation sur les droits d'eau, l'achat de toute la chaîne de contrôle.
+
+Ils exigent des hommes et des armes (`needs`), exposent l'escouade (`danger`
+jusqu'à 0,70), et rapportent dix à trente fois une opération ordinaire.
+
+## Le pouvoir concret : quatorze décrets
+
+Une charge publique ne rendait qu'un effet passif par tour. Chaque charge ouvre
+maintenant des **décrets** — actions réservées au titulaire, puissantes,
+limitées par un délai de renouvellement, et qui font monter l'attention
+publique :
+
+- **Commission du bétail** : fixer un cours plancher, ordonner un contrôle des
+  marques ;
+- **Shérif** : assermenter vos hommes, classer un dossier, lever une milice ;
+- **Procureur** : abandonner les poursuites, mettre une maison rivale en
+  accusation, obtenir une amnistie fiscale ;
+- **Sénateur** : faire voter une aide à l'élevage, détourner la route et le
+  zonage, s'attribuer les baux fédéraux ;
+- **Gouverneur** : gracier les siens, classer le domaine en réserve d'État,
+  envoyer la garde.
+
+⚠️ **Le coût politique est le seul contrepoids et il doit rester visible.**
+Chaque décret ajoute de 4 à 18 points d'attention publique ; à 40, la commission
+d'enquête s'ouvre. Un décret gratuit casserait tout l'équilibre de la charge.
+
+## L'adversaire politique
+
+Hors mandat, la charge est tenue par **quelqu'un**. `state.rivalPol` : un
+adversaire nommé, avec un caractère — intègre, vénal, ambitieux, populiste.
+
+Hostile (relation ≤ −30), il rouvre de vieux dossiers, fait voter des taxes qui
+ne visent qu'un domaine du comté, demande la révision des titres fonciers et
+alimente le siège final. Acquis (≥ 40), il fait traîner une procédure qui vous
+visait, oriente un marché public vers le domaine, vous défend en séance.
+
+Trois façons de traiter avec lui : **financer sa campagne** (efficace et
+public), **lui glisser une enveloppe** (plus efficace, et il peut la montrer au
+journal), **faire campagne contre lui** (il en sort affaibli ou renforcé, et il
+saura qui l'a lancée). Il change de tête tous les quinze ans environ, et le
+suivant ne vous doit rien.
+
+## La grande crise de chaque époque
+
+Les événements sont des incidents ; il manquait ce qui définit une époque. Une
+crise par période, ouverte une seule fois dans sa fenêtre, qui **pèse à chaque
+tour tant qu'elle dure** et se referme en payant.
+
+| Époque | Crise | Ce qu'elle fait chaque tour |
+|---|---|---|
+| Fondation | La bande de Colter | Bêtes emmenées, hommes tombés dans les cols, meules brûlées |
+| Prohibition | Le syndicat de Chicago | Une part prélevée, les soupçons qui montent |
+| Dépression | Les années de poussière | Le fourrage qui s'envole, les bêtes qui étouffent |
+| Après-guerre | La guerre des parcours | Les maisons rivales qui se durcissent, les troupeaux qui se mêlent |
+| Années 70-80 | L'effondrement du bœuf | Le cours qui descend, les frais de portage |
+| Mondialisation | L'embargo sanitaire | Bêtes bloquées, analyses, réputation qui s'use |
+| Ère moderne | La sécheresse du siècle | Fourrage, bêtes vendues en urgence, siège qui monte |
+
+La sortie coûte une action et une somme **qui monte avec le domaine**, avec des
+chances affichées ; un échec ne rend pas la mise et prolonge la crise. Le
+bandeau d'alertes annonce la crise, compte les années restantes et porte le
+bouton d'action.
+
+## La maisonnée, enfin lisible
+
+Trois défauts corrigés dans le panneau de la famille :
+
+- ⚠️ **Les défunts restaient dans la liste des vivants**, l'âge figé à leur
+  mort, entre leurs frères et sœurs. Ils ont désormais leur propre section en bas
+  du panneau ;
+- ⚠️ **Un petit-enfant dont le parent était mort disparaissait** de l'affichage.
+  Il remonte dans sa propre section ;
+- **Les petits-enfants adultes n'avaient ni affectation ni désignation.** Une
+  seule fonction, `membreHTML()`, rend maintenant n'importe quel membre vivant —
+  enfant ou petit-enfant — avec son sélecteur de tâche dès 16 ans et son bouton
+  de désignation quand il peut hériter. `roleCount()` les comptait déjà : c'est
+  l'interface qui ne suivait pas.
+
+Les maisonnées peuvent aussi être plus grandes : le frein par enfant à charge
+passe de 0,18 à 0,11, les plafonds de 14 et 16 à 20 et 24.
+
+⚠️ **Trois effets d'échelle sont apparus avec les grandes familles**, tous
+mesurés : `partitionEstate()` divisait par le nombre exact de prétendants (un
+domaine tombait au huitième — plafonné à trois parts) ; les crises mortelles
+pouvaient emporter le seul porteur du nom en 1890 (elles exigent quatre vivants,
+et le remède unique ne vise plus le chef de famille) ; « Un ranch, deux
+héritiers » et « La branche qui fait sécession » se déclenchaient sur un ranch de
+180 hectares (elles exigent 400 et 500, et une scission ne descend jamais le
+domaine sous 200).
+
+⚠️ **`size` est surchargé dans `portraitSVG()`** : `portraitTag()` s'en sert
+comme classe CSS ("small"/"large"), l'affiche exportée comme géométrie en
+pixels. Émettre `width="small"` produisait une erreur SVG à chaque portrait de la
+maisonnée. Seule une valeur **numérique** vaut géométrie.
+
 ## Le concours équestre, une fois par tour
 
 ⚠️ Avec 8 actions par année, le concours était devenu **la meilleure affaire du
@@ -1141,13 +1286,13 @@ chargement et à l'import. **Toute nouvelle propriété de `state` doit y être 
 
 Courbe mesurée sur 30 parties par profil (`node tests/sim.js index.html 30 <profil>`) :
 
-| Profil | Fin médiane | Trésorerie finale* | Fins observées sur 40 parties |
-|---|---|---|---|
-| `passive` | 1891 | 629 | faillite quasi certaine |
-| `outlaw` | 1915 | 697 | faillite, saisie fiscale |
-| `mixed` | 2026 | 132 181 | — |
-| `honest` | 2026 | 123 195 | — |
-| `policy` | 2020 | 146 239 | 12× 2026, 8× dernier troupeau, 7× fin de lignée, **5× utilité publique**, 4× faillite, 4× vendu, 3× saisie fiscale |
+| Profil | Fin médiane | Trésorerie finale* |
+|---|---|---|
+| `passive` | 1892 | 610 |
+| `outlaw` | 1927 | 12 001 |
+| `honest` | 1930 | 36 006 — mais 13 parties sur 30 atteignent 2026 |
+| `mixed` | 2021 | 107 761 |
+| `policy` | 2021 | 138 678 |
 
 \* en dollars de 1885, seule façon de comparer d'une époque à l'autre.
 
@@ -1265,6 +1410,7 @@ sans aucune dépendance :
 # doctrines couplées aux arcs, siège et mariage rival.
 # guerre ouverte en trois phases, chute d'une maison, nation ashkani.
 # choix impossibles, scission de la famille, dernier assaut.
+# décrets et adversaire politique, grande crise d'époque.
 # chronique de la saga, tournant fondateur.
 # export de la chronique, variantes de départ.
 # affaires d'époque, fiscalité, escouade, revendication foncière, pègre.
@@ -1276,7 +1422,7 @@ sans aucune dépendance :
 # vues du domaine, motifs et scènes, vue d'hiver réservée au froid.
 # troisième génération, lien parent stable, ordre de succession.
 # carte du domaine en photographies, cadrage par parcelle.
-# 931 vérifications, sortie non nulle en cas d'échec.
+# 971 vérifications, sortie non nulle en cas d'échec.
 node tests/scenarios.js index.html
 
 # Simulation de masse.
@@ -1309,6 +1455,9 @@ si l'on repartait dessus.
 - **Les crises de famille ne se rejouent jamais** : dix crises pour 141 ans, une
   seule fois chacune. Des variantes par époque — la même déchirure en 1890 et en
   2010 — doubleraient leur durée de vie
+- **Les voisins rachetés ne laissent pas de trace** : leur nom disparaît du jeu
+  une fois la vente faite, alors qu'un « ancien ranch des Whitlock » sur la carte
+  du domaine coûterait trois lignes
 - **La branche dissidente ne se réconcilie pas** : une fois scindée, la famille
   reste scindée. Un mariage entre cousins, un retour au bercail, un rachat de la
   branche manquent
