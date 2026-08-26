@@ -197,7 +197,7 @@ for(let run = 0; run < RUNS; run++){
               continue;
             }
           }
-          const ops = ev("illegalOps()").filter(o => o.gain[1] && (!o.cost || s2.money > s2.costModifier*o.cost*3));
+          const ops = ev("illegalOps()").filter(o => o.gain[1] && (!o.cost || s2.money > s2.costModifier*o.cost*3) && (!o.needs || o.needs().ok));
           if(ops.length){ G.runIllegalOp(ops[Math.floor(rng()*ops.length)].id); continue; }
         }
         if(metier && POLICY === "honest"){
@@ -209,7 +209,7 @@ for(let run = 0; run < RUNS; run++){
         // On ne mange jamais son capital de production : seul le surplus
         // au-dessus des deux tiers de la capacité part au marché.
         else if(s2.money < sc(200) && s2.cattle > cap*0.8) G.doAction("sellCattle");
-        else if(s2.money > sc(1500*L) && s2.cattle >= cap-6*L) G.doAction("buyLand");
+        else if(s2.money > sc(260)*4 && s2.cattle >= cap-6*L) G.doAction("buyLand");
         else if(s2.cattle < cap-4 && s2.money > (s2.cattlePrice+6)*5*3) G.doAction("buyCattle");
         else if(s2.unity < 55) G.doAction("family");
         else if(s2.horses < 1 && s2.money > sc(400)) G.doAction("buyHorse");
@@ -242,11 +242,11 @@ for(let run = 0; run < RUNS; run++){
         else if(s2.feed < 60*L && s2.money > sc(60)*2) G.doAction("buyFeed");
         else if(s2.cattle > cap) G.doAction("sellCattle");
         else if(s2.money < sc(300) && s2.suspicion < 35){
-          const ops = ev("illegalOps()").filter(o => o.gain[1] && (!o.cost || s2.money > s2.costModifier*o.cost*3));
+          const ops = ev("illegalOps()").filter(o => o.gain[1] && (!o.cost || s2.money > s2.costModifier*o.cost*3) && (!o.needs || o.needs().ok));
           if(ops.length) G.runIllegalOp(ops[0].id); else G.doAction("sellCattle");
         }
         else if(s2.suspicion > 60 && s2.money > sc(150*L)) G.doAction("bribe");
-        else if(s2.money > sc(1200*L) && s2.cattle >= cap-6*L) G.doAction("buyLand");
+        else if(s2.money > sc(260)*4 && s2.cattle >= cap-6*L) G.doAction("buyLand");
         else if(s2.cattle < cap-4 && s2.money > (s2.cattlePrice+6)*5*3) G.doAction("buyCattle");
         else if(s2.champion && s2.champion.training < 60 && s2.money > sc(400*L)) G.doAction("trainHorse");
         else if(s2.horses < 1 && s2.money > sc(400)) G.doAction("buyHorse");
@@ -275,7 +275,7 @@ for(let run = 0; run < RUNS; run++){
         else if(s2.feed < 60*L && s2.money > sc(60)*2) G.doAction("buyFeed");
         else if(s2.cattle > cap) G.doAction("sellCattle");
         else if(s2.money < sc(200) && s2.cattle > cap*0.8) G.doAction("sellCattle");
-        else if(s2.money > sc(1200*L) && s2.cattle >= cap-6*L) G.doAction("buyLand");
+        else if(s2.money > sc(260)*4 && s2.cattle >= cap-6*L) G.doAction("buyLand");
         else if(s2.cattle < cap-4 && s2.money > (s2.cattlePrice+6)*5*3) G.doAction("buyCattle");
         else if(s2.unity < 55) G.doAction("family");
         else if(s2.suspicion > 60 && s2.money > sc(150*L)) G.doAction("bribe");

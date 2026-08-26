@@ -1548,7 +1548,12 @@ function resolveSuccession(){
 // toutes les parts sauf une quittent la famille dans l'année. Un grand ranch
 // peut y perdre les deux tiers de sa surface d'un seul coup.
 function partitionEstate(heirs){
-  const parts = heirs.length;
+  // ⚠️ Plafonné à trois parts. Avec des maisonnées désormais larges, diviser
+  // par le nombre exact de prétendants ramenait un domaine à un huitième d'un
+  // coup : mesuré, « le dernier troupeau » passait de 6 à 10 fins sur 30. En
+  // pratique les héritiers lointains se font racheter ; seuls deux ou trois
+  // tiennent bon assez longtemps pour obtenir une part.
+  const parts = Math.min(3, heirs.length);
   const keep = 1 / parts;
   const lostLand = Math.round(state.land * (1 - keep));
   const lostCattle = Math.round(state.cattle * (1 - keep));
@@ -4101,6 +4106,14 @@ function warReckoning(scene, h){
 // ============================================================================
 
 // ---- Les outils de la famille ----
+// Le vivier des crises qui tuent : le conjoint et les enfants, jamais le chef
+// de famille — c'est lui qui tient le domaine, et sa mort a ses propres règles.
+function sickPool(){
+  const out = [];
+  if(state.spouse && state.spouse.alive !== false) out.push(state.spouse);
+  (state.children||[]).forEach(c => { if(c.alive !== false) out.push(c); });
+  return out;
+}
 function livingKin(){
   const out = [];
   if(state.founder && state.founder.alive !== false) out.push(state.founder);
@@ -4135,7 +4148,9 @@ function exileKin(c, why){
 // vos propres cousins dedans.
 function splitFamily(c, why){
   if(!c) return;
-  const shareLand = Math.round(state.land * .38);
+  // La part qui s'en va ne descend jamais le domaine sous 200 hectares : en
+  // dessous, ce n'est plus une scission, c'est une double faillite.
+  const shareLand = Math.min(Math.round(state.land * .38), Math.max(0, state.land - 200));
   const shareCattle = Math.round(state.cattle * .38);
   const shareMoney = Math.round(Math.max(0, state.money) * .30);
   state.land = Math.max(40, state.land - shareLand);
@@ -4177,7 +4192,7 @@ function splitFamily(c, why){
 // droit d'être vide.
 var FAMILY_CRISES = [
   {
-    id:"sonKilled",
+    id:"sonKilled", lethal:true,
     title:"Ce que votre fils a fait",
     art:"night", image:"Une chemise trempée qu'on brûle dans le fourneau",
     canStart:()=>adultHeirs().length >= 1 && state.year < 1975,
@@ -4235,8 +4250,11 @@ var FAMILY_CRISES = [
     id:"twoSick",
     title:"Le médecin n'a qu'une dose",
     art:"family", image:"Deux portes fermées dans le même couloir",
-    canStart:()=>livingKin().length >= 3 && state.year < 1955,
-    who:()=>{ const k = livingKin(); return k.length >= 2 ? k : null; },
+    lethal:true,
+    canStart:()=>sickPool().length >= 2 && state.year < 1955,
+    // ⚠️ Jamais le chef de famille : il a sa propre crise, et le tuer en 1890
+    // alors qu'aucun enfant n'est en âge éteignait la lignée sur un coup de dé.
+    who:()=>{ const k = sickPool(); return k.length >= 2 ? k : null; },
     text:(k)=>{
       const a = k[0], b = k[1];
       return `La fièvre a pris ${a.name} et ${b.name} la même semaine. Le médecin est venu de la ville `
@@ -4276,7 +4294,11 @@ var FAMILY_CRISES = [
     id:"twoHeirs",
     title:"Un ranch, deux héritiers",
     art:"family", image:"Deux chaises tirées de part et d'autre d'une table",
-    canStart:()=>adultHeirs().length >= 2,
+    // ⚠️ Il faut un domaine qui vaille une querelle. Sans ce seuil, la crise
+    // tombait dès la première génération sur un ranch de 180 hectares et le
+    // coupait en deux avant qu'il n'ait rien été : mesuré, « le dernier
+    // troupeau » passait à 10 fins sur 30.
+    canStart:()=>adultHeirs().length >= 2 && state.land >= 400,
     who:()=>{ const h = adultHeirs(); return h.length >= 2 ? h.slice(0,2) : null; },
     text:(h)=>`${h[0].name} et ${h[1].name} ne se parlent plus depuis les foins. Chacun a fait `
       + `venir un notaire. Ils veulent une réponse maintenant, devant tout le monde : `
@@ -4373,7 +4395,7 @@ var FAMILY_CRISES = [
   },
 
   {
-    id:"lastRequest",
+    id:"lastRequest", lethal:true,
     title:"Ce qu'il vous demande",
     art:"family", image:"Une main posée sur un drap",
     canStart:()=>state.founder.alive !== false && state.founder.age >= 76 && state.founder.health <= 45,
@@ -4503,7 +4525,7 @@ var FAMILY_CRISES = [
   },
 
   {
-    id:"accidentModern",
+    id:"accidentModern", lethal:true,
     title:"L'accident qu'on peut taire",
     art:"machine", image:"Un phare cassé qu'on remplace avant l'aube",
     canStart:()=>state.year >= 1955 && adultHeirs().length >= 1,
@@ -4552,7 +4574,7 @@ var FAMILY_CRISES = [
     id:"secession",
     title:"La branche qui fait sécession",
     art:"family", image:"Deux voitures qui quittent la cour dans deux directions",
-    canStart:()=>adultHeirs().length >= 2 && state.unity <= 38,
+    canStart:()=>adultHeirs().length >= 2 && state.unity <= 38 && state.land >= 500,
     who:()=>adultHeirs().sort((a,b)=>(b.resentment||0)-(a.resentment||0))[0] || null,
     text:(k)=>`${k.name} n'est pas venu au repas. ${k.sex==="f"?"Elle":"Il"} a réuni les cousins, `
       + `un avocat et deux des contremaîtres dans la grange basse, et ${k.sex==="f"?"elle":"il"} a `
@@ -4616,8 +4638,14 @@ function maybeStartCrisis(){
   if(state.crisis || state.gameOver) return;
   if(state.turn < (state.crisisCooldown || 0)) return;
   const done = state.crisesDone || [];
+  // ⚠️ Une crise qui peut tuer ou bannir quelqu'un attend que la maison compte
+  // assez de monde pour y survivre. Sans ce garde-fou, une crise de 1890
+  // pouvait emporter le seul porteur du nom : mesuré, « fin de la lignée » et
+  // « le dernier troupeau » explosaient dès qu'on agrandissait les familles.
+  const solide = livingKin().length >= 4;
   const pool = FAMILY_CRISES.filter(c => {
     if(done.includes(c.id)) return false;
+    if(c.lethal && !solide) return false;
     try{ return c.canStart() && !!c.who(); }catch(e){ return false; }
   });
   if(!pool.length) return;
