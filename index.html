@@ -4944,6 +4944,8 @@ var NEIGHBOUR_STATES = {
 function ensureNeighbours(){
   if(!state) return [];
   if(!Array.isArray(state.neighbours)) state.neighbours = [];
+  if(state.eraCrisis === undefined) state.eraCrisis = null;
+  if(!Array.isArray(state.eraCrisesDone)) state.eraCrisesDone = [];
   if(state.rivalPol === undefined) state.rivalPol = null;
   if(!state.decreeCooldown) state.decreeCooldown = {};
   if(typeof state.decreesUsed !== "number") state.decreesUsed = 0;
@@ -6483,6 +6485,259 @@ function launchSquad(){
 //      dont les terres ont été prises trois générations plus tôt.
 // ============================================================================
 
+// ============================================================================
+// LA GRANDE CRISE DE CHAQUE ÉPOQUE
+// ----------------------------------------------------------------------------
+// Les événements sont des incidents : ils arrivent, on tranche, on passe. Il
+// manquait ce qui définit une époque — une crise qui s'installe, dure des
+// années, pèse chaque tour, et qu'on ne referme qu'en payant.
+//
+// Une par époque, déclenchée une seule fois, à un moment tiré dans la fenêtre.
+// Elle s'ouvre par une scène, applique un effet à CHAQUE tour tant qu'elle
+// dure, et propose chaque année une façon d'en sortir — dont le prix monte avec
+// la taille du domaine.
+// ============================================================================
+var ERA_CRISES = {
+  foundation:{
+    id:"colterGang", icon:"🔫", name:"La bande de Colter",
+    art:"night", image:"Des feux de camp dans les collines",
+    from:1888, to:1912, years:[4,8],
+    open:"Ils sont vingt-cinq, ils campent dans les collines du nord depuis le printemps, et ils "
+      + "vivent de ce qu'ils prennent. Le marshal du comté a deux adjoints. Le pays est à eux "
+      + "jusqu'à ce que quelqu'un y mette fin.",
+    each:()=>{
+      const guard = ranchGunStrength() + roleCount("security")*12;
+      if(guard > rand(60,150)) return;
+      if(chance(.45)){
+        const lost = Math.min(state.cattle, rand(4,14));
+        state.cattle -= lost;
+        addLog(`La bande de Colter emmène ${lost} bête${lost>1?"s":""} cette nuit.`, "bad");
+      } else if(chance(.25)){
+        const hit = hurtCowboys(1, true);
+        addLog(`Un homme du ranch tombe sur eux au détour d'un col. ${casualtyLine(hit)}`, "bad");
+      }
+    },
+    fix:{label:"Monter une expédition contre eux", cost:400, squadWord:"vos hommes",
+      odds:()=>Math.min(.9, .25 + ranchGunStrength()/160 + (state.weapons*.02)),
+      win:"La bande est dispersée dans les rochers. Colter est pendu au chef-lieu six semaines plus tard.",
+      lose:"L'expédition rentre battue, et la bande sait maintenant d'où venaient les hommes."}
+  },
+  prohibition:{
+    id:"chicagoRing", icon:"🎩", name:"Le syndicat de Chicago",
+    art:"city", image:"Deux automobiles noires arrêtées dans la cour",
+    from:1921, to:1931, years:[3,7],
+    open:"Ils ne demandent pas la permission. Vos terres sont sur la route du nord, et à partir "
+      + "de maintenant elles leur appartiennent trois nuits par semaine. Le prix du refus a été "
+      + "expliqué avec beaucoup de politesse.",
+    each:()=>{
+      state.suspicion = clamp(state.suspicion + rand(1,4));
+      if(chance(.30)){
+        const c = sc(rand(120,400));
+        state.money -= Math.min(state.money, c);
+        addLog(`La part du syndicat est prélevée : ${c} $. On ne discute pas le montant.`, "bad");
+      }
+    },
+    fix:{label:"Les chasser du domaine", cost:600,
+      odds:()=>Math.min(.85, .20 + ranchGunStrength()/170 + (currentOffice()?.15:0)),
+      win:"Deux voitures brûlées au bout du chemin et un coup de téléphone à Chicago : la route "
+        + "passera ailleurs. Cela s'est su.",
+      lose:"Ils reviennent à douze, la semaine suivante, et cette fois ils ne parlent plus."}
+  },
+  depression:{
+    id:"dustYears", icon:"🌪️", name:"Les années de poussière",
+    art:"storm", image:"Un mur de terre haut de mille mètres",
+    from:1933, to:1943, years:[4,8],
+    open:"Le vent a emporté la terre arable de trois comtés. Le ciel est brun à midi, les puits "
+      + "s'ensablent, et l'herbe ne repousse pas. Ce n'est pas une mauvaise année : c'est une "
+      + "décennie qui commence.",
+    each:()=>{
+      state.feed = Math.max(0, state.feed - rand(20,60));
+      if(chance(.25)){
+        const lost = Math.min(state.cattle, rand(3,10));
+        state.cattle -= lost;
+        addLog(`${lost} bête${lost>1?"s meurent":" meurt"} de poussière dans les poumons.`, "bad");
+      }
+    },
+    fix:{label:"Planter des rideaux d'arbres et creuser des retenues", cost:900,
+      odds:()=>Math.min(.9, .45 + state.land/9000 + (hasBuilding("puits")?.15:0)),
+      win:"Quatre kilomètres de brise-vent et trois retenues. La terre tient. On viendra voir "
+        + "comment vous avez fait.",
+      lose:"Les jeunes arbres n'ont pas passé le premier été."}
+  },
+  industrial:{
+    id:"rangeWar", icon:"⚔️", name:"La guerre des parcours",
+    art:"rider", image:"Des clôtures arrachées sur dix kilomètres",
+    from:1948, to:1966, years:[3,6],
+    open:"Le bureau des terres a rouvert les parcours fédéraux à l'enchère, et toutes les maisons "
+      + "de la vallée s'y sont ruées en même temps. Les clôtures tombent, les troupeaux se mêlent, "
+      + "et on a tiré deux fois en une semaine.",
+    each:()=>{
+      rivalHouses().forEach(h => { h.relation = clamp(h.relation - rand(1,4), -100, 100);
+        h.strength = clamp(h.strength + rand(0,2), 0, 100); });
+      if(chance(.28)){
+        const lost = Math.min(state.cattle, rand(5,16));
+        state.cattle -= lost;
+        addLog(`${lost} bêtes se perdent dans le mélange des troupeaux. Personne ne les rendra.`, "bad");
+      }
+    },
+    fix:{label:"Imposer un partage des parcours", cost:1200,
+      odds:()=>Math.min(.9, .30 + state.reputation/280 + (currentOffice()?.28:0)
+        + ((state.institutions&&state.institutions.cattleCommission)?.12:0)),
+      win:"Le partage est signé par les trois maisons devant le bureau des terres. Les clôtures "
+        + "remontent, et personne n'a perdu la face.",
+      lose:"Deux maisons signent, la troisième non — et ce sont vos parcours qu'elle occupe."}
+  },
+  corporate:{
+    id:"beefCrash", icon:"📉", name:"L'effondrement du bœuf",
+    art:"money", image:"Un tableau de cotations qui ne remonte pas",
+    from:1972, to:1988, years:[3,6],
+    open:"Les cours ont perdu la moitié en dix-huit mois : embargo à l'export, surproduction au "
+      + "Sud, et des consommateurs qui mangent autre chose. Tout le monde vend, donc personne "
+      + "ne vend bien.",
+    each:()=>{
+      state.cattlePrice = Math.max(state.cattlePriceMin,
+        state.cattlePrice - Math.max(1, Math.round(state.costModifier)));
+      if(chance(.20)){
+        const c = sc(rand(200,700));
+        state.money -= Math.min(state.money, c);
+        addLog(`Les frais de portage du troupeau invendu : ${c} $.`, "bad");
+      }
+    },
+    fix:{label:"Se reconvertir : vente directe et races à viande", cost:1600,
+      odds:()=>Math.min(.9, .35 + state.reputation/260 + (ventureLevel(ventureOfEra()?ventureOfEra().id:"")>0?.15:0)),
+      win:"Le domaine sort du circuit des cours : vente directe, race à viande, contrats fermes. "
+        + "Le prix du marché cesse de vous concerner.",
+      lose:"La reconversion coûte deux ans de trésorerie et n'aboutit pas."}
+  },
+  globalization:{
+    id:"madCow", icon:"🧫", name:"L'embargo sanitaire",
+    art:"law", image:"Un scellé rouge sur une porte d'enclos",
+    from:1992, to:2007, years:[3,6],
+    open:"Un cas confirmé à deux cents kilomètres, et trente-huit pays ferment leurs frontières "
+      + "le même jour. Personne ne distingue votre troupeau du sien : c'est le pays entier qui "
+      + "est à l'arrêt.",
+    each:()=>{
+      if(chance(.35)){
+        const c = sc(rand(300,900));
+        state.money -= Math.min(state.money, c);
+        addLog(`Bêtes bloquées, contrôles, analyses : ${c} $ de plus ce trimestre.`, "bad");
+      }
+      if(chance(.12)) state.reputation = clamp(state.reputation - 1);
+    },
+    fix:{label:"Faire certifier la traçabilité complète du domaine", cost:2400,
+      odds:()=>Math.min(.92, .40 + state.reputation/240 + (hasBuilding("bureau")?.12:0)),
+      win:"Chaque bête tracée de la naissance à l'abattoir, audit indépendant à l'appui. "
+        + "Les frontières se rouvrent pour vous avant les autres.",
+      lose:"L'audit relève trois manquements. Il faudra tout reprendre."}
+  },
+  modern:{
+    id:"megaDrought", icon:"🏜️", name:"La sécheresse du siècle",
+    art:"storm", image:"Un lit de rivière craquelé",
+    from:2012, to:2024, years:[4,9],
+    open:"Vingt-deux ans que les précipitations baissent, et cette année le fleuve n'atteint plus "
+      + "la vallée. Les restrictions sont permanentes, l'eau se rationne au compteur, et le "
+      + "voisinage se surveille.",
+    each:()=>{
+      state.feed = Math.max(0, state.feed - rand(30,90));
+      state.siege = Math.min(100, (state.siege||0) + .5);
+      if(chance(.22)){
+        const lost = Math.min(state.cattle, rand(4,14));
+        state.cattle -= lost;
+        addLog(`${lost} bêtes vendues en urgence faute d'eau et d'herbe.`, "bad");
+      }
+    },
+    fix:{label:"Refaire tout le domaine en irrigation économe", cost:9000,
+      odds:()=>Math.min(.9, .40 + (hasBuilding("puits")?.18:0) + (hasBuilding("hangar")?.12:0)),
+      win:"Goutte-à-goutte, capteurs, retenues collinaires et pâturage tournant. Le domaine "
+        + "consomme le tiers de ce qu'il buvait, et le comté vient prendre des leçons.",
+      lose:"Les travaux prennent deux ans et la nappe baisse plus vite qu'eux."}
+  }
+};
+
+function eraCrisisDef(){ return ERA_CRISES[state.eraId] || null; }
+function inEraCrisis(){ return !!state.eraCrisis && state.year <= state.eraCrisis.until; }
+
+// L'ouverture : une seule fois par époque, dans sa fenêtre.
+function maybeOpenEraCrisis(){
+  if(state.eraCrisis || state.gameOver) return false;
+  const d = eraCrisisDef();
+  if(!d) return false;
+  if(!state.eraCrisesDone) state.eraCrisesDone = [];
+  if(state.eraCrisesDone.indexOf(d.id) >= 0) return false;
+  if(state.year < d.from || state.year > d.to) return false;
+  // Sur la fenêtre entière, une ouverture quasi certaine, sans être datée.
+  const reste = Math.max(1, d.to - state.year + 1);
+  if(!chance(Math.min(.6, 1 / reste))) return false;
+  state.eraCrisis = {id:d.id, until: state.year + rand(d.years[0], d.years[1]), fixed:false};
+  state.eraCrisesDone.push(d.id);
+  presentEvent({
+    title: d.icon + " " + d.name, art: d.art, image: d.image,
+    text: () => d.open + `\n\nCela va durer. Chaque année coûtera, jusqu'à ce que vous y mettiez fin.`,
+    choices: [{label:"Il va falloir tenir", apply:()=>{
+      addLog(`${d.name} — le pays entre dans une mauvaise passe qui va durer des années.`, "bad");
+      recordSaga("hardship", d.name, d.art, `${state.year}. ${d.open.split(".")[0]}.`);
+    }}]
+  });
+  return true;
+}
+
+// L'effet de chaque tour, et la sortie une fois l'an.
+function eraCrisisPhase(){
+  if(!state.eraCrisis) return;
+  const d = ERA_CRISES[state.eraId];
+  if(!d || d.id !== state.eraCrisis.id){ state.eraCrisis = null; return; }
+  if(state.year > state.eraCrisis.until){
+    addLog(`${d.name} — c'est fini. Le pays reprend son souffle.`, "good");
+    state.eraCrisis = null;
+    return;
+  }
+  try{ d.each(); }catch(e){}
+}
+
+// Ce que coûte d'en sortir : le prix monte avec le domaine, parce qu'un grand
+// domaine a plus à protéger.
+function eraCrisisCost(d){
+  return Math.round(sc(d.fix.cost) * (1 + Math.min(1.2, state.land / 2500)));
+}
+
+function fixEraCrisis(){
+  const d = ERA_CRISES[state.eraId];
+  if(!d || !state.eraCrisis || state.eraCrisis.id !== d.id) return;
+  if(state.actions <= 0 || state.gameOver){ toast("Plus d'action disponible ce tour."); return; }
+  const cout = eraCrisisCost(d);
+  if(pay(cout) === false) return;
+  useAction();
+  $("eraCrisisModal").classList.add("hidden");
+  const p = d.fix.odds();
+  if(chance(p)){
+    addLog(`${d.name} — ${d.fix.win}`, "good");
+    recordSaga("prosperity", `${d.name} surmontée`, d.art, `${state.year}. ${d.fix.win}`);
+    state.reputation = clamp(state.reputation + rand(6,14));
+    state.eraCrisis = null;
+  } else {
+    addLog(`${d.name} — ${d.fix.lose}`, "bad");
+    state.eraCrisis.until += rand(1,2);
+  }
+  checkAchievements();
+  render();
+}
+
+function openEraCrisisPanel(){
+  if(!inEraCrisis()){ toast("Aucune crise en cours."); return; }
+  const d = ERA_CRISES[state.eraId];
+  if(!d) return;
+  const cout = eraCrisisCost(d);
+  const p = Math.round(d.fix.odds() * 100);
+  $("eraCrisisTitle").textContent = d.icon + " " + d.name;
+  $("eraCrisisText").innerHTML = d.open
+    + `<br><br><b>Encore ${Math.max(0, state.eraCrisis.until - state.year)} année(s)</b> si rien n'est fait. `
+    + `En sortir coûte <b>${moneyFmt.format(cout)} $</b> et une action, avec <b>${p} % de réussite</b>. `
+    + `Un échec ne rend pas la mise et prolonge la crise.`;
+  $("eraCrisisGo").textContent = `${d.fix.label} — ${moneyFmt.format(cout)} $`;
+  $("eraCrisisGo").disabled = state.money < cout;
+  eraCrisisModal.classList.remove("hidden");
+}
+
 function eraIndex(id){
   const i = ERAS.findIndex(e => e.id === id);
   return i < 0 ? 0 : i;
@@ -6774,6 +7029,19 @@ function alarms(){
         + `À 100, le comté exproprie pour utilité publique. `
         + `Un nom respecté, une charge publique, des terres classées et une maison unie font redescendre.`
     });
+  }
+  if(inEraCrisis()){
+    const d = ERA_CRISES[state.eraId];
+    if(d){
+      list.push({
+        level:"bad", icon:d.icon,
+        title:`${d.name} — encore ${Math.max(0, state.eraCrisis.until - state.year)} an(s)`,
+        what:`Elle coûte à chaque tour tant qu'elle dure. En sortir : `
+          + `${moneyFmt.format(eraCrisisCost(d))} $ et une action, `
+          + `${Math.round(d.fix.odds()*100)} % de réussite. `
+          + `<button class="choice" onclick="openEraCrisisPanel()">${d.fix.label}</button>`
+      });
+    }
   }
   const missed = state.missedPayments || 0;
   if(missed > 0){
@@ -7212,6 +7480,8 @@ function ensureProgress(){
   if(typeof state.arcCooldown !== "number") state.arcCooldown = 0;
   if(typeof state.warCooldown !== "number") state.warCooldown = 0;
   if(!Array.isArray(state.neighbours)) state.neighbours = [];
+  if(state.eraCrisis === undefined) state.eraCrisis = null;
+  if(!Array.isArray(state.eraCrisesDone)) state.eraCrisesDone = [];
   if(state.rivalPol === undefined) state.rivalPol = null;
   if(!state.decreeCooldown) state.decreeCooldown = {};
   if(typeof state.decreesUsed !== "number") state.decreesUsed = 0;
@@ -7773,6 +8043,8 @@ function baseState() {
     competedTurn:-1,
     neighbours:[],
     boughtNeighbours:0,
+    eraCrisis:null,
+    eraCrisesDone:[],
     rivalPol:null,
     decreeCooldown:{},
     decreesUsed:0,
@@ -8920,6 +9192,9 @@ function endTurn(){
   // Le dernier assaut prime sur tout : c'est une échéance, pas un hasard.
   if(maybeShowSiegeTrial()) return;
 
+  // La grande crise de l'époque : elle s'ouvre une fois, puis pèse chaque tour.
+  if(!insideAnnualChain() && maybeOpenEraCrisis()) return;
+
   // Une guerre ouverte prime ensuite : c'est le fil le plus chaud.
   maybeOpenWar();
   if(maybeShowWarStep()) return;
@@ -9040,6 +9315,7 @@ function ageFamily(){
   siegePhase();
   neighbourPhase();
   rivalPolPhase();
+  eraCrisisPhase();
   [state.founder,state.spouse].forEach(p => {
     if(!p.alive) return;
     p.age++;
@@ -14236,6 +14512,15 @@ document.getElementById("familyBtn").addEventListener("click",()=>{renderFamily(
 <p class="modal-intro" id="illegalIntro"></p>
 <div id="illegalContent"></div>
 <button class="choice" onclick="illegalModal.classList.add('hidden')">Renoncer pour cette fois</button>
+</div></div>
+
+<div id="eraCrisisModal" class="modal hidden"><div class="modal-card">
+<h2 id="eraCrisisTitle">La crise</h2>
+<p class="modal-intro" id="eraCrisisText"></p>
+<div class="squad-foot">
+  <button class="choice" id="eraCrisisGo" onclick="fixEraCrisis()">Agir</button>
+  <button class="choice" onclick="eraCrisisModal.classList.add('hidden')">Tenir encore</button>
+</div>
 </div></div>
 
 <div id="neighbourModal" class="modal hidden"><div class="modal-card">

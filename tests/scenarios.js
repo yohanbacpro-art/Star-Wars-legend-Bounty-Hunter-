@@ -4963,5 +4963,113 @@ section("Les décrets et l'adversaire politique");
   }
 }
 
+
+// ------------------------------------------------- La grande crise de l'époque
+section("La grande crise de chaque époque");
+{
+  const cr = ev("ERA_CRISES");
+  const eras = ev("ERAS").map(e => e.id);
+  const sans = eras.filter(id => !cr[id]);
+  check("chaque époque a sa crise", sans.length === 0, sans.join(", "));
+
+  const bad = [];
+  Object.keys(cr).forEach(k => {
+    const d = cr[k];
+    ["id","icon","name","art","image","open"].forEach(f => { if(!d[f]) bad.push(k+" sans "+f); });
+    if(typeof d.each !== "function") bad.push(k+" sans effet de tour");
+    if(!d.fix || !d.fix.label || !(d.fix.cost>0) || typeof d.fix.odds !== "function"
+       || !d.fix.win || !d.fix.lose) bad.push(k+" sans sortie chiffrée");
+    if(!Array.isArray(d.years) || d.years.length !== 2) bad.push(k+" sans durée");
+    const era = ev("ERAS").find(e => e.id === k);
+    if(era && (d.from < era.start || d.to > era.end + 1)) bad.push(k+" hors de sa fenêtre d'époque");
+  });
+  check("chaque crise est décrite, datée, chiffrée et surmontable",
+    bad.length === 0, bad.slice(0,4).join(" | "));
+  check("identifiants uniques",
+    new Set(Object.keys(cr).map(k=>cr[k].id)).size === Object.keys(cr).length);
+
+  // L'effet de tour s'exécute partout, riche comme démuni.
+  const errs = [];
+  Object.keys(cr).forEach(k => {
+    [["riche", 9000000], ["démuni", 0]].forEach(([nom, argent]) => {
+      const g = freshGame();
+      const era = ev("ERAS").find(e => e.id === k);
+      g.eraId = k; g.year = era.start + 2; g.costModifier = era.inflation;
+      g.money = argent; g.land = 900; g.cattle = 300; g.feed = 500;
+      G.ensureSecondHouse();
+      try{ for(let i=0;i<20;i++) cr[k].each(); }catch(e){ errs.push(`${k} (${nom}) : ${e.message}`); }
+      try{ cr[k].fix.odds(); }catch(e){ errs.push(`${k} odds : ${e.message}`); }
+    });
+  });
+  check("tous les effets de crise s'exécutent", errs.length === 0, errs.slice(0,3).join(" | "));
+
+  // Elle s'ouvre dans sa fenêtre, une seule fois, et pas ailleurs.
+  {
+    const g = freshGame();
+    g.eraId = "foundation"; g.year = 1886;
+    check("hors fenêtre, rien ne s'ouvre", G.maybeOpenEraCrisis() === false);
+    ST().year = 1900;
+    let ouvert = 0;
+    for(let i = 0; i < 200 && !ST().eraCrisis; i++){ if(G.maybeOpenEraCrisis()) ouvert++; }
+    check("dans la fenêtre, elle finit par s'ouvrir", ouvert === 1 && !!ST().eraCrisis);
+    check("elle a une échéance", ST().eraCrisis.until > ST().year, ST().eraCrisis.until);
+    check("elle est en cours", G.inEraCrisis() === true);
+    check("elle ne se rouvre pas", G.maybeOpenEraCrisis() === false);
+    // Elle s'éteint d'elle-même passé le terme.
+    ST().year = ST().eraCrisis.until + 1;
+    G.eraCrisisPhase();
+    check("passé son terme, elle s'éteint", ST().eraCrisis === null);
+    check("et elle ne revient pas", G.maybeOpenEraCrisis() === false);
+  }
+
+  // On en sort en payant : réussite et échec forcés.
+  {
+    const vrai = Math.random;
+    const g = freshGame();
+    g.eraId = "foundation"; g.year = 1900; g.money = 900000; g.actions = 3; g.land = 600;
+    g.eraCrisis = {id:"colterGang", until:1908, fixed:false};
+    g.eraCrisesDone = ["colterGang"];
+    const m0 = ST().money;
+    Math.random = () => 0.001;
+    G.fixEraCrisis();
+    Math.random = vrai;
+    check("on peut en sortir", ST().eraCrisis === null);
+    check("cela coûte une action", ST().actions === 2, ST().actions);
+    check("et cela coûte cher", ST().money < m0, m0 - ST().money);
+
+    const g2 = freshGame();
+    g2.eraId = "foundation"; g2.year = 1900; g2.money = 900000; g2.actions = 3;
+    g2.eraCrisis = {id:"colterGang", until:1908, fixed:false};
+    g2.eraCrisesDone = ["colterGang"];
+    Math.random = () => 0.999;
+    G.fixEraCrisis();
+    Math.random = vrai;
+    check("un échec ne referme rien", ST().eraCrisis !== null);
+    check("et il prolonge la crise", ST().eraCrisis.until > 1908, ST().eraCrisis.until);
+  }
+
+  // Le prix monte avec le domaine.
+  {
+    const g = freshGame();
+    g.eraId = "foundation"; g.year = 1900; g.land = 200;
+    const petit = G.eraCrisisCost(ev("ERA_CRISES").foundation);
+    ST().land = 3000;
+    check("un grand domaine paie davantage",
+      G.eraCrisisCost(ev("ERA_CRISES").foundation) > petit * 1.5,
+      petit + " → " + G.eraCrisisCost(ev("ERA_CRISES").foundation));
+  }
+
+  // Elle figure au bandeau d'alertes, avec son bouton.
+  {
+    const g = freshGame();
+    g.eraId = "foundation"; g.year = 1900; g.money = 900000;
+    g.eraCrisis = {id:"colterGang", until:1906, fixed:false};
+    const al = G.alarms();
+    const ligne = al.find(a => /Colter/.test(a.title));
+    check("la crise figure au bandeau d'alertes", !!ligne, al.map(a=>a.title).join(" | "));
+    check("avec de quoi agir", !!ligne && /openEraCrisisPanel/.test(ligne.what));
+  }
+}
+
 console.log("\n" + pass + " vérifications passées, " + fail + " échec(s).");
 process.exit(fail ? 1 : 0);
