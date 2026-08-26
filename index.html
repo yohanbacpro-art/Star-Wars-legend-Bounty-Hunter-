@@ -5254,7 +5254,64 @@ const ILLEGAL_OPS = {
        addLog("Le ruisseau change de vallée. Les pâtures du bas reverdissent.","good"); },
      onFail:()=>{ state.rival.relation=clamp(state.rival.relation-25,-100,100);
        const c=factionOfType("community"); if(c) c.relation=clamp(c.relation-22,-100,100);
-       addLog("La digue est démontée devant témoins. Le comté saura qui l'avait montée.","bad"); }}
+       addLog("La digue est démontée devant témoins. Le comté saura qui l'avait montée.","bad"); }},
+
+    {id:"bigDrive", icon:"🐄", name:"Le grand rabattage", squad:true,
+     what:"Pas dix bêtes : deux cents. On vide un canyon entier en une nuit et on remaquille les fers au fer chaud, à trois comtés de là.",
+     gain:[2400,5200], sus:[30,46], base:.36, edge:"shoot", danger:.45,
+     needs:()=>({ok:(state.cowboys||[]).length>=4, why:"Il faut au moins quatre cow-boys."}),
+     onWin:()=>{ const t=rand(40,120); state.cattle+=t; state.legacy.greed+=2;
+       addLog(`${t} bêtes portent désormais votre fer. Personne ne les réclamera avant l'automne.`,"good"); },
+     fail:"Deux comtés lancent un mandat. Les bêtes sont saisies et vos hommes identifiés.",
+     onFail:()=>{ state.suspicion=clamp(state.suspicion+25);
+       state.money-=Math.min(state.money,sc(rand(300,700)));
+       addLog("Un shérif de l'autre versant a reconnu un fer retouché. Cela va remonter.","bad"); }},
+
+    {id:"payroll", icon:"💰", name:"Attaquer la paie du chemin de fer", squad:true,
+     what:"Le wagon-coffre passe au pont du nord le premier lundi du mois. Trois hommes à cheval, quatre minutes, et de quoi acheter cinq cents hectares.",
+     cost:120, gain:[4000,9000], sus:[42,60], base:.30, edge:"shoot", danger:.60,
+     needs:()=>({ok:(state.cowboys||[]).length>=3 && state.weapons>=2, why:"Il faut au moins trois cow-boys et deux armes."}),
+     onWin:()=>{ state.legacy.greed+=3;
+       addLog("Le coffre est vidé sur le ballast. On n'en reparlera qu'entre soi, et à voix basse.","good"); },
+     fail:"Des gardes Pinkerton voyageaient dans le wagon suivant.",
+     onFail:()=>{ state.suspicion=clamp(state.suspicion+35);
+       state.reputation=clamp(state.reputation-rand(10,20));
+       const l=factionOfType("law"); if(l) l.relation=clamp(l.relation-35,-100,100);
+       addLog("La fusillade au pont a fait trois morts et deux témoins.","bad"); }},
+
+    {id:"bankJob", icon:"🏦", name:"Le braquage de la banque du comté", squad:true,
+     what:"Le coffre de la ville garde la paie des mines et les dépôts de tout le canton. Il n'y a qu'un gardien et une porte à charnières.",
+     cost:200, gain:[6000,14000], sus:[50,70], base:.26, edge:"shoot", danger:.70,
+     needs:()=>({ok:(state.cowboys||[]).length>=4 && state.weapons>=3, why:"Il faut au moins quatre cow-boys et trois armes."}),
+     onWin:()=>{ state.legacy.greed+=3; addMobTies(1);
+       addLog("Le coffre part sur une charrette de foin. Le comté cherchera pendant vingt ans.","good"); },
+     fail:"La ville entière sort avec un fusil : une banque, ce sont les économies de tout le monde.",
+     onFail:()=>{ state.suspicion=clamp(state.suspicion+45);
+       state.reputation=clamp(state.reputation-rand(18,30));
+       const c=factionOfType("community"); if(c) c.relation=clamp(c.relation-45,-100,100);
+       addLog("On a tiré depuis les fenêtres de la grand-rue. Personne n'oubliera qui menait.","bad"); }},
+
+    {id:"claimJump", icon:"📜", name:"S'emparer d'une concession",
+     what:"Un colon a déposé un titre sur la meilleure eau du secteur et n'a pas les moyens de la défendre. Un faux témoignage suffit à le renverser.",
+     cost:90, gain:[600,1500], sus:[16,26], base:.55, edge:"relation",
+     reward:"Ajoute des hectares au domaine",
+     onWin:()=>{ const ha=rand(40,90); state.land+=ha; addParcel(ha);
+       addClaimPressure(4); state.legacy.greed+=2;
+       addLog(`${ha} hectares changent de titulaire au bureau des terres.`,"good"); },
+     fail:"Le colon a un frère avocat à la capitale.",
+     onFail:()=>{ state.reputation=clamp(state.reputation-rand(8,16));
+       state.money-=Math.min(state.money,sc(rand(200,500)));
+       addLog("Le faux témoignage est démonté à l'audience, et vous payez les deux avocats.","bad"); }},
+
+    {id:"waterRight", icon:"💧", name:"Détourner le droit d'eau du canton",
+     what:"Le registre des droits d'eau tient dans un cahier, chez un employé qui boit.",
+     cost:70, gain:[500,1200], sus:[18,30], base:.50, edge:"money",
+     onWin:()=>{ addClaimPressure(3); state.legacy.greed++;
+       addLog("Votre nom figure désormais en tête de la ligne d'eau. Tout le canton passe après.","good"); },
+     fail:"L'employé a parlé au premier verre.",
+     onFail:()=>{ const c=factionOfType("community"); if(c) c.relation=clamp(c.relation-30,-100,100);
+       state.suspicion=clamp(state.suspicion+22);
+       addLog("Le canton entier sait ce qui a été tenté sur l'eau. C'est le genre de chose qu'on ne pardonne pas.","bad"); }}
   ],
   prohibition:[
     {id:"runBooze", icon:"🥃", name:"Convoyer une cargaison d'alcool",
@@ -5295,7 +5352,61 @@ const ILLEGAL_OPS = {
        addLog("La grange ne désemplit pas. Personne n'a jamais rien vu.","good"); },
      onFail:()=>{ state.reputation=clamp(state.reputation-rand(8,15));
        const f=factionOfType("law"); if(f) f.relation=clamp(f.relation-30,-100,100);
-       addLog("Quarante noms au procès-verbal, dont le vôtre en tête.","bad"); }}
+       addLog("Quarante noms au procès-verbal, dont le vôtre en tête.","bad"); }},
+
+    {id:"trainHijack", icon:"🚂", name:"Détourner un wagon frigorifique", squad:true,
+     what:"Un wagon entier de viande fédérale, aiguillé sur votre embranchement pendant qu'un employé regarde ailleurs.",
+     cost:180, gain:[3200,7000], sus:[32,48], base:.38, edge:"shoot", danger:.42,
+     needs:()=>({ok:(state.cowboys||[]).length>=3, why:"Il faut au moins trois cow-boys."}),
+     onWin:()=>{ state.legacy.greed+=2; addMobTies(1);
+       addLog("Le wagon est vidé en quatre heures et remis sur la voie, portes closes.","good"); },
+     fail:"Les inspecteurs des chemins de fer suivent le wagon depuis Omaha.",
+     onFail:()=>{ state.suspicion=clamp(state.suspicion+32);
+       setQuarantine(rand(2,4),"Les autorités bloquent tout mouvement de bétail le temps de l'enquête.");
+       addLog("Le wagon était surveillé. Le domaine est bloqué le temps de l'enquête.","bad"); }},
+
+    {id:"distillery", icon:"🥃", name:"Monter une distillerie dans le canyon",
+     what:"Pas trois bouteilles : un alambic de mille litres, au fond d'un canyon qu'on ne survole pas.",
+     cost:400, gain:[2800,6400], sus:[28,42], base:.44, edge:"money",
+     onWin:()=>{ addMobTies(2); state.legacy.greed+=2;
+       addLog("Deux camions par semaine partent vers la ville. Cela rapporte plus que le troupeau.","good"); },
+     fail:"Les agents du Trésor ont remonté la fumée.",
+     onFail:()=>{ state.suspicion=clamp(state.suspicion+38);
+       state.money-=Math.min(state.money,sc(rand(500,1200)));
+       addLog("L'alambic saute à la dynamite et deux de vos hommes passent en jugement.","bad"); }},
+
+    {id:"takeRoute", icon:"🎩", name:"Prendre la route du nord aux Italiens", squad:true,
+     what:"Il y a une place à prendre sur la route de Chicago. Celui qui l'occupe ne la cédera pas.",
+     cost:300, gain:[5000,11000], sus:[40,58], base:.32, edge:"shoot", danger:.55,
+     needs:()=>({ok:(state.cowboys||[]).length>=4 && state.weapons>=2, why:"Il faut au moins quatre cow-boys et deux armes."}),
+     onWin:()=>{ addMobTies(3); state.legacy.greed+=3;
+       addLog("La route du nord est à vous. On vous appelle par votre prénom au téléphone, depuis Chicago.","good"); },
+     fail:"Ils avaient une Thompson et l'adresse de votre maison.",
+     onFail:()=>{ const hit=hurtCowboys(rand(2,4),true);
+       state.suspicion=clamp(state.suspicion+40);
+       addLog(`Fusillade à la sortie du canyon. ${casualtyLine(hit)}`,"bad"); }},
+
+    {id:"emptyVault", icon:"💵", name:"Vider le coffre avant la faillite",
+     what:"Le directeur sait que sa banque ferme vendredi. Contre une part, il vous laisse passer jeudi soir.",
+     cost:150, gain:[2000,5000], sus:[26,40], base:.46, edge:"relation",
+     onWin:()=>{ state.legacy.greed+=2;
+       addLog("Les guichets ferment le lendemain. Vous étiez le dernier servi.","good"); },
+     fail:"Trois cents déposants apprennent qui est passé avant eux.",
+     onFail:()=>{ state.reputation=clamp(state.reputation-rand(16,28));
+       const c=factionOfType("community"); if(c) c.relation=clamp(c.relation-35,-100,100);
+       addLog("La liste des retraits de la veille est affichée sur la porte de la banque.","bad"); }},
+
+    {id:"strikeBreak", icon:"🔨", name:"Briser la grève des abattoirs", squad:true,
+     what:"L'abattoir est bloqué et vos bêtes attendent sur les quais. Une nuit suffit à débloquer la chaîne.",
+     cost:120, gain:[900,2200], sus:[24,38], base:.48, edge:"shoot", danger:.35,
+     needs:()=>({ok:(state.cowboys||[]).length>=3, why:"Il faut au moins trois cow-boys."}),
+     onWin:()=>{ const t=factionOfType("trade"); if(t) t.relation=clamp(t.relation+20,-100,100);
+       state.legacy.greed+=2;
+       addLog("La chaîne repart au matin. Les négociants n'oublieront pas qui a débloqué leurs quais.","good"); },
+     fail:"Un photographe du syndicat était sur le toit.",
+     onFail:()=>{ state.reputation=clamp(state.reputation-rand(15,26));
+       const m=factionOfType("media"); if(m) m.relation=clamp(m.relation-35,-100,100);
+       addLog("La photo fait la une de trois journaux de l'État.","bad"); }}
   ],
   depression:[
     {id:"blackBeef", icon:"🥩", name:"Vendre de la viande au marché noir",
@@ -5331,7 +5442,65 @@ const ILLEGAL_OPS = {
      onWin:()=>{ const t=factionOfType("trade"); if(t) t.relation=clamp(t.relation-15,-100,100);
        addLog("L'argent est sorti à temps. Les voisins, eux, ont tout perdu lundi.","good"); },
      onFail:()=>{ state.debt=(state.debt||0)+sc(rand(120,300));
-       addLog("Le compte est gelé, et ce qui restait dessus devient une créance sur vous.","bad"); }}
+       addLog("Le compte est gelé, et ce qui restait dessus devient une créance sur vous.","bad"); }},
+
+    {id:"reliefRing", icon:"📦", name:"Détourner un train de secours fédéral", squad:true,
+     what:"Farine, semences et bétail de réforme pour tout le comté, sur une voie de garage, sans gardien.",
+     cost:100, gain:[2200,5200], sus:[34,50], base:.38, edge:"shoot", danger:.40,
+     needs:()=>({ok:(state.cowboys||[]).length>=3, why:"Il faut au moins trois cow-boys."}),
+     onWin:()=>{ const t=rand(20,60); state.cattle+=t; state.feed+=rand(200,500);
+       state.legacy.greed+=3;
+       addLog(`${t} bêtes de réforme et de quoi passer l'hiver, pris à ceux qui n'avaient rien.`,"good"); },
+     fail:"Un inspecteur fédéral compte les wagons à l'arrivée.",
+     onFail:()=>{ state.suspicion=clamp(state.suspicion+38);
+       state.reputation=clamp(state.reputation-rand(18,30));
+       const c=factionOfType("community"); if(c) c.relation=clamp(c.relation-40,-100,100);
+       addLog("Le comté apprend qui a mangé sa farine. On ne s'en remet pas vite.","bad"); }},
+
+    {id:"foreclosureRing", icon:"⚖️", name:"Truquer les ventes sur saisie",
+     what:"Le commissaire-priseur écarte les enchérisseurs, vous ramassez les fermes ruinées au dixième de leur valeur.",
+     cost:350, gain:[1800,4200], sus:[26,40], base:.44, edge:"money",
+     reward:"Des hectares au prix de la misère",
+     onWin:()=>{ const ha=rand(60,160); state.land+=ha; addParcel(ha);
+       state.legacy.greed+=3;
+       addLog(`${ha} hectares de fermes saisies, payés une bouchée de pain.`,"good"); },
+     fail:"Un fermier expulsé se pend dans sa grange, et laisse une lettre.",
+     onFail:()=>{ state.reputation=clamp(state.reputation-rand(22,36));
+       const c=factionOfType("community"); if(c) c.relation=clamp(c.relation-45,-100,100);
+       state.legacy.grudges=state.legacy.grudges||[];
+       state.legacy.grudges.push({name:"le comté", why:"les ventes sur saisie"});
+       addLog("La lettre est lue à voix haute à l'enterrement. Votre nom y figure.","bad"); }},
+
+    {id:"dustClaim", icon:"🌪️", name:"Gonfler le sinistre de la sécheresse",
+     what:"Déclarer trois fois plus de bêtes perdues que la vérité, avec le vétérinaire pour l'écrire.",
+     cost:80, gain:[1400,3400], sus:[22,36], base:.52, edge:"relation",
+     onWin:()=>{ state.legacy.greed+=2;
+       addLog("L'indemnité fédérale tombe, calculée sur un troupeau qui n'a jamais existé.","good"); },
+     fail:"Un contrôleur recompte les carcasses.",
+     onFail:()=>{ state.suspicion=clamp(state.suspicion+30);
+       state.money-=Math.min(state.money,sc(rand(400,900)));
+       addLog("L'indemnité est réclamée avec pénalités, et le vétérinaire radié.","bad"); }},
+
+    {id:"damPayroll", icon:"💼", name:"Le convoi de paie du barrage", squad:true,
+     what:"Deux mille ouvriers payés en liquide, un camion, une route de montagne et un seul virage aveugle.",
+     cost:200, gain:[4500,10000], sus:[44,62], base:.30, edge:"shoot", danger:.62,
+     needs:()=>({ok:(state.cowboys||[]).length>=4 && state.weapons>=3, why:"Il faut au moins quatre cow-boys et trois armes."}),
+     onWin:()=>{ state.legacy.greed+=3; addMobTies(1);
+       addLog("Le camion est retrouvé vide à l'aube, à quarante kilomètres.","good"); },
+     fail:"Les gardes fédéraux escortaient le convoi depuis le chantier.",
+     onFail:()=>{ const hit=hurtCowboys(rand(2,4),true);
+       state.suspicion=clamp(state.suspicion+45);
+       addLog(`Le virage était une souricière. ${casualtyLine(hit)}`,"bad"); }},
+
+    {id:"seedSwap", icon:"🌾", name:"Revendre les semences du programme",
+     what:"Les semences distribuées gratuitement aux fermiers valent trois dollars le boisseau de l'autre côté de la frontière d'État.",
+     cost:60, gain:[900,2400], sus:[20,32], base:.55, edge:"money",
+     onWin:()=>{ state.legacy.greed+=2;
+       addLog("Quarante tonnes de semences passent la frontière en camions bâchés.","good"); },
+     fail:"Les sacs portent le sceau fédéral, et personne n'a pensé à les changer.",
+     onFail:()=>{ state.suspicion=clamp(state.suspicion+28);
+       const c=factionOfType("community"); if(c) c.relation=clamp(c.relation-30,-100,100);
+       addLog("Les sacs au sceau fédéral sont photographiés sur un marché du comté voisin.","bad"); }}
   ],
   industrial:[
     {id:"weights", icon:"⚖️", name:"Truquer les balances à l'abattoir",
@@ -5374,7 +5543,64 @@ const ILLEGAL_OPS = {
        addLog("Vos camions passent devant tout le monde au quai de chargement.","good"); },
      onFail:()=>{ const c=factionOfType("community"); if(c) c.relation=clamp(c.relation-30,-100,100);
        state.suspicion=clamp(state.suspicion+15);
-       addLog("L'enregistrement circule dans tous les dépôts de l'État.","bad"); }}
+       addLog("L'enregistrement circule dans tous les dépôts de l'État.","bad"); }},
+
+    {id:"coopHeist", icon:"🏭", name:"Le hold-up de la coopérative", squad:true,
+     what:"La coopérative garde la recette de la foire annuelle dans un coffre de bureau, un week-end entier.",
+     cost:250, gain:[5000,11000], sus:[40,56], base:.34, edge:"shoot", danger:.50,
+     needs:()=>({ok:(state.cowboys||[]).length>=3, why:"Il faut au moins trois cow-boys."}),
+     onWin:()=>{ state.legacy.greed+=3;
+       addLog("Le coffre est ouvert au chalumeau. La coopérative met deux ans à s'en remettre.","good"); },
+     fail:"Un vigile de nuit avait pris son service plus tôt.",
+     onFail:()=>{ const hit=hurtCowboys(rand(1,3),true);
+       state.suspicion=clamp(state.suspicion+42);
+       const t=factionOfType("trade"); if(t) t.relation=clamp(t.relation-40,-100,100);
+       addLog(`${casualtyLine(hit)} La coopérative sait de quel ranch venaient les hommes.`,"bad"); }},
+
+    {id:"landGrab", icon:"🗺️", name:"Racheter la vallée par prête-noms",
+     what:"Six sociétés, six acheteurs différents, une seule main : le temps que le pays comprenne, la vallée est à vous.",
+     cost:1200, gain:[0,0], sus:[24,38], base:.48, edge:"money",
+     reward:"Une part entière de la vallée",
+     onWin:()=>{ const ha=rand(150,400); state.land+=ha; addParcel(ha);
+       state.legacy.greed+=3; addClaimPressure(6);
+       addLog(`${ha} hectares acquis sous six noms. Aucun voisin n'a vu venir la manœuvre.`,"good"); },
+     fail:"Un notaire recoupe deux dossiers.",
+     onFail:()=>{ state.reputation=clamp(state.reputation-rand(14,26));
+       state.money-=Math.min(state.money,sc(rand(600,1400)));
+       const c=factionOfType("community"); if(c) c.relation=clamp(c.relation-35,-100,100);
+       addLog("Les six ventes sont annulées et les frais restent à votre charge.","bad"); }},
+
+    {id:"beefRing", icon:"🥩", name:"Monter un circuit de viande volée",
+     what:"Un abattoir complice, deux camions et un carnet de bons : deux cents bêtes par mois qui n'existent nulle part.",
+     cost:400, gain:[3000,6800], sus:[30,44], base:.42, edge:"money",
+     onWin:()=>{ addMobTies(2); state.legacy.greed+=2;
+       addLog("Le circuit tourne. Personne ne compte les bêtes qui n'ont jamais eu de papiers.","good"); },
+     fail:"L'inspection vétérinaire descend sur l'abattoir un mardi matin.",
+     onFail:()=>{ setQuarantine(rand(3,6),"Le circuit remonte jusqu'à vos enclos.");
+       state.suspicion=clamp(state.suspicion+36);
+       addLog("L'abattoir est fermé et vos enclos placés sous surveillance sanitaire.","bad"); }},
+
+    {id:"armouredCar", icon:"🚐", name:"Le fourgon blindé de la route 9", squad:true,
+     what:"Il ralentit toujours au même passage à niveau, et il transporte la paie de trois usines.",
+     cost:350, gain:[7000,16000], sus:[48,66], base:.28, edge:"shoot", danger:.68,
+     needs:()=>({ok:(state.cowboys||[]).length>=4 && state.weapons>=3, why:"Il faut au moins quatre cow-boys et trois armes."}),
+     onWin:()=>{ state.legacy.greed+=3; addMobTies(2);
+       addLog("Quatre minutes au passage à niveau. Le fourgon repart vide et personne n'est blessé.","good"); },
+     fail:"Le fourgon avait une escorte en civil deux voitures derrière.",
+     onFail:()=>{ const hit=hurtCowboys(rand(2,4),true);
+       state.suspicion=clamp(state.suspicion+48);
+       state.reputation=clamp(state.reputation-rand(15,26));
+       addLog(`${casualtyLine(hit)} Les portraits-robots passent au journal télévisé.`,"bad"); }},
+
+    {id:"drillLease", icon:"🛢️", name:"Falsifier un bail pétrolier",
+     what:"Antidater un bail sur des terres qui ne sont pas encore à vous, avant que la foreuse n'arrive.",
+     cost:300, gain:[2600,6000], sus:[26,40], base:.46, edge:"relation",
+     onWin:()=>{ state.legacy.greed+=2; addClaimPressure(5);
+       addLog("Les redevances tombent sur un bail signé trois ans avant que vous n'ayez la terre.","good"); },
+     fail:"Le registre du comté est recopié au propre cette année-là.",
+     onFail:()=>{ state.suspicion=clamp(state.suspicion+30);
+       state.money-=Math.min(state.money,sc(rand(700,1600)));
+       addLog("La date ne correspond à rien. Le bail est annulé et le dossier transmis.","bad"); }}
   ],
   corporate:[
     {id:"books", icon:"📚", name:"Maquiller les comptes du ranch",
@@ -5420,7 +5646,63 @@ const ILLEGAL_OPS = {
        addLog(`${moneyFmt.format(cut)} $ de dette rachetés pour une bouchée de pain.`,"good"); },
      onFail:()=>{ state.debt=Math.round((state.debt||0)*1.25);
        state.missedPayments=(state.missedPayments||0)+1;
-       addLog("Le prêt est dénoncé : tout devient exigible, et la dette gonfle.","bad"); }}
+       addLog("Le prêt est dénoncé : tout devient exigible, et la dette gonfle.","bad"); }},
+
+    {id:"pension", icon:"🏛️", name:"Piller la caisse de retraite du domaine",
+     what:"Trente ans de cotisations de vos propres hommes, sur un compte que personne ne contrôle.",
+     gain:[6000,14000], sus:[34,50], base:.44, edge:"money",
+     onWin:()=>{ state.legacy.greed+=3;
+       (state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty-rand(4,10)));
+       addLog("La caisse est vidée en trois virements. Les hommes ne le sauront qu'à la retraite.","good"); },
+     fail:"Un contrôleur des retraites croise deux relevés.",
+     onFail:()=>{ state.suspicion=clamp(state.suspicion+40);
+       (state.cowboys||[]).forEach(c=>c.loyalty=clamp(c.loyalty-rand(20,35)));
+       state.reputation=clamp(state.reputation-rand(20,34));
+       addLog("Les hommes apprennent où est passée leur retraite. Trois démissionnent le jour même.","bad"); }},
+
+    {id:"westWingFire", icon:"🔥", name:"L'incendie de l'aile ouest",
+     what:"Bâtiments, matériel, cheptel déclaré : une nuit de janvier et une police d'assurance récente.",
+     cost:200, gain:[5000,12000], sus:[38,54], base:.40, edge:"money",
+     onWin:()=>{ state.legacy.greed+=3;
+       state.cattle=Math.max(0,state.cattle-rand(10,30));
+       addLog("L'expert conclut à un court-circuit. L'indemnité couvre trois fois la perte.","good"); },
+     fail:"L'expert d'assurance est un ancien pompier.",
+     onFail:()=>{ state.suspicion=clamp(state.suspicion+45);
+       state.money-=Math.min(state.money,sc(rand(1500,3500)));
+       addLog("Le rapport parle d'accélérant. L'assureur porte plainte et résilie tout.","bad"); }},
+
+    {id:"toxicBurial", icon:"☣️", name:"Enfouir les déchets d'un industriel",
+     what:"Quatre-vingts fûts dans une combe du nord, une signature, et de quoi vivre trois ans.",
+     gain:[4000,9000], sus:[28,44], base:.50, edge:"money",
+     onWin:()=>{ state.legacy.greed+=3; addClaimPressure(8);
+       addLog("Les fûts sont recouverts avant la première neige. Il faudra bien que quelqu'un s'en souvienne un jour.","good"); },
+     fail:"Un ruisseau change de couleur au printemps.",
+     onFail:()=>{ state.suspicion=clamp(state.suspicion+40);
+       state.reputation=clamp(state.reputation-rand(22,36));
+       setQuarantine(rand(4,8),"Le ruisseau contaminé ferme le domaine.");
+       addLog("Le ruisseau vire à l'ocre en avril. Les analyses tombent en mai.","bad"); }},
+
+    {id:"cattleFraud", icon:"📈", name:"Vendre trois fois le même troupeau",
+     what:"Trois investisseurs de la côte, un seul troupeau, et personne qui vienne jamais le compter.",
+     cost:150, gain:[7000,15000], sus:[36,52], base:.42, edge:"relation",
+     onWin:()=>{ state.legacy.greed+=3;
+       addLog("Trois relevés trimestriels, trois signatures, un seul troupeau. Cela peut durer des années.","good"); },
+     fail:"Deux des trois se rencontrent à un salon.",
+     onFail:()=>{ state.suspicion=clamp(state.suspicion+44);
+       state.money-=Math.min(state.money,sc(rand(2000,5000)));
+       state.reputation=clamp(state.reputation-rand(20,32));
+       addLog("Ils comparent leurs relevés au bar de l'hôtel. La plainte est déposée le lundi.","bad"); }},
+
+    {id:"aquiferPump", icon:"🚰", name:"Pomper la nappe de la vallée",
+     what:"Un forage clandestin sous un hangar, et l'eau de tout le canton qui remonte chez vous.",
+     cost:600, gain:[2500,6000], sus:[24,40], base:.48, edge:"money",
+     onWin:()=>{ state.legacy.greed+=2; addClaimPressure(6);
+       addLog("Les pâtures restent vertes en août pendant que celles des voisins jaunissent.","good"); },
+     fail:"Trois puits voisins tombent à sec le même mois.",
+     onFail:()=>{ const c=factionOfType("community"); if(c) c.relation=clamp(c.relation-40,-100,100);
+       state.suspicion=clamp(state.suspicion+32);
+       state.money-=Math.min(state.money,sc(rand(1000,2400)));
+       addLog("L'agence de l'eau remonte au forage en une semaine. Le canton entier est au courant.","bad"); }}
   ],
   globalization:[
     {id:"offshore", icon:"🏝️", name:"Loger les bénéfices à l'étranger",
@@ -5459,7 +5741,62 @@ const ILLEGAL_OPS = {
        addLog("Les prairies tiennent tout l'été pendant que la vallée grille.","good"); },
      onFail:()=>{ const c=factionOfType("community"); if(c) c.relation=clamp(c.relation-35,-100,100);
        const f=Math.min(state.money,sc(rand(250,600))); state.money-=f;
-       addLog(`Surprélèvement en période de restriction : ${moneyFmt.format(f)} $ et la vallée au courant.`,"bad"); }}
+       addLog(`Surprélèvement en période de restriction : ${moneyFmt.format(f)} $ et la vallée au courant.`,"bad"); }},
+
+    {id:"cartel", icon:"🤝", name:"S'entendre sur les prix avec les gros",
+     what:"Quatre producteurs, un déjeuner par trimestre, et un prix plancher que personne ne casse.",
+     cost:400, gain:[6000,13000], sus:[30,46], base:.46, edge:"relation",
+     onWin:()=>{ state.legacy.greed+=3;
+       addLog("Le prix ne bouge plus d'un cent en dix-huit mois. Les acheteurs paient et se taisent.","good"); },
+     fail:"L'un des quatre a porté un micro au déjeuner.",
+     onFail:()=>{ state.suspicion=clamp(state.suspicion+42);
+       state.money-=Math.min(state.money,sc(rand(3000,7000)));
+       state.reputation=clamp(state.reputation-rand(18,30));
+       addLog("L'autorité de la concurrence produit l'enregistrement du déjeuner de mars.","bad"); }},
+
+    {id:"labourRing", icon:"🚚", name:"Faire venir des ouvriers sans papiers",
+     what:"Quarante hommes logés dans un hangar, payés le tiers, et un intermédiaire qui prend sa part.",
+     cost:200, gain:[3000,7000], sus:[28,44], base:.52, edge:"money",
+     onWin:()=>{ state.legacy.greed+=3;
+       addLog("Les charges de main-d'œuvre tombent des deux tiers. Personne ne pose de question tant que ça tourne.","good"); },
+     fail:"Un contrôle cerne le hangar à quatre heures du matin.",
+     onFail:()=>{ state.suspicion=clamp(state.suspicion+40);
+       state.reputation=clamp(state.reputation-rand(20,34));
+       state.money-=Math.min(state.money,sc(rand(2000,4500)));
+       const m=factionOfType("media"); if(m) m.relation=clamp(m.relation-40,-100,100);
+       addLog("Les images du hangar tournent en boucle pendant trois jours.","bad"); }},
+
+    {id:"cargoJack", icon:"📦", name:"Détourner un conteneur au port", squad:true,
+     what:"Un conteneur de viande d'export « perdu » entre le quai et l'entrepôt, avec deux dockers dans la combine.",
+     cost:500, gain:[6000,14000], sus:[36,52], base:.38, edge:"shoot", danger:.45,
+     needs:()=>({ok:(state.cowboys||[]).length>=3, why:"Il faut au moins trois hommes."}),
+     onWin:()=>{ addMobTies(2); state.legacy.greed+=2;
+       addLog("Le conteneur est déclaré perdu en mer. Il est vendu à Denver le mois suivant.","good"); },
+     fail:"Le port est couvert par cent quarante caméras.",
+     onFail:()=>{ state.suspicion=clamp(state.suspicion+45);
+       state.money-=Math.min(state.money,sc(rand(1500,3500)));
+       addLog("Les caméras du portique ont tout filmé, y compris les plaques.","bad"); }},
+
+    {id:"subsidyRing", icon:"🧾", name:"Le carrousel des subventions",
+     what:"Les mêmes hectares déclarés dans trois programmes d'aide, sur trois sociétés, dans deux États.",
+     cost:300, gain:[5000,11000], sus:[26,42], base:.50, edge:"money",
+     onWin:()=>{ state.legacy.greed+=3;
+       addLog("Trois versements par an sur les mêmes prairies. C'est légal jusqu'à ce que quelqu'un croise les fichiers.","good"); },
+     fail:"Les fichiers sont croisés cette année-là.",
+     onFail:()=>{ state.suspicion=clamp(state.suspicion+38);
+       state.money-=Math.min(state.money,sc(rand(3000,6500)));
+       addLog("Le remboursement est exigé sur cinq ans, avec pénalités.","bad"); }},
+
+    {id:"labSwap", icon:"🧪", name:"Acheter le laboratoire d'analyses",
+     what:"Un directeur de laboratoire, une enveloppe par trimestre, et chaque prélèvement revient conforme.",
+     cost:350, gain:[2500,6000], sus:[24,38], base:.54, edge:"relation",
+     onWin:()=>{ state.legacy.greed+=2;
+       addLog("Tous les prélèvements sont conformes depuis deux ans. Absolument tous.","good"); },
+     fail:"Une contre-analyse est demandée par un client.",
+     onFail:()=>{ setQuarantine(rand(3,6),"Les résultats truqués ferment le domaine.");
+       state.suspicion=clamp(state.suspicion+40);
+       state.reputation=clamp(state.reputation-rand(20,34));
+       addLog("La contre-analyse sort tout ce que la première cachait.","bad"); }}
   ],
   modern:[
     {id:"shell", icon:"🏢", name:"Racheter la terre par société-écran",
@@ -5505,7 +5842,64 @@ const ILLEGAL_OPS = {
        addLog("Les virements passent, la comptabilité est impeccable, et personne n'a vu une seule bête.","good"); },
      onFail:()=>{ setReceivership(rand(3,6),"Les comptes du ranch sont gelés le temps de l'enquête.");
        state.suspicion=clamp(state.suspicion+30);
-       addLog("Comptes gelés et administrateur nommé : le ranch ne s'appartient plus.","bad"); }}
+       addLog("Comptes gelés et administrateur nommé : le ranch ne s'appartient plus.","bad"); }},
+
+    {id:"crypto", icon:"🪙", name:"Blanchir par les cryptomonnaies",
+     what:"Trois portefeuilles, un mélangeur et une société estonienne : l'argent liquide du domaine devient une plus-value.",
+     cost:800, gain:[8000,18000], sus:[30,46], base:.46, edge:"money",
+     onWin:()=>{ state.legacy.greed+=3;
+       addLog("L'argent ressort propre, sur un compte que personne ne rattachera jamais au ranch.","good"); },
+     fail:"La chaîne est publique, et quelqu'un sait la lire.",
+     onFail:()=>{ setReceivership(rand(3,6),"Les comptes sont gelés le temps de l'enquête.");
+       state.suspicion=clamp(state.suspicion+42);
+       addLog("Un analyste retrace la chaîne en trois heures. Les comptes sont gelés.","bad"); }},
+
+    {id:"carbonFraud", icon:"🌳", name:"Vendre du carbone qui n'existe pas",
+     what:"Certifier en puits de carbone des prairies qu'on continue de pâturer, et vendre les crédits à un avionneur.",
+     cost:600, gain:[7000,16000], sus:[26,42], base:.50, edge:"relation",
+     onWin:()=>{ state.legacy.greed+=3;
+       addLog("Les crédits partent à un groupe aérien qui n'enverra jamais personne compter les arbres.","good"); },
+     fail:"Une association compare les images satellite de deux étés.",
+     onFail:()=>{ state.suspicion=clamp(state.suspicion+38);
+       state.reputation=clamp(state.reputation-rand(22,36));
+       state.money-=Math.min(state.money,sc(rand(4000,9000)));
+       const m=factionOfType("media"); if(m) m.relation=clamp(m.relation-40,-100,100);
+       addLog("Les images satellite montrent la même prairie pâturée deux étés de suite.","bad"); }},
+
+    {id:"dataRansom", icon:"💻", name:"Payer pour faire tomber un concurrent",
+     what:"Un groupe qu'on ne rencontre jamais chiffre les systèmes du plus gros producteur de l'État.",
+     cost:1400, gain:[6000,15000], sus:[34,50], base:.42, edge:"money",
+     onWin:()=>{ const hs=rivalHouses(); const h=hs[rand(0,hs.length-1)];
+       if(h){ weakenHouse(h,rand(10,20)); }
+       state.legacy.greed+=3;
+       addLog("Leur chaîne d'abattage est à l'arrêt trois semaines. Vos prix montent d'autant.","good"); },
+     fail:"Le paiement remonte jusqu'à vous.",
+     onFail:()=>{ setReceivership(rand(4,8),"Enquête fédérale sur une cyberattaque.");
+       state.suspicion=clamp(state.suspicion+48);
+       state.reputation=clamp(state.reputation-rand(25,40));
+       addLog("Les fédéraux remontent le paiement. Une cyberattaque, ce n'est plus du bétail volé.","bad"); }},
+
+    {id:"waterSpec", icon:"🏜️", name:"Spéculer sur les droits d'eau",
+     what:"Racheter les droits d'eau de tout le canton par une société d'investissement, et les revendre à la ville.",
+     cost:2500, gain:[12000,26000], sus:[28,44], base:.44, edge:"money",
+     onWin:()=>{ state.legacy.greed+=3; addClaimPressure(8);
+       addLog("La ville rachète ses propres droits d'eau au triple. Les fermiers du canton, eux, n'ont plus rien.","good"); },
+     fail:"Le canton se pourvoit et obtient la préemption publique.",
+     onFail:()=>{ state.money-=Math.min(state.money,sc(rand(6000,14000)));
+       const c=factionOfType("community"); if(c) c.relation=clamp(c.relation-45,-100,100);
+       state.reputation=clamp(state.reputation-rand(20,32));
+       addLog("La préemption s'exerce à votre prix d'achat. Vous avez financé le canton.","bad"); }},
+
+    {id:"buyInspectors", icon:"📋", name:"Acheter toute la chaîne de contrôle",
+     what:"Vétérinaire, inspecteur du travail, agent des eaux : trois virements par an et plus aucune visite.",
+     cost:1000, gain:[3000,8000], sus:[22,38], base:.52, edge:"relation",
+     onWin:()=>{ state.legacy.greed+=3;
+       addLog("Plus une visite en dix-huit mois. Le domaine fonctionne comme s'il n'y avait plus de règles.","good"); },
+     fail:"L'un des trois est muté et son successeur lit les dossiers.",
+     onFail:()=>{ state.suspicion=clamp(state.suspicion+44);
+       setQuarantine(rand(3,6),"Tous les contrôles reportés tombent d'un coup.");
+       state.money-=Math.min(state.money,sc(rand(3000,7000)));
+       addLog("Trois ans de contrôles reportés arrivent la même semaine.","bad"); }}
   ]
 };
 

@@ -3320,8 +3320,10 @@ section("Coups en douce");
 }
 {
   // Une opération engage bien une action, et sa mise est prélevée.
-  const era = ev("ERAS").find(e => ev(`ILLEGAL_OPS["${e.id}"]`).some(o => o.cost));
-  const withCost = ev(`ILLEGAL_OPS["${era.id}"]`).find(o => o.cost);
+  // Une opération avec mise ET sans prérequis d'hommes ou d'armes : les gros
+  // coups en exigent, et un ranch neuf ne les a pas.
+  const era = ev("ERAS").find(e => ev(`ILLEGAL_OPS["${e.id}"]`).some(o => o.cost && !o.needs));
+  const withCost = ev(`ILLEGAL_OPS["${era.id}"]`).find(o => o.cost && !o.needs);
   const s = freshGame();
   s.eraId = era.id; s.costModifier = era.inflation;
   s.money = 100000; s.actions = 3;
