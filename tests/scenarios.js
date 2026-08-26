@@ -1328,7 +1328,10 @@ section("Une dynastie établie peut tomber");
     else (heldCauses[ending] = (heldCauses[ending]||0)+1);
   }
   if(Object.keys(heldCauses).length) console.log("       chutes malgré la tenue : " + JSON.stringify(heldCauses));
-  check("le même empire bien tenu passe le siècle", held >= 7, held + "/10");
+  // Seuil descendu de 7 à 6 avec la V5.0 : le dernier assaut peut emporter un
+  // empire par ailleurs bien tenu, et c'est voulu. Le pilote prend toujours la
+  // première issue, qui n'est pas toujours la meilleure face à la coalition.
+  check("le même empire bien tenu passe le siècle", held >= 6, held + "/10");
 }
 
 section("Quarantaine, administration et partage");
@@ -4484,9 +4487,12 @@ section("La nation ashkani");
   const nation = G.factionOfType("nation");
   nation.relation = -80;
   const cattle0 = ST().cattle, claim0 = ST().claimPressure || 0;
-  for(let i = 0; i < 100; i++) G.nationHostilePhase(nation);
+  // Mille tirages, pas cent : à cent, la mesure passait ou échouait selon la
+  // graine, l'espérance étant tout près du seuil. Espérance ≈ 18 % de raids,
+  // dont un tiers coûtent des bêtes, à douze têtes en moyenne — soit ~700.
+  for(let i = 0; i < 1000; i++) G.nationHostilePhase(nation);
   const perdu1885 = cattle0 - ST().cattle;
-  check("en 1885, la nation coûte des bêtes, et beaucoup", perdu1885 > 60, perdu1885 + " têtes sur 100 trimestres");
+  check("en 1885, la nation coûte des bêtes, et beaucoup", perdu1885 > 300, perdu1885 + " têtes sur 1000 trimestres");
   check("et la revendication monte quand même", (ST().claimPressure||0) > claim0);
 
   // 1960 ne coûte plus de bêtes : cela coûte des avocats.
@@ -4497,7 +4503,7 @@ section("La nation ashkani");
   if(nation3){
     nation3.relation = -80;
     const c0 = ST().cattle, m0 = ST().money, p0 = ST().claimPressure || 0;
-    for(let i = 0; i < 100; i++) G.nationHostilePhase(nation3);
+    for(let i = 0; i < 1000; i++) G.nationHostilePhase(nation3);
     check("en 1960, plus une bête n'est touchée", ST().cattle === c0, c0 - ST().cattle);
     check("mais l'argent part en frais", ST().money < m0, m0 - ST().money);
     check("et le dossier grossit plus vite qu'en 1885",
@@ -4513,7 +4519,7 @@ section("La nation ashkani");
   const c4 = ST().cattle;
   const nation4 = G.factionOfType("nation");
   nation4.relation = -80;
-  for(let i = 0; i < 100; i++) G.nationHostilePhase(nation4);
+  for(let i = 0; i < 1000; i++) G.nationHostilePhase(nation4);
   check("des hommes armés découragent les incursions",
     (c4 - ST().cattle) < perdu1885, (c4 - ST().cattle) + " contre " + perdu1885);
 }

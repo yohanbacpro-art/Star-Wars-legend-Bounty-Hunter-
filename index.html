@@ -1051,6 +1051,12 @@ var SCENES = {"0":{"piste":"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2
                 <small id="ventureDesc">Une entreprise propre à l'époque, qui rapporte chaque trimestre.</small>
                 <div class="action-cost" id="ventureCost">Coût : —</div>
               </button>
+              <button class="action" data-action="neighbour">
+                <span class="icon">🏡</span>
+                <strong>Racheter un voisin</strong>
+                <small id="neighbourDesc">Un ranch entier : ses terres, son troupeau et ses hommes.</small>
+                <div class="action-cost" id="neighbourCount">Voir les fermes à vendre</div>
+              </button>
               <button class="action" data-action="build">
                 <span class="icon">🏗️</span>
                 <strong>Bâtir sur le domaine</strong>
@@ -4878,6 +4884,148 @@ function checkSiegeEnd(){
   return true;
 }
 
+// ============================================================================
+// RACHETER LES VOISINS
+// ----------------------------------------------------------------------------
+// « Acheter 20 hectares » est une ligne de tableur. Racheter le ranch des
+// Whitlock parce que le vieux est mort et que ses fils sont partis en ville,
+// c'est une décision — avec un nom, une histoire, un troupeau, des hommes qui
+// restent ou s'en vont, et un prix qui dépend de la raison pour laquelle ils
+// vendent.
+//
+// Trois voisins sont toujours en vue. Chacun a un état qui évolue tout seul :
+// il prospère, il décline, il est saisi. Un ranch en difficulté se paie moins
+// cher, mais il arrive avec ses dettes ou ses procès.
+// ============================================================================
+var NEIGHBOUR_NAMES = ["Whitlock","Ambrose","Pelletier","Sorenson","Delgado",
+  "Hargitay","Bowden","Fenwick","Okonkwo","Marchetti","Tanaka","Kowalski"];
+
+var NEIGHBOUR_STATES = {
+  prospere:{label:"Prospère", icon:"🌾", mult:1.35,
+    what:"Bien tenu, bien gardé. Il ne vend que si le prix est indécent."},
+  ordinaire:{label:"Ordinaire", icon:"🏚️", mult:1.0,
+    what:"Ni bon ni mauvais. Le genre de ranch qu'on rachète sans faire d'histoire."},
+  endette:{label:"Endetté", icon:"🏦", mult:.62,
+    what:"La banque l'a déjà à l'œil. Bon marché — et ses traites viennent avec."},
+  deuil:{label:"En succession", icon:"⚰️", mult:.72,
+    what:"Le vieux est mort, les héritiers sont en ville et ne veulent pas revenir."},
+  saisi:{label:"Saisi", icon:"⚖️", mult:.48,
+    what:"Vendu à la barre. Une affaire — si l'on ne craint pas ce qu'en dira la vallée."}
+};
+
+function ensureNeighbours(){
+  if(!state) return [];
+  if(!Array.isArray(state.neighbours)) state.neighbours = [];
+  while(state.neighbours.length < 3) state.neighbours.push(newNeighbour());
+  return state.neighbours;
+}
+
+function newNeighbour(){
+  const pris = (state.neighbours||[]).map(n=>n.name)
+    .concat(rivalHouses().map(h=>h.name));
+  const pool = NEIGHBOUR_NAMES.filter(n => pris.indexOf(n) < 0);
+  const keys = Object.keys(NEIGHBOUR_STATES);
+  const land = rand(3, 14) * 20;
+  return {
+    name: pool.length ? pool[rand(0,pool.length-1)] : "Kearney",
+    land: land,
+    cattle: Math.round(land / 3 * (rand(50,105)/100)),
+    hands: rand(0, 3),
+    condition: keys[rand(0, keys.length-1)],
+    since: state.year
+  };
+}
+
+// Le prix : la terre, les bêtes, les bâtiments — corrigé par l'état du voisin
+// et par votre réputation. Un nom respecté paie moins cher, parce qu'on préfère
+// vendre à quelqu'un dont on sait ce qu'il fera des terres.
+function neighbourPrice(n){
+  const st = NEIGHBOUR_STATES[n.condition] || NEIGHBOUR_STATES.ordinaire;
+  const brut = sc(n.land * 30) + n.cattle * (state.cattlePrice + 4) + sc(300);
+  const nom = 1 - Math.max(-.06, Math.min(.10, (state.reputation - 50) / 500));
+  return Math.max(1, Math.round(brut * st.mult * nom));
+}
+
+// Ce qui vient avec : un ranch endetté apporte sa dette, un ranch saisi apporte
+// la rancune du pays.
+function neighbourCatch(n){
+  if(n.condition === "endette") return "Sa dette passe au domaine.";
+  if(n.condition === "saisi") return "Le comté n'aime pas ceux qui rachètent à la barre.";
+  if(n.condition === "deuil") return "Les héritiers vendent vite, mais on s'en souviendra.";
+  if(n.condition === "prospere") return "Rien à redire : c'est simplement cher.";
+  return "Rien de particulier.";
+}
+
+function buyNeighbour(i){
+  ensureNeighbours();
+  const n = state.neighbours[i];
+  if(!n) return;
+  if(state.actions <= 0 || state.gameOver){ toast("Plus d'action disponible ce tour."); return; }
+  if(inReceivership()){ toast("L'administrateur judiciaire bloque toute acquisition."); return; }
+  const prix = neighbourPrice(n);
+  if(pay(prix) === false) return;
+  useAction();
+  $("neighbourModal").classList.add("hidden");
+
+  state.land += n.land;
+  addParcel(n.land);
+  state.cattle += n.cattle;
+
+  // Les hommes du voisin : certains restent, et ils arrivent avec leur nom.
+  let restes = 0;
+  for(let k = 0; k < n.hands; k++){
+    if((state.cowboys||[]).length >= 14) break;
+    if(chance(.55 + state.reputation/400)){
+      hireNamedCowboy({trait:"Ancien des "+n.name, loyalty:rand(35,65)});
+      restes++;
+    }
+  }
+
+  if(n.condition === "endette"){
+    const dette = Math.round(prix * rand(30,60)/100);
+    state.debt = (state.debt || 0) + dette;
+    addLog(`La dette des ${n.name} — ${moneyFmt.format(dette)} $ — passe au domaine avec les terres.`, "bad");
+  }
+  if(n.condition === "saisi"){
+    state.reputation = clamp(state.reputation - rand(6,14));
+    const c = factionOfType("community"); if(c) c.relation = clamp(c.relation - rand(12,22), -100, 100);
+    state.legacy.greed++;
+    addClaimPressure(2);
+  }
+  if(n.condition === "deuil") state.reputation = clamp(state.reputation - rand(1,5));
+  if(n.condition === "prospere") state.reputation = clamp(state.reputation + rand(3,8));
+
+  addLog(`Le ranch des ${n.name} — ${n.land} hectares, ${n.cattle} bêtes — est racheté pour `
+    + `${moneyFmt.format(prix)} $.` + (restes ? ` ${restes} de leurs hommes restent.` : ` Leurs hommes s'en vont.`), "good");
+  recordSaga("prosperity", `Le ranch des ${n.name} passe au domaine`, "land",
+    `${state.year}. ${n.land} hectares de plus, et un nom de moins dans la vallée.`);
+
+  state.neighbours.splice(i, 1);
+  state.boughtNeighbours = (state.boughtNeighbours || 0) + 1;
+  ensureNeighbours();
+  checkAchievements();
+  render();
+}
+
+// Les voisins vivent leur vie : ils prospèrent, ils s'endettent, ils meurent,
+// et de temps en temps l'un d'eux quitte la vallée sans vous avoir attendu.
+function neighbourPhase(){
+  ensureNeighbours();
+  const keys = Object.keys(NEIGHBOUR_STATES);
+  state.neighbours.forEach(n => {
+    if(chance(.14)) n.condition = keys[rand(0, keys.length-1)];
+    if(chance(.35)) n.cattle = Math.max(0, n.cattle + rand(-6, 8));
+    if(chance(.10)) n.land = Math.max(40, n.land + rand(-20, 20));
+  });
+  if(chance(.10) && state.neighbours.length){
+    const i = rand(0, state.neighbours.length - 1);
+    const parti = state.neighbours[i];
+    state.neighbours.splice(i, 1);
+    ensureNeighbours();
+    addLog(`Le ranch des ${parti.name} a été vendu — pas à vous.`, "info");
+  }
+}
+
 // ---- Les chevaux ----
 // Le ranch a un cheval de tête, nommé et suivi. On l'entraîne, il gagne les
 // concours, il vieillit — et il peut être volé, ou volé à d'autres.
@@ -6638,6 +6786,8 @@ function ensureProgress(){
   ensureSecondSecret();
   if(typeof state.arcCooldown !== "number") state.arcCooldown = 0;
   if(typeof state.warCooldown !== "number") state.warCooldown = 0;
+  if(!Array.isArray(state.neighbours)) state.neighbours = [];
+  if(typeof state.boughtNeighbours !== "number") state.boughtNeighbours = 0;
   if(state.crisis === undefined) state.crisis = null;
   if(typeof state.siege !== "number") state.siege = 0;
   if(!Array.isArray(state.siegeDone)) state.siegeDone = [];
@@ -7193,6 +7343,8 @@ function baseState() {
     actions:3,
     buildings:[],
     competedTurn:-1,
+    neighbours:[],
+    boughtNeighbours:0,
     war:null,
     warCooldown:0,
     vendetta:null,
@@ -7488,6 +7640,13 @@ function render(){
   $("illegalCount").textContent = illegalOps().length + " opérations — chances affichées";
   $("rivalOpCount").textContent = rivalOps().length + " opérations — chances affichées";
   {
+    ensureNeighbours();
+    const moins = state.neighbours.reduce((a,n)=>Math.min(a, neighbourPrice(n)), Infinity);
+    $("neighbourCount").textContent = state.neighbours.length
+      ? `${state.neighbours.length} fermes — à partir de ${moneyFmt.format(moins)} $`
+      : "Aucune ferme à vendre";
+  }
+  {
     const av = availableBuildings(), built = av.filter(b => hasBuilding(b.id)).length;
     $("buildCount").textContent = built >= av.length
       ? "Tout est bâti"
@@ -7749,6 +7908,8 @@ function doAction(type){
   if(type === "venture"){ investVenture(); return; }
 
   if(type === "build"){ openBuildPanel(); return; }
+
+  if(type === "neighbour"){ openNeighbourPanel(); return; }
 
   if(type === "buyHorse"){
     const cost = spend(180);
@@ -8446,6 +8607,7 @@ function ageFamily(){
   houseBendPhase();
   vendettaPhase();
   siegePhase();
+  neighbourPhase();
   [state.founder,state.spouse].forEach(p => {
     if(!p.alive) return;
     p.age++;
@@ -8486,15 +8648,18 @@ function ageFamily(){
   // adultes figeait la maisonnée en une seule cohorte, qui vieillissait et
   // s'éteignait d'un bloc au bout de trois ou quatre générations.
   const dependents = state.children.filter(c => c.alive !== false && c.age < 18).length;
-  const familyCapFactor = Math.max(0, 1 - dependents * 0.18);
+  // Frein desserré : 0,18 par enfant à charge plafonnait la fratrie à cinq ou
+  // six, ce qui est peu pour une maison de ranch d'avant-guerre. À 0,11, une
+  // grande maisonnée redevient possible sans devenir la règle.
+  const familyCapFactor = Math.max(0, 1 - dependents * 0.11);
   // La fertilité décline dès la trentaine et s'arrête à 40 ans révolus.
   const mother = motherOfHousehold();
   let motherAgeFactor = 1;
   if(mother && mother.age >= 30){
     motherAgeFactor = Math.max(0.05, 1 - (mother.age - 30) * 0.09);
   }
-  const birthChance = .32 * familyCapFactor * motherAgeFactor;
-  if(coupleCanConceive() && livingChildrenCount < 14 && chance(birthChance)){
+  const birthChance = .38 * familyCapFactor * motherAgeFactor;
+  if(coupleCanConceive() && livingChildrenCount < 20 && chance(birthChance)){
     const sex = chance(.5) ? "m" : "f";
     const name = pickName(sex);
     const baby = addChild(name, {sex});
@@ -8508,13 +8673,13 @@ function ageFamily(){
   // un peu plus jeune, d'où la limite un peu plus haute.
   const eligibleParents = state.children.filter(c =>
     c.alive !== false && c.married && c.age >= 18 && (c.sex === "f" ? c.age < 40 : c.age < 48));
-  if(eligibleParents.length && livingChildrenCount < 16){
+  if(eligibleParents.length && livingChildrenCount < 24){
     const parent = eligibleParents[rand(0,eligibleParents.length-1)];
     let parentAgeFactor = 1;
     if(parent.age >= 30){
       parentAgeFactor = Math.max(0.05, 1 - (parent.age - 30) * 0.09);
     }
-    const grandchildChance = .3 * familyCapFactor * parentAgeFactor;
+    const grandchildChance = .36 * familyCapFactor * parentAgeFactor;
     if(chance(grandchildChance)){
       const sex = chance(.5) ? "m" : "f";
       const name = pickName(sex);
@@ -13478,52 +13643,91 @@ function renderFamily(){
      +"d'autant plus qu'ils sont ambitieux. Ne rien décider laisse la rancune monter — "
      +"et rend la reprise du ranch bien plus risquée à la mort du chef de famille.</small></p>";
  }
- h+="<h4>Enfants</h4>";
- if(state.children.length===0){h+="<i>Aucun enfant</i>";}
- else{
-   h+="<ul>";
-   // Les petits-enfants ne sont plus listés à plat entre leurs oncles : ils
-   // apparaissent sous leur propre parent, comme une troisième génération.
-   const ordered = state.children.filter(c => c.parentCid === undefined)
-     .concat(state.children.filter(c => c.parentCid !== undefined
-       && !state.children.some(x => x.cid === c.parentCid)));
-   ordered.forEach((c)=>{
-     const i = state.children.indexOf(c);
-     if(!c.trait)c.trait=["Travailleur","Ambitieux","Calme","Impulsif","Charismatique"][Math.floor(Math.random()*5)];
-     if(!c.goal)c.goal=["Reprendre le ranch","Devenir riche","Partir en ville","Élever des chevaux"][Math.floor(Math.random()*4)];
+ h+="<h4>La maisonnée</h4>";
+ // ⚠️ Les défunts sortent de la liste des vivants. Ils y restaient, l'âge figé
+ // à leur mort, entre leurs frères et sœurs : au bout de trois générations le
+ // panneau devenait illisible. Ils ont maintenant leur propre section, en bas.
+ const vivants = state.children.filter(c => c.alive !== false);
+ const enfants = vivants.filter(c => c.parentCid === undefined);
+ // Un petit-enfant dont le parent est mort n'a plus de rang où s'afficher :
+ // il remonte dans sa propre section plutôt que de disparaître.
+ const orphelins = vivants.filter(c => c.parentCid !== undefined
+   && !vivants.some(x => x.cid === c.parentCid));
+
+ // Une seule fonction rend n'importe quel membre vivant de la maison, enfant
+ // ou petit-enfant : c'est ce qui donne enfin aux petits-enfants adultes le
+ // sélecteur d'affectation et le bouton de désignation.
+ function membreHTML(c, petit){
+   const i = state.children.indexOf(c);
+   if(!c.trait)c.trait=["Travailleur","Ambitieux","Calme","Impulsif","Charismatique"][Math.floor(Math.random()*5)];
+   if(!c.goal)c.goal=["Reprendre le ranch","Devenir riche","Partir en ville","Élever des chevaux"][Math.floor(Math.random()*4)];
    const isHeir = heir && heir.cid===c.cid;
-   h+="<li><div class=\"who\">"+portraitTag(c,{size:"small"})+"<div><b>"+c.name+"</b> "+(c.sex==="f"?"♀":"♂")+(isHeir?" 👑":"")+" - "+c.age+" ans"+(c.married?" ("+married(c)+" à "+c.spouseName+")":"")+(c.parentName?" — enfant de "+c.parentName:"")+"<br><input type=\"text\" id=\"childNameInput"+i+"\" value=\""+c.name.replace(/"/g,"&quot;")+"\" style=\"width:130px;\"> <button class=\"choice\" onclick=\"renameChild("+i+")\">Renommer</button><br>Trait : "+c.trait+"<br>Ambition personnelle : "+c.goal;
-     if(c.age>=18 && c.alive!==false){
-       const res = c.resentment||0;
-       const mood = res>=70?"prêt·e à tout":(res>=45?"amer·ère":(res>=20?"contrarié·e":"en paix"));
-       h+="<br>Ambition : "+(c.ambition||0)+"/100 · Attachement : "+(c.bond||50)+"/100 · Rancune : "+res+"/100 <i>("+mood+")</i>";
-       h+="<br>"+(isHeir
+   const peutHeriter = c.age>=18 && (!petit || adults.some(a=>a.cid===c.cid));
+   let b = "<div class=\"who\">"+portraitTag(c,{size:"small"})+"<div><b>"+c.name+"</b> "
+     +(c.sex==="f"?"♀":"♂")+(isHeir?" 👑":"")+" — "+c.age+" ans"
+     +(c.married?" ("+married(c)+" à "+c.spouseName+")":"")
+     +(c.parentName?" — enfant de "+c.parentName:"")
+     +"<br><input type=\"text\" id=\"childNameInput"+i+"\" value=\""+c.name.replace(/"/g,"&quot;")+"\" style=\"width:130px;\"> "
+     +"<button class=\"choice\" onclick=\"renameChild("+i+")\">Renommer</button>"
+     +"<br>Trait : "+c.trait+"<br>Ambition personnelle : "+c.goal;
+   if(c.age>=18){
+     const res = c.resentment||0;
+     const mood = res>=70?"prêt·e à tout":(res>=45?"amer·ère":(res>=20?"contrarié·e":"en paix"));
+     b+="<br>Ambition : "+(c.ambition||0)+"/100 · Attachement : "+(c.bond||50)+"/100 · Rancune : "+res+"/100 <i>("+mood+")</i>";
+     if(peutHeriter){
+       b+="<br>"+(isHeir
          ? "<button class=\"choice\" onclick=\"clearHeir()\">Retirer la désignation</button>"
          : "<button class=\"choice\" onclick=\"pickHeir("+c.cid+")\">Désigner comme "+heirWord(c)+"</button>");
+     } else if(petit){
+       b+="<br><small><i>Ne devient prétendant·e que si plus aucun enfant direct ne peut reprendre.</i></small>";
      }
-     if(c.age>=16){
-       h+="<br>Affectation : <select id=\"childRole"+i+"\" onchange=\"setChildRole("+i+")\">";
-       Object.keys(CHILD_ROLES).forEach(k=>{
-         const sel = (c.role||"none")===k ? " selected" : "";
-         h+="<option value=\""+k+"\""+sel+">"+CHILD_ROLES[k].label+"</option>";
-       });
-       h+="</select><br><small>"+CHILD_ROLES[c.role||"none"].desc+"</small>";
-     } else {
-       h+="<br><small><i>Trop jeune pour être affecté à une tâche (16 ans requis)</i></small>";
-     }
-     // La descendance de cet enfant, juste en dessous.
+   }
+   if(c.age>=16){
+     b+="<br>Affectation : <select id=\"childRole"+i+"\" onchange=\"setChildRole("+i+")\">";
+     Object.keys(CHILD_ROLES).forEach(k=>{
+       const sel = (c.role||"none")===k ? " selected" : "";
+       b+="<option value=\""+k+"\""+sel+">"+CHILD_ROLES[k].label+"</option>";
+     });
+     b+="</select><br><small>"+CHILD_ROLES[c.role||"none"].desc+"</small>";
+   } else {
+     b+="<br><small><i>Trop jeune pour être affecté·e à une tâche (16 ans requis)</i></small>";
+   }
+   return b;
+ }
+
+ if(!enfants.length && !orphelins.length){
+   h+="<i>Aucun enfant</i>";
+ } else {
+   h+="<ul>";
+   enfants.forEach(c=>{
+     h+="<li>"+membreHTML(c, false);
      const kids = grandChildren(c.cid);
      if(kids.length){
-       h+="<div class=\"grandkids\"><small>"+(kids.length>1?"Petits-enfants":"Petit-enfant")+" :</small><div class=\"kin\">";
-       kids.forEach(k=>{
-         h+="<figure>"+portraitTag(k,{size:"small"})
-           +"<figcaption>"+k.name+"<br><span class=\"tree-dates\">"+k.age+" ans</span></figcaption></figure>";
-       });
-       h+="</div></div>";
+       h+="<div class=\"grandkids\"><small>"+(kids.length>1?"Petits-enfants":"Petit-enfant")
+         +" — "+kids.length+"</small><ul>";
+       kids.forEach(k=>{ h+="<li>"+membreHTML(k, true)+"</div></div></li>"; });
+       h+="</ul></div>";
      }
-   h+="</div></div></li>";
+     h+="</div></div></li>";
    });
+   if(orphelins.length){
+     h+="<li><b>Petits-enfants de la maison</b><ul>";
+     orphelins.forEach(k=>{ h+="<li>"+membreHTML(k, true)+"</div></div></li>"; });
+     h+="</ul></li>";
+   }
    h+="</ul>";
+ }
+
+ // Ceux qui ne sont plus : la maison d'une dynastie compte aussi ses morts,
+ // mais à part, et sans sélecteur d'affectation.
+ const defunts = state.children.filter(c => c.alive === false);
+ if(defunts.length){
+   h+="<h4>Ceux qui ne sont plus <small>("+defunts.length+")</small></h4><div class=\"kin\">";
+   defunts.forEach(c=>{
+     h+="<figure>"+portraitTag(c,{size:"small"})
+       +"<figcaption>"+c.name+"<br><span class=\"tree-dates\">"+c.age+" ans</span></figcaption></figure>";
+   });
+   h+="</div>";
  }
  document.getElementById("familyContent").innerHTML=h;
 }
@@ -13600,6 +13804,13 @@ document.getElementById("familyBtn").addEventListener("click",()=>{renderFamily(
 <p class="modal-intro" id="illegalIntro"></p>
 <div id="illegalContent"></div>
 <button class="choice" onclick="illegalModal.classList.add('hidden')">Renoncer pour cette fois</button>
+</div></div>
+
+<div id="neighbourModal" class="modal hidden"><div class="modal-card">
+<h2>Les fermes à vendre</h2>
+<p class="modal-intro" id="neighbourIntro"></p>
+<div id="neighbourContent"></div>
+<button class="choice" onclick="neighbourModal.classList.add('hidden')">Pas cette année</button>
 </div></div>
 
 <div id="buildModal" class="modal hidden"><div class="modal-card">
@@ -13795,6 +14006,42 @@ function renderIllegalPanel(){
      + `</button>`;
  });
  illegalContent.innerHTML = h;
+}
+
+function openNeighbourPanel(){
+ if(!state || state.gameOver) return;
+ if(state.actions <= 0){ toast("Plus d'action disponible ce tour."); return; }
+ ensureNeighbours();
+ renderNeighbourPanel();
+ neighbourModal.classList.remove("hidden");
+}
+function renderNeighbourPanel(){
+ ensureNeighbours();
+ $("neighbourIntro").innerHTML =
+   `Trois voisins sont en vue chaque année. Le prix suit leur état : un ranch endetté ou `
+   + `saisi se paie beaucoup moins cher — et arrive avec ce qui va avec. `
+   + `Un nom respecté fait baisser le prix, parce qu'on préfère vendre à quelqu'un dont on sait `
+   + `ce qu'il fera des terres. <b>${state.boughtNeighbours||0} ranch(s) déjà rachetés.</b>`;
+ let h = "";
+ state.neighbours.forEach((n,i) => {
+   const st = NEIGHBOUR_STATES[n.condition] || NEIGHBOUR_STATES.ordinaire;
+   const prix = neighbourPrice(n);
+   const ok = state.money >= prix;
+   h += `<button class="op" ${ok?"":"disabled"} onclick="buyNeighbour(${i})">`
+     + `<span class="op-icon">${st.icon}</span>`
+     + `<span><span class="op-name">Le ranch des ${n.name}</span>`
+     + `<span class="op-what">${st.what}</span></span>`
+     + `<span class="op-facts">`
+     + `<span class="fact ${ok?"":"bad"}">Prix : ${moneyFmt.format(prix)} $</span>`
+     + `<span class="fact good">${n.land} ha · ${n.cattle} bêtes</span>`
+     + `<span class="fact">${n.hands} homme${n.hands>1?"s":""} sur place</span>`
+     + `<span class="fact">${st.label}</span>`
+     + `</span>`
+     + `<span class="op-fail"><b>Ce qui vient avec :</b> ${neighbourCatch(n)}</span>`
+     + (ok ? "" : `<span class="op-blocked">La caisse ne suit pas.</span>`)
+     + `</button>`;
+ });
+ neighbourContent.innerHTML = h;
 }
 
 function openBuildPanel(){
