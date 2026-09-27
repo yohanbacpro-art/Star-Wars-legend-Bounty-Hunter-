@@ -11,7 +11,7 @@ const HTML = fs.readFileSync(path.join(__dirname, "..", "star-wars.html"), "utf8
 const ENGINE = [...HTML.matchAll(/<script>([\s\S]*?)<\/script>/g)][0][1];
 const ctx = {Math, JSON, Object, Array, String, Number, Set, Map, console};
 vm.createContext(ctx);
-vm.runInContext(ENGINE + "\n;globalThis.__E = {newGame, runAI, finishTurn, applyBattle, autoBattle, battleValid, createBattle, bRunAI, bResult, bDamage, bArc, bSideUnits, makeBattle, addFleet, fleetById, shipCount, planetsOf, income, FACTION_IDS, SYSTEMS, SYS, ADJ, FLEET_MP, BMAX_ROUNDS, BMAX_ROUNDS_GROUND, troops, troopCount, fleetLoad, fleetCap, makeInvasion, invasionValid, createGroundBattle, applyGround, bOrbital, bUnitAt, TROOP_TYPES, charOf, voteSupport, canEnact, enactDecree, hasDecree, resolveDilemma, dilemmaOptions, MAX_DECREES, DECREE_IDS, EVENTS, eventOptions, resolveEvent, takeLoan, repayLoan, hireMercs, assassinate, assassinTargets, purge, buyIntel, syndicateTurn, finishTurnOnly:finishTurn, LOAN, sithCoup, sithCoupReady, sithClaim, sithTurn, charDies, makeTruce, moveFleet, canInvade, hostileFleetsAt, probeChar, checkVictory, HEROES, genChar};", ctx);
+vm.runInContext(ENGINE + "\n;globalThis.__E = {newGame, runAI, finishTurn, applyBattle, autoBattle, battleValid, createBattle, bRunAI, bResult, bDamage, bArc, bSideUnits, makeBattle, addFleet, fleetById, shipCount, planetsOf, income, FACTION_IDS, SYSTEMS, SYS, ADJ, FLEET_MP, BMAX_ROUNDS, BMAX_ROUNDS_GROUND, troops, troopCount, fleetLoad, fleetCap, makeInvasion, invasionValid, createGroundBattle, applyGround, bOrbital, bUnitAt, TROOP_TYPES, charOf, voteSupport, canEnact, enactDecree, hasDecree, resolveDilemma, dilemmaOptions, MAX_DECREES, DECREE_IDS, EVENTS, eventOptions, resolveEvent, takeLoan, repayLoan, hireMercs, assassinate, assassinTargets, purge, buyIntel, syndicateTurn, finishTurnOnly:finishTurn, LOAN, sithCoup, sithCoupReady, sithClaim, sithTurn, charDies, makeTruce, moveFleet, canInvade, hostileFleetsAt, probeChar, checkVictory, HEROES, genChar, startCrisis, crisisTurn, canMove, tradeRoutes, makeAlliance, allied, hostile, hegemonyStatus, convokeCongress, quarantine, canQuarantine, WEAPON_TURNS, playableFactions, SYS};", ctx);
 const E = ctx.__E;
 
 const GAMES = +process.argv[2] || 24;
@@ -68,12 +68,15 @@ function checkInvariants(st, where){
   if(S.alive && !(S.acolytes >= 0 && S.acolytes <= 6 && S.exposure >= 0 && S.exposure <= 100 && S.dark >= 0)) fail(where + " : jauges Sith hors bornes");
   if(S.alive && S.shadow && (E.planetsOf(st, "sith").length || st.fleets.some(f => f.owner === "sith"))) fail(where + " : un Sith caché ne devrait rien posséder");
   st.fleets.forEach(f => (f.heroes || []).forEach(h => { if(!E.HEROES[h.kind]) fail(where + " : héros inconnu " + h.kind); }));
+  const W = st.factions.war;
+  if(W.shadow && (E.planetsOf(st, "war").length || st.fleets.some(f => f.owner === "war"))) fail(where + " : seigneur de guerre dormant mais présent");
+  st.closedLinks.forEach(([a, b]) => { if(!E.SYS[a] || !E.SYS[b]) fail(where + " : route fermée inconnue"); });
 }
 
 // ---------- Parties complètes ----------
 const results = [];
 for(let g = 0; g < GAMES; g++){
-  const player = E.FACTION_IDS[g % 5];
+  const player = E.playableFactions()[g % 5];
   const st = E.newGame(player, 1000 + g);
   checkInvariants(st, "partie " + g + " départ");
   let battles = 0, invasions = 0;
@@ -333,6 +336,58 @@ console.log("Batailles tactiques : " + tactical + " terminées, " + (rounds / Ma
   st.jedi.strength = 0;
   if(E.checkVictory(st) !== "sith") fail("victoire Sith attendue");
   console.log("Force : coup d'État, Empire Sith, découverte, succession, trêve, héros, enquête et victoire vérifiés");
+}
+
+// ---------- v0.7 : grandes crises, alliances, hégémonie ----------
+{
+  ["warlord", "hyperlane", "weapon", "pandemic", "droids"].forEach(id => {
+    const st = E.newGame("lig", 7100);
+    try{
+      E.startCrisis(st, id);
+      checkInvariants(st, "crise " + id + " (départ)");
+      for(let t = 0; t < 15 && !st.over; t++){ E.runAI(st, {includePlayer:true}); E.finishTurnOnly(st); }
+      checkInvariants(st, "crise " + id + " (15 tours)");
+    }catch(e){ fail("crise " + id + " : " + e.stack); }
+  });
+  // Seigneur de guerre : il surgit avec des mondes et une flotte.
+  let st = E.newGame("rep", 7200);
+  E.startCrisis(st, "warlord");
+  if(st.factions.war.shadow || !E.planetsOf(st, "war").length || !st.fleets.some(f => f.owner === "war")) fail("seigneur de guerre absent");
+  // Route coupée : ni passage ni commerce.
+  st = E.newGame("rep", 7300);
+  E.startCrisis(st, "hyperlane");
+  const [a, b] = st.closedLinks[0];
+  const f = E.addFleet(st, "rep", a, {frig:1}, 0);
+  if(E.canMove(st, f, b)) fail("une route coupée ne devrait pas se franchir");
+  if(E.FACTION_IDS.some(x => E.tradeRoutes(st, x).some(([p, q]) => (p === a && q === b) || (p === b && q === a)))) fail("une route coupée ne devrait pas commercer");
+  // Arme ancienne : quatre tours de contrôle continu.
+  st = E.newGame("man", 7400);
+  E.startCrisis(st, "weapon");
+  const rs = st.systems[st.relic.sys];
+  rs.owner = "man";
+  for(let t = 0; t <= E.WEAPON_TURNS; t++){ st.turn++; E.crisisTurn(st); }
+  if(!st.factions.man.superweapon || st.relic.owner !== "man") fail("l'arme ancienne devrait revenir à qui tient son monde");
+  // Pandémie et quarantaine
+  st = E.newGame("lig", 7500);
+  E.startCrisis(st, "pandemic");
+  const src = Object.keys(st.plague.infected)[0], owner = st.systems[src].owner;
+  st.factions[owner].cr = 100;
+  if(!E.canQuarantine(st, owner, src) || !E.quarantine(st, owner, src)) fail("quarantaine impossible");
+  for(let t = 0; t < 30 && st.plague; t++){ st.turn++; E.crisisTurn(st); }
+  if(st.plague) fail("la pandémie devrait finir par s'éteindre");
+  // Alliance et hégémonie
+  st = E.newGame("rep", 7600);
+  E.makeAlliance(st, "rep", "lig"); E.makeAlliance(st, "rep", "man");
+  if(E.hostile(st, "rep", "lig") || !E.allied(st, "man", "rep")) fail("une alliance devrait empêcher l'hostilité");
+  const ids = Object.keys(st.systems);
+  ids.slice(0, 16).forEach(x => { st.systems[x].owner = "rep"; });
+  ids.slice(16, 22).forEach(x => { st.systems[x].owner = "lig"; });
+  ids.slice(22, 25).forEach(x => { st.systems[x].owner = "man"; });
+  st.factions.rep.inf = 200;
+  const h = E.hegemonyStatus(st, "rep");
+  if(!h.ready) fail("hégémonie attendue : " + JSON.stringify(h));
+  if(!E.convokeCongress(st, "rep") || !st.over || st.over.winner !== "rep" || st.over.how !== "hegemony") fail("le Congrès galactique devrait donner la victoire");
+  console.log("v0.7 : cinq crises, seigneur de guerre, route coupée, arme ancienne, pandémie, alliances et hégémonie vérifiés");
 }
 
 // ---------- Boucliers orientés : un tir dans le dos fait plus mal ----------

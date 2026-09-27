@@ -89,6 +89,7 @@
   .route{stroke:#2a3653;stroke-width:2}
   .route.trade{stroke-width:3.5;opacity:.85}
   .route.blocked{stroke:var(--bad);stroke-dasharray:6 5;opacity:.9}
+  .route.closed{stroke:#a97ee0;stroke-dasharray:2 6;stroke-width:3;opacity:.9}
   .sys{cursor:pointer}
   .sys text{fill:var(--ink);font-size:13px;text-anchor:middle;pointer-events:none;paint-order:stroke;stroke:#070b14;stroke-width:3px}
   .sys .hit{fill:transparent}
@@ -144,7 +145,7 @@
   <div class="factions" id="factionCards"></div>
   <div class="row">
     <button id="btnContinue" class="primary hidden">Continuer la partie</button>
-    <span class="muted" style="font-size:.85rem">Prototype v0.6 — carte, batailles, invasions, politique, Syndicat, événements et la Force.</span>
+    <span class="muted" style="font-size:.85rem">Prototype v0.7 — carte, batailles, invasions, politique, Syndicat, événements, la Force et les grandes crises.</span>
   </div>
 </div>
 
@@ -255,10 +256,11 @@ SYSTEMS.forEach(([id]) => { ADJ[id] = []; });
 LINKS.forEach(([a, b]) => { ADJ[a].push(b); ADJ[b].push(a); });
 
 // ---------- Données : factions ----------
-const FACTION_IDS = ["emp", "rep", "man", "lig", "sith"];
+const FACTION_IDS = ["emp", "rep", "man", "lig", "sith", "war"];
+function playableFactions(){ return FACTION_IDS.filter(f => FACTIONS[f].playable !== false); }
 const FACTIONS = {
   emp:{name:"Vestiges impériaux", color:"#b9c4d0", capital:"kaldor", fleetWord:"Groupe de combat",
-       start:{cr:320, mat:160, inf:10}, planets:["kaldor","nirauan","vassek","tessaris"],
+       start:{cr:320, mat:160, inf:30}, planets:["kaldor","nirauan","vassek","tessaris"],
        vet:1, morale:10, ground:1.1, baseLoyalty:60, conquest:26, costMul:1, frigMul:1, turnsAdd:0, defMul:1,
        pitch:"Une flotte moderne ressort des Régions Inconnues, avec très peu de planètes.",
        strength:"Flotte vétérane et disciplinée", weakness:"Les mondes conquis restent peu loyaux"},
@@ -269,9 +271,9 @@ const FACTIONS = {
        strength:"Économie et influence", weakness:"Décisions militaires lentes (+1 tour pour construire et recruter)"},
   man:{name:"Mandalore", color:"#4fb3a9", capital:"mandalore", fleetWord:"Clan de guerre",
        start:{cr:220, mat:110, inf:15}, planets:["mandalore","concord","krownest","kalevala"],
-       vet:1, morale:15, ground:1.3, baseLoyalty:64, conquest:35, costMul:1.2, frigMul:1, turnsAdd:0, defMul:1,
+       vet:1, morale:15, ground:1.2, baseLoyalty:64, conquest:35, costMul:1.2, frigMul:1, turnsAdd:0, defMul:1,
        pitch:"Peu de mondes en Bordure Extérieure, mais les meilleurs guerriers de la galaxie.",
-       strength:"Meilleures troupes au sol (+30 %), guerriers aguerris", weakness:"Peu de production spatiale (vaisseaux +20 %)"},
+       strength:"Meilleures troupes au sol (+20 %), guerriers aguerris", weakness:"Peu de production spatiale (vaisseaux +20 %)"},
   lig:{name:"Ligue de la Bordure", color:"#e0703f", capital:"lothal", fleetWord:"Flottille",
        start:{cr:220, mat:110, inf:15}, planets:["lothal","ryloth","christophsis","eriadu","ithor"],
        vet:0, morale:0, ground:1, baseLoyalty:50, conquest:30, costMul:1, frigMul:1, turnsAdd:0, defMul:1.3,
@@ -283,6 +285,11 @@ const FACTIONS = {
        vet:1, morale:20, ground:1.2, baseLoyalty:50, conquest:25, costMul:1.1, frigMul:1, turnsAdd:0, defMul:1,
        pitch:"Réputés disparus depuis Palpatine, les Sith ont survécu dans l'ombre. Ni planète ni flotte : des agents, des secrets et la patience.",
        strength:"Corruption, assassinats, trahisons en pleine bataille", weakness:"Découvert trop tôt, c'est la fin de la partie"},
+  // Le seigneur de guerre n'existe qu'à travers une grande crise (v0.7) ; il n'est pas jouable.
+  war:{name:"Seigneur de guerre", color:"#a97ee0", capital:null, fleetWord:"Horde", playable:false,
+       start:{cr:0, mat:0, inf:0}, planets:[], shadow:true,
+       vet:2, morale:15, ground:1.1, baseLoyalty:40, conquest:25, costMul:1, frigMul:1, turnsAdd:0, defMul:1,
+       pitch:"Un chef pirate de la Bordure qui ne négocie avec personne.", strength:"Flotte aguerrie", weakness:"Aucun allié"},
 };
 const INDEPENDENT_COLOR = "#5d6780";
 // Mondes indépendants qui se défendent bien mieux que leur région ne le laisse croire.
@@ -293,7 +300,7 @@ const START_FLEETS = {
   rep:[["coruscant",{dest:1, frig:3, esc:4},{inf:4, tank:1, art:1}], ["kuat",{frig:1, esc:2},{inf:2}]],
   man:[["mandalore",{dest:1, frig:3, esc:6},{inf:5, tank:1}], ["concord",{frig:2, esc:2},{inf:2}]],
   lig:[["lothal",{frig:2, esc:3},{inf:2, art:1}], ["eriadu",{frig:1, esc:2},{inf:2}]],
-  sith:[],
+  sith:[], war:[],
 };
 // Garnisons de départ des mondes de faction : capitale, puis les autres.
 const START_GARRISON = {capital:{inf:4, tank:2, walk:1, art:1}, other:{inf:2, tank:1}};
@@ -338,11 +345,12 @@ function costOf(fid, type, st){
 // ---------- Nouvelle partie ----------
 function newGame(player, seed){
   seed = (seed == null ? Math.floor(Math.random() * 2 ** 32) : seed) >>> 0;
-  const st = {version:6, turn:1, rng:seed, seed, player, systems:{}, fleets:[], nextFleet:1,
+  const st = {version:7, turn:1, rng:seed, seed, player, systems:{}, fleets:[], nextFleet:1,
               fleetCount:{}, factions:{}, log:[], report:[], pending:[], over:null,
               chars:{}, nextChar:1, dilemmas:[], events:[], delayed:[],
-              synd:{cash:100, paid:{emp:0, rep:0, man:0, lig:0, sith:0}},
-              jedi:null, truces:[], sithSites:[], sithFound:[], sithSearched:[]};
+              synd:{cash:100, paid:{emp:0, rep:0, man:0, lig:0, sith:0, war:0}},
+              jedi:null, truces:[], sithSites:[], sithFound:[], sithSearched:[],
+              closedLinks:[], alliances:[], clashes:{}, relic:null, plague:null, news:[], crisis:null};
   FACTION_IDS.forEach(f => {
     const F = FACTIONS[f];
     st.factions[f] = {cr:F.start.cr, mat:F.start.mat, inf:F.start.inf, alive:true, capital:F.capital, shock:0};
@@ -389,6 +397,9 @@ function newGame(player, seed){
   }));
   initPolitics(st);
   initForce(st);
+  // v0.7 : la première grande crise éclate entre les tours 25 et 40.
+  st.crisis = {nextAt:25 + rint(st, 0, 15), used:[], cutUntil:0, cutName:"", droidsUntil:0, warlordDown:false};
+  Object.assign(st.factions.war, {shadow:true, capital:null, jediRep:10});
   FACTION_IDS.forEach(f => { st.factions[f].syndicate = syndAvg(st, f); });
   logEv(st, "La galaxie retient son souffle. Dix ans après l'Effondrement, chacun compte ses vaisseaux.", "info", []);
   st.report = st.log; st.log = [];
@@ -414,12 +425,12 @@ function fleetById(st, id){ return st.fleets.find(f => f.id === id) || null; }
 function shipCount(f){ return f.ships.dest + f.ships.frig + f.ships.esc; }
 function fleetPower(st, f){
   const base = SHIP_TYPES.reduce((s, t) => s + f.ships[t] * SHIPS[t].power, 0);
-  return base * (1 + 0.15 * f.vet) * (1 + FACTIONS[f.owner].morale / 100) * admiralMul(st, f) * heroMul(f);
+  return base * (1 + 0.15 * f.vet) * (1 + FACTIONS[f.owner].morale / 100) * admiralMul(st, f) * heroMul(f) * (st.factions[f.owner].superweapon ? 1.25 : 1);
 }
 function siegePower(f){ return SHIP_TYPES.reduce((s, t) => s + f.ships[t] * SHIPS[t].siege, 0); }
 // Hostilité : tout le monde est en guerre, sauf pendant une trêve arbitrée par les Jedi.
 function truceBetween(st, a, b){ return !!st.truces && st.truces.some(t => ((t.a === a && t.b === b) || (t.a === b && t.b === a)) && t.until >= st.turn); }
-function hostile(st, a, b){ return a !== b && (!a || !b || !truceBetween(st, a, b)); }
+function hostile(st, a, b){ return a !== b && (!a || !b || (!truceBetween(st, a, b) && !allied(st, a, b))); }
 function planetHostile(st, s, fid){ return s.owner !== fid && hostile(st, s.owner, fid); }
 function hostileFleetsAt(st, sysId, fid){ return st.fleets.filter(f => f.at === sysId && hostile(st, f.owner, fid)); }
 function hostilePowerAt(st, sysId, fid){ return hostileFleetsAt(st, sysId, fid).reduce((s, f) => s + fleetPower(st, f), 0); }
@@ -440,7 +451,7 @@ function fleetLoad(f){ return troopLoad(f.troops); }
 // Milice d'un monde indépendant, à la mesure de ses défenses.
 function militia(s){
   const k = HOLDOUTS[s.id] || 1;
-  return troops({inf:Math.round((2 + s.maxDef / 15) * Math.min(k, 1.6)), tank:s.maxDef > 40 ? 1 : 0, art:s.maxDef > 30 ? 1 : 0});
+  return troops({inf:Math.round((1 + s.maxDef / 20) * Math.min(k, 1.6)), tank:s.maxDef > 50 ? 1 : 0, art:s.maxDef > 40 ? 1 : 0});
 }
 // Des vaisseaux perdus, et les troupes qui ne tiennent plus à bord sont perdues avec eux.
 function trimTroops(f){
@@ -524,7 +535,7 @@ function splitFleet(st, f){
   return g;
 }
 
-function canMove(st, f, to){ return !!f && f.mp > 0 && ADJ[f.at].includes(to); }
+function canMove(st, f, to){ return !!f && f.mp > 0 && nb(st, f.at).includes(to); }
 // Déplace d'un saut. Entrer dans un système hostile, ou face à une flotte hostile, arrête la flotte.
 // Renvoie la flotte hostile rencontrée (bataille) ou null.
 function moveFleet(st, f, to){
@@ -549,7 +560,7 @@ function planetYield(st, s){
 }
 // Une route rapporte quand ses deux bouts sont tenus par la même faction et qu'aucun n'est bloqué.
 function tradeRoutes(st, fid){
-  return LINKS.filter(([a, b]) => st.systems[a].owner === fid && st.systems[b].owner === fid && !tradeBlocked(st, a) && !tradeBlocked(st, b));
+  return LINKS.filter(([a, b]) => st.systems[a].owner === fid && st.systems[b].owner === fid && !tradeBlocked(st, a) && !tradeBlocked(st, b) && !linkClosed(st, a, b));
 }
 function routeValue(st, a, b){ return 3 * (st.systems[a].hub ? 1.5 : 1) * (st.systems[b].hub ? 1.5 : 1); }
 function income(st, fid){
@@ -626,7 +637,7 @@ function loyaltyTarget(st, s){
 const REGIMES = {
   emp:{name:"Conseil des Moffs", leader:"Grand Moff", chief:"Moff",
        groups:[["mil","Militaristes","military"], ["tech","Technocrates","economy"], ["loy","Loyalistes","order"]],
-       rule:"Un groupe sous 20 de satisfaction voit son Moff détourner 10 % des crédits. Quatre tours de suite sous 20, et le Moff fait sécession avec un monde et la flotte qui s'y trouve."},
+       rule:"Un groupe sous 20 de satisfaction voit son Moff détourner 10 % des crédits. Cinq tours de suite sous 20, et le Moff fait sécession avec un monde."},
   rep:{name:"Sénat", leader:"Chancelier", chief:"Sénateur",
        groups:[["hawk","Faucons","military"], ["core","Mondes du Noyau","economy"], ["hum","Humanistes","people"]],
        seats:{hawk:30, core:40, hum:30},
@@ -640,6 +651,9 @@ const REGIMES = {
   sith:{name:"Ordre Sith", leader:"Seigneur Sith", chief:"Disciple",
        groups:[["blade","Lames","military"], ["coll","Collaborateurs","economy"], ["cult","Culte","order"]],
        rule:"Tant qu'il agit dans l'Ombre, le Seigneur Sith ne rend de comptes à personne. Une fois révélé, ses disciples exigent des conquêtes, ses collaborateurs des profits, son culte l'ordre."},
+  war:{name:"Horde pirate", leader:"Seigneur de guerre", chief:"Capitaine",
+       groups:[["raid","Pillards","military"], ["fence","Receleurs","economy"], ["crew","Équipages","order"]],
+       rule:"Le seigneur de guerre règne par la peur et le butin."},
 };
 const ROLE_NAME = {military:"armée", economy:"économie", order:"ordre", people:"peuple"};
 
@@ -700,6 +714,8 @@ const NAMES = {
        last:["Vizago","Thrawk","Dokan","Varko","Maddox","Kerr","Farran","Ghent","Vale","Oroso","Pell","Nadash","Brood","Selk","Arvani"]},
   sith:{first:["Kaelis","Vornis","Seraph","Malach","Ivra","Thane","Zhaan","Nyx","Oren","Veyl","Cassar","Rhaelle","Morvane","Sarith"],
        last:["Morrow","Quell","Ashen","Vosk","Drek","Solace","Vyre","Hollow","Kade","Nox","Umbra","Carrow"]},
+  war:{first:["Garrok","Vesska","Krath","Durn","Ysolde","Brakk","Tarsa","Moro","Skell","Rhuun"],
+       last:["le Boucher","Sang-de-Fer","Crocs-Noirs","le Borgne","Pillefeu","Mâchoire","Trois-Lunes","Ferraille"]},
 };
 
 // ---------- Personnages ----------
@@ -968,13 +984,16 @@ function addDilemma(st, d){
 function dilemmaValid(st, d){
   const F = st.factions[d.fid];
   if(!F.alive) return false;
-  if(d.kind === "truce") return st.factions[d.other].alive;
+  if(d.kind === "truce" || d.kind === "alliance") return st.factions[d.other].alive;
   if(d.kind === "rival") return !!charOf(st, d.char);
   return true;
 }
 const DEFIANCE_COST = 15, BRIBE_COST = 20;
 function dilemmaOptions(st, d){
   const F = st.factions[d.fid];
+  if(d.kind === "alliance") return [
+    {key:"accept", label:"Accepter l'alliance", desc:"Paix durable avec " + FACTIONS[d.other].name + " ; l'alliance compte pour l'hégémonie politique."},
+    {key:"refuse", label:"Refuser", desc:"Rien ne change."}];
   if(d.kind === "truce") return [
     {key:"accept", label:"Accepter la trêve", desc:"Ni bataille ni invasion avec " + FACTIONS[d.other].name + " pendant " + TRUCE_TURNS + " tours. Réputation Jedi +5, le peuple approuve (+5), l'armée grogne (−5)."},
     {key:"refuse", label:"Refuser", desc:"Réputation Jedi −5."}];
@@ -1007,6 +1026,11 @@ function resolveDilemma(st, d, key){
   const opt = dilemmaOptions(st, d).find(o => o.key === key);
   if(!opt || opt.disabled) key = d.kind === "duel" ? "refuse" : d.kind === "defiance" ? "vote" : "ignore";
   let msg = "";
+  if(d.kind === "alliance"){
+    if(key === "accept"){ makeAlliance(st, d.fid, d.other); msg = "Alliance conclue avec " + FACTIONS[d.other].name + "."; }
+    else msg = "Tu déclines l'alliance proposée par " + FACTIONS[d.other].name + ".";
+    return msg;
+  }
   if(d.kind === "truce"){
     if(key === "accept"){
       makeTruce(st, d.fid, d.other);
@@ -1066,15 +1090,15 @@ function regimeTurn(st, fid){
   const F = st.factions[fid], P = st.player, mine = fid === P;
   F.groups.forEach(g => { g.low = g.sat < 20 ? g.low + 1 : 0; });
   if(fid === "emp"){
-    const g = F.groups.find(x => x.low >= 4);
+    const g = F.groups.find(x => x.low >= 5);
     if(g){
       const moff = charOf(st, g.chief);
       const s = planetsOf(st, fid).filter(p => p.id !== F.capital).sort((a, b) => a.loyalty - b.loyalty)[0];
       if(s){
-        const fleets = ownFleetsAt(st, s.id, fid);
-        fleets.forEach(f => removeFleet(st, f));
+        // Les flottes en orbite restent fidèles et se replient.
+        ownFleetsAt(st, s.id, fid).forEach(f => { f.from = f.at; retreatFleet(st, f); });
         planetSecedes(st, s);
-        logEv(st, "Le Moff " + (moff ? moff.name : "") + " des " + g.name + " fait sécession avec " + SYS[s.id].name + (fleets.length ? " et " + fleets.length + " flotte(s)" : "") + ".", mine ? "bad" : "info", mine ? [P] : []);
+        logEv(st, "Le Moff " + (moff ? moff.name : "") + " des " + g.name + " fait sécession avec " + SYS[s.id].name + ".", mine ? "bad" : "info", mine ? [P] : []);
         if(moff) replaceChar(st, moff);
       }
       g.sat = 45; g.low = 0;
@@ -1171,7 +1195,7 @@ function admiralsAfterBattle(st, winIds, loseIds, loserGone){
 function politicsTurn(st){
   FACTION_IDS.forEach(fid => {
     const F = st.factions[fid];
-    if(!F.alive || F.shadow) return;
+    if(!F.alive || F.shadow || fid === "war") return;
     const P = st.player, mine = fid === P;
     // Décrets : entretien, effets par tour, expiration
     F.decrees.forEach(d => {
@@ -1797,7 +1821,7 @@ function eventsTurn(st){
     return false;
   });
   FACTION_IDS.forEach(fid => {
-    if(!st.factions[fid].alive || st.factions[fid].shadow) return;
+    if(!st.factions[fid].alive || st.factions[fid].shadow || fid === "war") return;
     const n = fid === P ? 1 + (rnd(st) < 0.3 ? 1 : 0) : (rnd(st) < 0.5 ? 1 : 0);
     const drawn = [];
     for(let i = 0; i < n; i++){
@@ -2117,7 +2141,7 @@ function jediTurn(st){
   // Médiation : une trêve entre les deux factions les plus épuisées.
   if(st.turn >= J.mediateAt){
     J.mediateAt = st.turn + 12;
-    const real = FACTION_IDS.filter(f => f !== "sith" && st.factions[f].alive && !st.factions[f].shadow);
+    const real = FACTION_IDS.filter(f => diplomat(st, f));
     let best = null;
     real.forEach((a, i) => real.slice(i + 1).forEach(b => {
       const w = st.factions[a].weariness + st.factions[b].weariness;
@@ -2199,7 +2223,7 @@ function aiSith(st){
     }
     // Corruption : les Moffs pour le coup d'État, les gouverneurs pour l'Empire Sith.
     const targets = Object.values(st.chars).filter(c => corruptible(st, c) && c.role !== "leader")
-      .map(c => ({c, v:(c.fid === "emp" && c.role === "chief" ? 1.6 : 0) + (c.role === "governor" ? 0.8 : 0) + (c.dossier ? 1 : 0) + corruptChance(st, c) * 3}))
+      .map(c => ({c, v:(c.fid === "emp" && c.role === "chief" ? 1.3 : 0) + (c.role === "governor" ? 0.8 : 0) + (c.dossier ? 1 : 0) + corruptChance(st, c) * 3}))
       .sort((a, b) => b.v - a.v);
     const top = targets[0] && targets[0].c;
     if(top && !top.dossier && canSithInvestigate(st, top)){ sithInvestigate(st, top); continue; }
@@ -2213,12 +2237,264 @@ function aiSith(st){
   }
 }
 
+// =====================================================================
+// v0.7 — Grandes crises galactiques, alliances et hégémonie politique
+// =====================================================================
+
+// ---------- Routes hyperspatiales fermées ----------
+function linkClosed(st, a, b){
+  return !!st.closedLinks && st.closedLinks.some(([x, y]) => (x === a && y === b) || (x === b && y === a));
+}
+// Voisins praticables d'un système : ADJ moins les routes coupées par une crise.
+function nb(st, id){ return st.closedLinks && st.closedLinks.length ? ADJ[id].filter(n => !linkClosed(st, id, n)) : ADJ[id]; }
+
+// ---------- Alliances ----------
+// Une alliance vaut paix permanente ; elle compte pour l'hégémonie politique.
+const ALLIANCE_COST = 30, CONGRESS_COST = 80, HEGEMONY_SHARE = 0.65;
+function allied(st, a, b){ return !!st.alliances && st.alliances.some(x => (x.a === a && x.b === b) || (x.a === b && x.b === a)); }
+function alliesOf(st, fid){
+  return (st.alliances || []).filter(x => x.a === fid || x.b === fid).map(x => x.a === fid ? x.b : x.a).filter(f => st.factions[f].alive);
+}
+function diplomat(st, fid){ const F = st.factions[fid]; return !!F && F.alive && !F.shadow && fid !== "sith" && fid !== "war"; }
+function clash(st, a, b){ if(a && b){ st.clashes[a + ":" + b] = st.turn; st.clashes[b + ":" + a] = st.turn; } }
+function lastClash(st, a, b){ return st.clashes[a + ":" + b] || -99; }
+function allianceChance(st, from, to){
+  const A = planetsOf(st, from).length, B = planetsOf(st, to).length, T = st.factions[to];
+  let p = 0.25 + (truceBetween(st, from, to) ? 0.25 : 0) + (B < A ? 0.15 : -0.15) + T.weariness / 250;
+  if(st.turn - lastClash(st, from, to) < 5) p -= 0.4;
+  if(A >= SYSTEMS.length * 0.4) p -= 0.3; // on se méfie d'un futur hégémon
+  return clamp(p, 0.05, 0.9);
+}
+function canPropose(st, from, to){
+  return diplomat(st, from) && diplomat(st, to) && from !== to && !allied(st, from, to) && st.factions[from].inf >= ALLIANCE_COST;
+}
+function proposeAlliance(st, from, to){
+  if(!canPropose(st, from, to)) return null;
+  st.factions[from].inf -= ALLIANCE_COST;
+  if(rnd(st) < allianceChance(st, from, to)){
+    makeAlliance(st, from, to);
+    return FACTIONS[to].name + " accepte ton alliance.";
+  }
+  return FACTIONS[to].name + " décline. Tes émissaires rentrent les mains vides.";
+}
+function makeAlliance(st, a, b){
+  if(allied(st, a, b)) return;
+  st.alliances.push({a, b, since:st.turn});
+  st.truces = st.truces.filter(t => !((t.a === a && t.b === b) || (t.a === b && t.b === a)));
+  logEv(st, FACTIONS[a].name + " et " + FACTIONS[b].name + " concluent une alliance.", "info", []);
+}
+function breakAlliance(st, a, b, why){
+  if(!allied(st, a, b)) return false;
+  st.alliances = st.alliances.filter(x => !((x.a === a && x.b === b) || (x.a === b && x.b === a)));
+  const F = st.factions[a];
+  if(!F.terror) F.jediRep = Math.max(0, F.jediRep - 10);
+  groupsByRole(F, "people").forEach(g => { g.sat = clamp(g.sat - 5, 0, 100); });
+  clash(st, a, b);
+  logEv(st, FACTIONS[a].name + " rompt son alliance avec " + FACTIONS[b].name + (why ? " : " + why : "") + ".", a === st.player || b === st.player ? "bad" : "info", []);
+  return true;
+}
+// Hégémonie : une coalition menée par la faction, avec au moins deux alliés (ou tous les survivants),
+// tient 60 % des systèmes, et le chef de file est le plus grand de la coalition.
+function hegemonyStatus(st, fid){
+  const allies = alliesOf(st, fid);
+  const own = planetsOf(st, fid).length;
+  const total = own + allies.reduce((a, f) => a + planetsOf(st, f).length, 0);
+  const survivors = FACTION_IDS.filter(f => f !== fid && st.factions[f].alive && !st.factions[f].shadow).length;
+  const need = Math.ceil(SYSTEMS.length * HEGEMONY_SHARE);
+  const leads = allies.every(f => planetsOf(st, f).length < own);
+  const enoughAllies = allies.length >= Math.min(2, survivors);
+  return {allies, total, need, leads, enoughAllies, inf:st.factions[fid].inf,
+          ready:diplomat(st, fid) && total >= need && leads && enoughAllies && allies.length > 0 && st.factions[fid].inf >= CONGRESS_COST};
+}
+function convokeCongress(st, fid){
+  if(!hegemonyStatus(st, fid).ready || st.over) return false;
+  st.factions[fid].inf -= CONGRESS_COST;
+  logEv(st, "Congrès galactique : " + FACTIONS[fid].name + " fonde un nouveau gouvernement galactique avec " + alliesOf(st, fid).map(f => FACTIONS[f].name).join(" et ") + ".", fid === st.player ? "good" : "bad", []);
+  st.over = {winner:fid, win:fid === st.player, turn:st.turn, how:"hegemony"};
+  return true;
+}
+function aiDiplomacy(st, fid){
+  if(!diplomat(st, fid)) return;
+  const F = st.factions[fid], P = st.player;
+  // Un allié devenu trop grand fait peur : on le lâche avant qu'il ne fonde son gouvernement.
+  alliesOf(st, fid).forEach(a => { if(planetsOf(st, a).length >= SYSTEMS.length * 0.42 && planetsOf(st, fid).length < planetsOf(st, a).length && rnd(st) < 0.3) breakAlliance(st, fid, a, "il devenait trop puissant"); });
+  if(hegemonyStatus(st, fid).ready){ convokeCongress(st, fid); return; }
+  if(F.inf < ALLIANCE_COST + 25 || rnd(st) > 0.12) return;
+  const cands = FACTION_IDS.filter(f => canPropose(st, fid, f) && st.turn - lastClash(st, fid, f) >= 5);
+  const to = cands.sort((a, b) => allianceChance(st, fid, b) - allianceChance(st, fid, a))[0];
+  if(!to) return;
+  if(to === P){
+    F.inf -= ALLIANCE_COST;
+    addDilemma(st, {kind:"alliance", fid:P, other:fid, title:"Une proposition d'alliance",
+      text:FACTIONS[fid].name + " propose une alliance : une paix durable entre vous, et un pas vers un gouvernement galactique commun."});
+  } else proposeAlliance(st, fid, to);
+}
+
+// ---------- Crises ----------
+const CRISES = {
+  warlord:{name:"Un seigneur de guerre", desc:"Un seigneur de guerre se lève dans la Bordure avec une flotte pirate et menace tout le monde."},
+  hyperlane:{name:"Une route coupée", desc:"Une route hyperspatiale majeure devient impraticable et coupe la galaxie."},
+  weapon:{name:"Une arme ancienne", desc:"Une arme ancienne a été découverte. Qui tiendra son monde quatre tours de suite s'en emparera."},
+  pandemic:{name:"La pandémie", desc:"Une pandémie se propage le long des routes commerciales."},
+  droids:{name:"Le soulèvement des droïdes", desc:"Les droïdes des mondes industriels se soulèvent."},
+};
+const CUTS = [
+  {name:"la Voie Hydienne", links:[["corellia","balmorra"], ["balmorra","kashyyyk"], ["balmorra","naboo"], ["duro","kashyyyk"], ["alsakan","naboo"], ["alsakan","iridonia"]]},
+  {name:"la Route Perlemienne", links:[["commenor","bothawui"], ["duro","kashyyyk"], ["kashyyyk","lothal"], ["bothawui","lothal"], ["ithor","eriadu"]]},
+  {name:"le Corridor de Rimma", links:[["fondor","ordmantell"], ["vassek","ordmantell"], ["carida","tessaris"], ["ordmantell","concord"], ["iridonia","mandalore"], ["vassek","concord"]]},
+];
+const WEAPON_TURNS = 4, PLAGUE_TURNS = 6, CUT_TURNS = 20;
+
+function crisisNews(st, title, text){ logEv(st, title + " — " + text, "bad", []); st.news.push({title, text}); }
+function startCrisis(st, id){
+  const P = st.player;
+  st.crisis.used.push(id);
+  if(id === "warlord") return startWarlord(st);
+  if(id === "hyperlane"){
+    const cut = CUTS[rint(st, 0, CUTS.length - 1)];
+    st.closedLinks = cut.links.map(l => l.slice());
+    st.crisis.cutUntil = st.turn + CUT_TURNS; st.crisis.cutName = cut.name;
+    // Les flottes déjà engagées sur ces routes restent où elles sont : seule la navigation change.
+    crisisNews(st, CRISES.hyperlane.name, "Une tempête hyperspatiale rend " + cut.name + " impraticable pendant " + CUT_TURNS + " tours. Le commerce et les flottes doivent faire le détour.");
+    return;
+  }
+  if(id === "weapon"){
+    const cands = Object.values(st.systems).filter(s => !s.owner && ["mid", "outer"].includes(SYS[s.id].region));
+    const s = pickOne(st, cands.length ? cands : Object.values(st.systems).filter(p => !FACTION_IDS.some(f => st.factions[f].capital === p.id)));
+    st.relic = {sys:s.id, holder:s.owner, since:st.turn, owner:null};
+    s.garrison.inf += 2;
+    crisisNews(st, CRISES.weapon.name, "Sous les ruines de " + SYS[s.id].name + " dort une arme de l'ancienne guerre. Qui tiendra ce monde " + WEAPON_TURNS + " tours de suite s'en emparera : puissance de ses flottes +25 %, une frappe orbitale de plus, même bouclier levé.");
+    return;
+  }
+  if(id === "pandemic"){
+    const s = pickOne(st, Object.values(st.systems).filter(p => p.owner && p.hub)) || pickOne(st, Object.values(st.systems).filter(p => p.owner));
+    st.plague = {infected:{[s.id]:st.turn + PLAGUE_TURNS}, immune:{}};
+    infect(st, s);
+    crisisNews(st, CRISES.pandemic.name, "Une fièvre inconnue se déclare à " + SYS[s.id].name + ". Elle voyage avec les marchands : chaque route commerciale active la propage. Un monde en quarantaine ne la transmet plus.");
+    return;
+  }
+  if(id === "droids"){
+    const hit = droidWave(st, 0.5);
+    st.crisis.droidsUntil = st.turn + 6;
+    crisisNews(st, CRISES.droids.name, "Les droïdes des mondes industriels se soulèvent" + (hit.length ? " : " + hit.join(", ") + "." : ".") + " D'autres chantiers peuvent suivre pendant six tours ; une garnison solide les tient.");
+  }
+}
+function infect(st, s){ s.malus = {until:st.turn + PLAGUE_TURNS, mul:s.quarantine >= st.turn ? 0.8 : 0.6}; }
+function canQuarantine(st, fid, sysId){
+  const s = st.systems[sysId];
+  return !!st.plague && s.owner === fid && st.plague.infected[sysId] >= st.turn && !(s.quarantine >= st.turn) && st.factions[fid].cr >= 20;
+}
+function quarantine(st, fid, sysId){
+  if(!canQuarantine(st, fid, sysId)) return false;
+  const s = st.systems[sysId];
+  st.factions[fid].cr -= 20; s.quarantine = st.plague.infected[sysId];
+  s.malus = {until:st.plague.infected[sysId], mul:0.8};
+  return true;
+}
+function droidWave(st, chance){
+  const hit = [];
+  Object.values(st.systems).filter(s => s.owner && s.yard && s.id !== st.factions[s.owner].capital).forEach(s => {
+    if(rnd(st) >= chance) return;
+    s.queue = [];
+    if(troopPower(s.garrison, s.owner) < 12){
+      const old = planetSecedes(st, s);
+      s.garrison = troops({inf:2, tank:2, walk:1}); s.droids = true;
+      hit.push(SYS[s.id].name + " (perdu par " + FACTIONS[old].name + ")");
+    } else {
+      s.garrison.inf = Math.max(0, s.garrison.inf - 2); s.loyalty = Math.max(0, s.loyalty - 10);
+      hit.push(SYS[s.id].name + " (révolte matée)");
+    }
+  });
+  return hit;
+}
+function startWarlord(st){
+  const W = st.factions.war;
+  const cands = Object.values(st.systems).filter(s => !s.owner && ["outer", "mid"].includes(SYS[s.id].region));
+  const home = pickOne(st, cands.length ? cands : Object.values(st.systems).filter(s => !s.owner)) || pickOne(st, Object.values(st.systems).filter(s => s.owner && s.id !== st.factions[s.owner].capital));
+  if(!home) return;
+  W.shadow = false; W.capital = home.id; W.cr = 300; W.mat = 150; W.inf = 20;
+  capture(st, home, "war");
+  home.loyalty = 60; home.garrison = troops({inf:4, tank:1});
+  nb(st, home.id).map(n => st.systems[n]).filter(s => !s.owner).slice(0, 2).forEach(s => { capture(st, s, "war"); s.loyalty = 45; s.garrison = troops({inf:2}); });
+  const f = addFleet(st, "war", home.id, {dest:2, frig:4, esc:6}, 2);
+  f.troops = troops({inf:6, tank:2, walk:1});
+  const g = addFleet(st, "war", home.id, {frig:3, esc:4}, 1);
+  g.troops = troops({inf:4});
+  const L = charOf(st, W.leader);
+  crisisNews(st, CRISES.warlord.name, (L ? L.name : "Un seigneur de guerre") + " s'empare de " + SYS[home.id].name + " avec une flotte pirate aguerrie. Il ne négocie avec personne.");
+}
+function crisisTurn(st){
+  const C = st.crisis, P = st.player;
+  // Déclenchement : une ou deux crises par partie.
+  if(st.turn >= C.nextAt && C.used.length < 2){
+    const ids = Object.keys(CRISES).filter(id => !C.used.includes(id));
+    startCrisis(st, ids[rint(st, 0, ids.length - 1)]);
+    C.nextAt = st.turn + rint(st, 35, 50);
+  }
+  // Route coupée
+  if(st.closedLinks.length && st.turn >= C.cutUntil){
+    st.closedLinks = [];
+    logEv(st, "La tempête hyperspatiale se dissipe : " + C.cutName + " est de nouveau praticable.", "info", []);
+  }
+  // Arme ancienne : quatre tours de contrôle continu
+  const R = st.relic;
+  if(R && !R.owner){
+    const s = st.systems[R.sys];
+    if(s.owner !== R.holder){ R.holder = s.owner; R.since = st.turn; }
+    if(R.holder && st.turn - R.since >= WEAPON_TURNS){
+      R.owner = R.holder; st.factions[R.owner].superweapon = true;
+      logEv(st, FACTIONS[R.owner].name + " s'empare de l'arme ancienne de " + SYS[R.sys].name + ".", R.owner === P ? "good" : "bad", []);
+    }
+  }
+  // Pandémie : elle voyage par les routes, surtout commerciales.
+  if(st.plague){
+    const I = st.plague.infected, trade = new Set();
+    FACTION_IDS.forEach(f => tradeRoutes(st, f).forEach(([a, b]) => { trade.add(a + ":" + b); trade.add(b + ":" + a); }));
+    const next = {};
+    Object.keys(I).forEach(id => {
+      if(I[id] < st.turn){ st.plague.immune[id] = true; return; }
+      next[id] = I[id];
+      const s = st.systems[id];
+      if(s.owner){ s.loyalty = Math.max(0, s.loyalty - 3); if(rnd(st) < 0.2) s.garrison.inf = Math.max(0, s.garrison.inf - 1); }
+      if(s.quarantine >= st.turn) return;
+      nb(st, id).forEach(n => {
+        if(I[n] || next[n] || st.plague.immune[n]) return;
+        if(rnd(st) < (trade.has(id + ":" + n) ? 0.5 : 0.12)){ next[n] = st.turn + PLAGUE_TURNS; infect(st, st.systems[n]); if(st.systems[n].owner === P) logEv(st, "La pandémie atteint " + SYS[n].name + ".", "bad", [P]); }
+      });
+    });
+    st.plague.infected = next;
+    if(!Object.keys(next).length){ st.plague = null; logEv(st, "La pandémie s'éteint enfin.", "info", []); }
+  }
+  // Répliques du soulèvement des droïdes
+  if(C.droidsUntil >= st.turn && rnd(st) < 0.3){
+    const hit = droidWave(st, 0.15);
+    if(hit.length) logEv(st, "Nouveaux soulèvements de droïdes : " + hit.join(", ") + ".", "bad", []);
+  }
+  // Le seigneur de guerre abattu
+  const W = st.factions.war;
+  if(W.capital && !W.alive && !C.warlordDown){ C.warlordDown = true; logEv(st, "Le seigneur de guerre est tombé. La Bordure respire.", "good", []); }
+}
+function crisesActive(st){
+  const out = [];
+  const W = st.factions.war;
+  if(W.alive && !W.shadow) out.push("Seigneur de guerre : " + planetsOf(st, "war").length + " monde(s)");
+  if(st.closedLinks.length) out.push(st.crisis.cutName + " impraticable jusqu'au tour " + st.crisis.cutUntil);
+  if(st.relic && !st.relic.owner) out.push("Arme ancienne à " + SYS[st.relic.sys].name + (st.relic.holder ? " : " + FACTIONS[st.relic.holder].name + " la tient depuis " + (st.turn - st.relic.since) + "/" + WEAPON_TURNS + " tours" : ""));
+  if(st.relic && st.relic.owner) out.push("Arme ancienne entre les mains de " + FACTIONS[st.relic.owner].name);
+  if(st.plague) out.push("Pandémie : " + Object.keys(st.plague.infected).length + " monde(s) touché(s)");
+  if(st.crisis.droidsUntil >= st.turn) out.push("Soulèvement des droïdes jusqu'au tour " + st.crisis.droidsUntil);
+  return out;
+}
+function aiCrisis(st, fid){
+  if(st.plague) planetsOf(st, fid).forEach(s => { if(canQuarantine(st, fid, s.id) && st.factions[fid].cr > 60) quarantine(st, fid, s.id); });
+}
+
 // ---------- Batailles : côté carte ----------
 // Les flottes adjacentes peuvent rejoindre une bataille : on prend la plus forte de chaque camp.
 function pickReinforcement(st, fid, sysId, exclude){
   let best = null;
   st.fleets.forEach(f => {
-    if(f.owner !== fid || exclude.includes(f.id) || !ADJ[sysId].includes(f.at)) return;
+    if(f.owner !== fid || exclude.includes(f.id) || !nb(st, sysId).includes(f.at)) return;
     if(hostileFleetsAt(st, f.at, fid).length) return; // déjà engagée chez elle
     if(!best || fleetPower(st, f) > fleetPower(st, best)) best = f;
   });
@@ -2268,7 +2544,7 @@ function autoBattle(st, bs, penalFid){
 }
 
 function retreatFleet(st, f){
-  const opts = ADJ[f.at].filter(n => !hostileFleetsAt(st, n, f.owner).length);
+  const opts = nb(st, f.at).filter(n => !hostileFleetsAt(st, n, f.owner).length);
   const own = opts.filter(n => st.systems[n].owner === f.owner);
   let to = null;
   if(f.from !== f.at && own.includes(f.from)) to = f.from;
@@ -2303,6 +2579,7 @@ function applyBattle(st, bs, res){
   const loseFid = winSide === "att" ? bs.defFid : bs.attFid;
   bs[winSide].forEach(id => { const f = fleetById(st, id); if(f && shipCount(f)) f.vet = Math.min(3, f.vet + 1); });
   st.factions[winFid].stats.won++; st.factions[loseFid].stats.lost++;
+  clash(st, winFid, loseFid);
   st.factions[winFid].stats.fought = st.factions[loseFid].stats.fought = true;
   st.factions[bs.attFid].lastOffensive = st.turn;
   const cruelWin = bs[winSide].some(id => { const f = fleetById(st, id); return f && hasTrait(charOf(st, f.admiral), "cruel"); });
@@ -2338,7 +2615,7 @@ function fortification(s){ return s.maxDef ? s.def / s.maxDef : 0; }
 // La Doctrine de terreur autorise le bombardement même bouclier levé, et une frappe de plus.
 function orbitalSupport(st, f, s){
   if(!f) return 0;
-  const terror = !!st.factions[f.owner].terror;
+  const terror = !!st.factions[f.owner].terror || !!st.factions[f.owner].superweapon;
   if(!terror && s && fortification(s) >= 0.5) return 0;
   return Math.min(terror ? 3 : 2, Math.ceil(siegePower(f) / 16) + (terror ? 1 : 0));
 }
@@ -2401,6 +2678,7 @@ function applyGround(st, gs, res){
   f.landed = st.turn; f.mp = 0;
   const lost = {att:troopCount(res.losses.att), def:troopCount(res.losses.def)};
   st.factions[gs.attFid].lastOffensive = st.turn;
+  clash(st, gs.attFid, gs.defFid);
   if(res.how !== "sans combat"){
     st.factions[gs.attFid].stats.fought = true;
     if(gs.defFid) st.factions[gs.defFid].stats.fought = true;
@@ -2540,6 +2818,7 @@ function finishTurn(st){
   // 4c. Syndicat : emprise, dettes, trésor ; puis les événements du tour et les effets différés
   syndicateTurn(st);
   forceTurn(st);
+  crisisTurn(st);
   eventsTurn(st);
   // 5. Chocs politiques qui s'estompent
   FACTION_IDS.forEach(f => { st.factions[f].shock = Math.max(0, st.factions[f].shock - 1); });
@@ -2582,7 +2861,9 @@ function checkVictory(st){
     if(!rivals.length) return f;
     const held = planetsOf(st, f).length;
     const caps = FACTION_IDS.filter(g => g !== f).every(g => {
-      const cap = FACTIONS[g].capital || (st.factions[g].alive && !st.factions[g].shadow ? st.factions[g].capital : null);
+      // Seules comptent les capitales des rivaux encore debout.
+      if(!st.factions[g].alive || st.factions[g].shadow) return true;
+      const cap = st.factions[g].capital;
       return !cap || st.systems[cap].owner === f;
     });
     if(held >= Math.ceil(total / 2) && caps) return f;
@@ -2594,11 +2875,12 @@ function checkVictory(st){
 function sysValue(st, s){
   let v = s.prod.cr + s.prod.mat + 5 * s.prod.inf + (s.yard ? 10 : 0) + (s.hub ? 6 : 0);
   if(FACTION_IDS.some(f => FACTIONS[f].capital === s.id)) v += 25;
+  if(st.relic && !st.relic.owner && st.relic.sys === s.id) v += 60; // l'arme ancienne attire tout le monde
   return v;
 }
 function maxHostileAdj(st, sysId, fid){
   let m = 0;
-  ADJ[sysId].concat([sysId]).forEach(n => { m = Math.max(m, hostilePowerAt(st, n, fid)); });
+  nb(st, sysId).concat([sysId]).forEach(n => { m = Math.max(m, hostilePowerAt(st, n, fid)); });
   return m;
 }
 function distToFrontier(st, from, fid){
@@ -2606,10 +2888,27 @@ function distToFrontier(st, from, fid){
   while(layer.length && d < 8){
     if(layer.some(n => st.systems[n].owner !== fid)) return d;
     const next = [];
-    layer.forEach(n => ADJ[n].forEach(m => { if(!seen.has(m)){ seen.add(m); next.push(m); } }));
+    layer.forEach(n => nb(st, n).forEach(m => { if(!seen.has(m)){ seen.add(m); next.push(m); } }));
     layer = next; d++;
   }
   return 8;
+}
+// Premier saut vers le système le plus proche qui satisfait `pred` (null si on y est déjà ou s'il est trop loin).
+function aiPathStep(st, from, pred, fid, maxD){
+  if(pred(from)) return null;
+  const prev = {[from]:null};
+  let layer = [from];
+  for(let d = 0; d < maxD && layer.length; d++){
+    const next = [];
+    for(const a of layer) for(const b of nb(st, a)){
+      if(b in prev) continue;
+      prev[b] = a;
+      if(pred(b)){ let x = b; while(prev[x] !== from) x = prev[x]; return x; }
+      next.push(b);
+    }
+    layer = next;
+  }
+  return null;
 }
 function aiChoose(st, f){
   const my = fleetPower(st, f);
@@ -2617,10 +2916,15 @@ function aiChoose(st, f){
   // Siège en cours : on reste tant que nos troupes peuvent espérer prendre le monde.
   if(planetHostile(st, here, f.owner) && !hostileFleetsAt(st, f.at, f.owner).length &&
      (!troopCount(here.garrison) || troopPower(f.troops, f.owner) >= troopPower(here.garrison, here.owner) * 1.1)) return null;
+  // Une flotte sans troupes à débarquer va d'abord en chercher chez elle.
+  if(fleetCap(f) >= 2 && troopPower(f.troops, f.owner) < 6){
+    const step = aiPathStep(st, f.at, n => st.systems[n].owner === f.owner && spareTroops(st, st.systems[n]) >= 2, f.owner, 5);
+    if(step && hostilePowerAt(st, step, f.owner) < my) return step;
+  }
   const hereThreat = maxHostileAdj(st, f.at, f.owner);
   let best = null;
   let bestScore = (hereThreat > 0 && hereThreat < my * 1.5 ? 8 : 0) + (3 - Math.min(3, distToFrontier(st, f.at, f.owner)));
-  ADJ[f.at].forEach(n => {
+  nb(st, f.at).forEach(n => {
     const s = st.systems[n];
     const E = hostilePowerAt(st, n, f.owner);
     let sc;
@@ -2666,8 +2970,10 @@ function aiShouldInvade(st, f){
 }
 function aiManage(st, fid){
   const F = st.factions[fid];
-  aiPolitics(st, fid);
+  if(fid !== "war") aiPolitics(st, fid);
   aiSyndicate(st, fid);
+  aiCrisis(st, fid);
+  aiDiplomacy(st, fid);
   const mine = planetsOf(st, fid);
   // Un groupe « peuple » mécontent interdit les impôts élevés.
   const people = F.groups ? groupsByRole(F, "people")[0] : null;
@@ -2694,7 +3000,7 @@ function aiManage(st, fid){
     const r = rnd(st);
     if(s.yard && F.cr > 180 && r < 0.35) t = r < 0.12 ? "walk" : "tank";
     else if(r < 0.5 && F.cr > 120) t = "art";
-    else if(s.garrison.inf < 4 || F.cr > 150) t = "inf";
+    else if(s.garrison.inf < 6 || F.cr > 150) t = "inf";
     if(t) queueRecruit(st, s.id, t);
   });
 }
@@ -2709,7 +3015,7 @@ function aiFaction(st, fid, onBattle){
     const coFoe = hostileFleetsAt(st, f.at, fid).sort((a, b) => fleetPower(st, b) - fleetPower(st, a))[0];
     if(coFoe && f.mp > 0){
       if(fleetPower(st, f) > 1.2 * fleetPower(st, coFoe)){ f.mp = 0; onBattle(makeBattle(st, f, coFoe)); return; }
-      const safe = ADJ[f.at].find(n => st.systems[n].owner === fid && !hostileFleetsAt(st, n, fid).length);
+      const safe = nb(st, f.at).find(n => st.systems[n].owner === fid && !hostileFleetsAt(st, n, fid).length);
       if(safe){ f.from = f.at; f.at = safe; f.mp = 0; }
       return;
     }
@@ -3304,7 +3610,7 @@ function loadSave(){
     const s = store(); const raw = s && s.getItem(SAVE_KEY);
     if(!raw) return null;
     const st = JSON.parse(raw);
-    return st && st.version === 6 ? st : null;
+    return st && st.version === 7 ? st : null;
   }catch(e){ return null; }
 }
 function clearSave(){ try{ const s = store(); if(s) s.removeItem(SAVE_KEY); }catch(e){} }
@@ -3312,7 +3618,7 @@ function clearSave(){ try{ const s = store(); if(s) s.removeItem(SAVE_KEY); }cat
 // ---------- Écran titre ----------
 function showTitle(){
   $("game").classList.add("hidden"); $("battle").classList.add("hidden"); $("title").classList.remove("hidden");
-  $("factionCards").innerHTML = FACTION_IDS.map(f => {
+  $("factionCards").innerHTML = playableFactions().map(f => {
     const F = FACTIONS[f];
     return '<button class="fcard" data-start="' + f + '"><b><span class="dot" style="background:' + F.color + '"></span>' + esc(F.name) + '</b>' +
       '<small>' + esc(F.pitch) + '</small>' +
@@ -3382,7 +3688,7 @@ function renderTop(){
 function renderMap(){
   const P = G.player;
   const f = ui.fleet ? fleetById(G, ui.fleet) : null;
-  const dests = f && f.owner === P && f.mp > 0 ? new Set(ADJ[f.at]) : new Set();
+  const dests = f && f.owner === P && f.mp > 0 ? new Set(nb(G, f.at)) : new Set();
   let h = "";
   const labels = [["Régions Inconnues",120,110],["Noyau",520,220],["Colonies",330,160],["Bordure Médiane",720,110],["Bordure Extérieure",770,640]];
   labels.forEach(([t, x, y]) => { h += '<text class="region" x="' + x + '" y="' + y + '" text-anchor="middle">' + t + '</text>'; });
@@ -3393,6 +3699,7 @@ function renderMap(){
       if(blockaded(G, a) || blockaded(G, b)) cls += " blocked";
       else { cls += " trade"; style = ' style="stroke:' + fcolor(sa.owner) + '"'; }
     }
+    if(linkClosed(G, a, b)){ cls = "route closed"; style = ""; }
     h += '<line class="' + cls + '"' + style + ' x1="' + A.x + '" y1="' + A.y + '" x2="' + Bs.x + '" y2="' + Bs.y + '"/>';
   });
   SYSTEMS.forEach(([id]) => {
@@ -3408,6 +3715,8 @@ function renderMap(){
     h += '<circle cx="' + S.x + '" cy="' + S.y + '" r="' + r + '" fill="' + (s.cartel ? CARTEL_COLOR : fcolor(s.owner)) + '" stroke="#070b14" stroke-width="2"/>';
     if(cap) h += '<circle cx="' + S.x + '" cy="' + S.y + '" r="5" fill="#070b14"/>';
     if(s.yard) h += '<rect x="' + (S.x - r - 6) + '" y="' + (S.y + r - 6) + '" width="8" height="8" fill="#dfe6f3" stroke="#070b14"/>';
+    if(G.relic && G.relic.sys === id && !G.relic.owner) h += '<polygon points="' + S.x + ',' + (S.y - r - 11) + ' ' + (S.x + 6) + ',' + (S.y - r - 5) + ' ' + S.x + ',' + (S.y - r + 1) + ' ' + (S.x - 6) + ',' + (S.y - r - 5) + '" fill="var(--accent)" stroke="#070b14"/>';
+    if(G.plague && G.plague.infected[id] >= G.turn) h += '<circle cx="' + (S.x - r - 3) + '" cy="' + (S.y - r) + '" r="5" fill="#8fd14f" stroke="#070b14"/>';
     h += '<text x="' + S.x + '" y="' + (S.y + r + 15) + '">' + esc(S.name) + '</text>';
     // Flottes : une pastille par faction présente
     const byOwner = {};
@@ -3481,6 +3790,9 @@ function renderPanel(){
     if(s.bought) h += '<span class="tag bad">Gouverneur acheté</span>';
     if(s.smuggle >= G.turn) h += '<span class="tag warn">Contrebande jusqu\'au tour ' + s.smuggle + '</span>';
     if(s.malus && s.malus.until >= G.turn) h += '<span class="tag bad">Production −' + Math.round((1 - s.malus.mul) * 100) + ' % (tour ' + s.malus.until + ')</span>';
+    if(G.plague && G.plague.infected[id] >= G.turn) h += '<span class="tag bad">Pandémie' + (s.quarantine >= G.turn ? ' · en quarantaine' : '') + '</span>';
+    if(G.relic && G.relic.sys === id && !G.relic.owner) h += '<span class="tag warn">Arme ancienne' + (G.relic.holder ? ' · ' + esc(fname(G.relic.holder)) + ' ' + (G.turn - G.relic.since) + '/' + WEAPON_TURNS : '') + '</span>';
+    if(s.droids) h += '<span class="tag">Droïdes libres</span>';
     h += '</div>';
     const y = planetYield(G, s);
     h += '<dl class="kv">';
@@ -3497,6 +3809,8 @@ function renderPanel(){
       const locked = s.taxLock >= G.turn;
       h += '<h3>Impôts</h3><div class="row">' + Object.keys(TAX).map(k => '<button class="small ' + (s.tax === k ? "on" : "") + '" data-act="tax" data-id="' + id + '" data-v="' + k + '"' + (locked ? " disabled" : "") + '>' + TAX[k].label + '</button>').join("") + '</div>';
       if(locked) h += '<div class="muted" style="font-size:.85rem">Autonomie accordée : impôts bas jusqu\'au tour ' + s.taxLock + '.</div>';
+      if(G.plague && G.plague.infected[id] >= G.turn && !(s.quarantine >= G.turn))
+        h += '<div class="row" style="margin-top:.5em"><button class="small" data-act="quarantine" data-id="' + id + '"' + (canQuarantine(G, P, id) ? "" : " disabled") + '>Quarantaine (20 cr) : production −20 % au lieu de −40 %, et plus de contagion</button></div>';
       h += '<div class="row" style="margin-top:.5em"><button class="small" data-act="purge" data-id="' + id + '"' + (canPurge(G, id) ? "" : " disabled") + '>Purger le Syndicat (−' + PURGE_COST + ' influence, emprise −35, loyauté −15)</button>' +
         (blockaded(G, id) ? '<button class="small" data-act="smuggle" data-id="' + id + '"' + (canSmuggle(G, P, id) ? "" : " disabled") + '>Contrebande (' + SYND_COST.smuggle + ' cr) : lever le blocus 5 tours</button>' : '') + '</div>';
       h += '<div class="muted" style="font-size:.85rem;margin-top:.3em">Élevés : +45 % de crédits, la loyauté visée baisse de 15. Bas : −40 %, +12.</div>';
@@ -3557,7 +3871,8 @@ function renderPanel(){
     h += '<h3>Rivaux</h3>';
     if(P !== "sith" && G.factions.sith.alive && G.factions.sith.shadow && G.factions.sith.rumor)
       h += '<div class="warn" style="font-size:.88rem">Des rumeurs parlent d\'un culte Sith agissant dans l\'ombre.</div>';
-    FACTION_IDS.filter(x => x !== P && !(x === "sith" && G.factions.sith.shadow && P !== "sith") && !(x === "sith" && !G.factions.sith.alive && P !== "sith" && !G.factions.sith.capital)).forEach(x => {
+    // Les factions cachées ou jamais apparues (Sith dans l'ombre, seigneur de guerre dormant) restent invisibles.
+    FACTION_IDS.filter(x => x !== P && !G.factions[x].shadow && (G.factions[x].alive || FACTIONS[x].capital || G.factions[x].capital)).forEach(x => {
       const alive = G.factions[x].alive;
       const pw = G.fleets.filter(f => f.owner === x).reduce((a, f) => a + fleetPower(G, f), 0);
       h += '<div class="row" style="justify-content:space-between;font-size:.92rem"><span><span class="dot" style="background:' + FACTIONS[x].color + '"></span>' + esc(FACTIONS[x].name) + '</span><span class="muted">' + (alive ? planetsOf(G, x).length + ' mondes · flotte ' + Math.round(pw) : 'effondrée') + '</span></div>';
@@ -3579,6 +3894,7 @@ function onPanel(e){
   else if(act === "tax"){ setTax(G, id, v); }
   else if(act === "appease"){ appease(G, id); }
   else if(act === "purge"){ purge(G, id); }
+  else if(act === "quarantine"){ quarantine(G, P, id); }
   else if(act === "search"){ const m = sithSearch(G, id); render(); if(m) showModal('<h2>Fouilles</h2><p>' + esc(m) + '</p>', [{label:"Continuer", primary:true}]); return; }
   else if(act === "chaos"){ sithChaos(G, id); }
   else if(act === "shadow"){ return showShadow(); }
@@ -3631,7 +3947,7 @@ function endTurn(){
     save();
     render();
     if(G.over) return showGameOver();
-    showReport(true, processDilemmas);
+    showReport(true, processNews);
   });
 }
 function processPending(done){
@@ -3652,6 +3968,12 @@ function showReport(auto, next){
     [{label:"Continuer", primary:true, fn:next || null}]);
 }
 // Dilemmes politiques à trancher en début de tour (duel, défiance, amiral rival).
+// Annonces des grandes crises, avant les dilemmes et les événements.
+function processNews(){
+  const n = G.news.shift();
+  if(!n) return processDilemmas();
+  showModal('<div class="tag bad">Grande crise</div><h2>' + esc(n.title) + '</h2><p>' + esc(n.text) + '</p>', [{label:"Continuer", primary:true, fn:processNews}]);
+}
 // Événements du tour : un ou deux choix, souvent sans bonne réponse.
 function processEvents(){
   const ev = G.events.shift();
@@ -3681,7 +4003,10 @@ function processDilemmas(){
 }
 function showGameOver(){
   const o = G.over;
-  const txt = o.win
+  const txt = o.win && o.how === "hegemony"
+    ? "Le Congrès galactique t'acclame : " + FACTIONS[G.player].name + " fonde un nouveau gouvernement galactique au tour " + o.turn + "."
+    : !o.win && o.how === "hegemony" ? FACTIONS[o.winner].name + " et ses alliés fondent un nouveau gouvernement galactique sans toi, au tour " + o.turn + "."
+    : o.win
     ? "La galaxie a un nouveau maître : " + FACTIONS[G.player].name + ", au tour " + o.turn + "."
     : o.winner ? FACTIONS[o.winner].name + " domine désormais la galaxie. Ton règne s'achève au tour " + o.turn + "."
     : G.player === "sith" ? "Le culte Sith est anéanti au tour " + o.turn + ". La galaxie ne saura jamais à quel point elle a eu de la chance."
@@ -3720,6 +4045,8 @@ function showMenu(){
     '<li><b>Loyauté</b> : sous 35, sabotages ; sous 20, révolte possible si aucune flotte ne garde le monde. Défaites et capitale perdue ébranlent le régime.</li>' +
     '<li><b>Batailles</b> : boucliers avant / flancs / arrière ; frapper de dos fait mal et brise le moral. Une unité à moins de 25 de moral fuit ; celles rattrapées sont massacrées.</li>' +
     '<li><b>Terrain spatial</b> : nébuleuse = portée réduite à 1 ; astéroïdes = couverture (−30 % de dégâts) mais 2 points de mouvement.</li>' +
+    '<li><b>Grandes crises</b> : une ou deux par partie (seigneur de guerre, route hyperspatiale coupée, arme ancienne, pandémie, soulèvement des droïdes). Elles bouleversent l\'équilibre et forcent tout le monde à s\'adapter.</li>' +
+    '<li><b>Victoire</b> : domination (la moitié des systèmes et les capitales des rivaux encore debout), hégémonie politique (une coalition d\'au moins deux alliés que tu mènes et qui tient 65 % des systèmes, puis 80 d\'influence pour convoquer le Congrès galactique), ou, pour le Sith, domination et Ordre Jedi éradiqué.</li>' +
     '<li><b>La Force</b> : l\'Ordre Jedi juge chaque faction. Honorable (réputation 75+), il t\'envoie un Chevalier ; cruelle (20 ou moins), il soutient la résistance et protège les mondes que tu envahis. Il propose des trêves aux factions épuisées. Un culte Sith agit peut-être dans l\'ombre : « Enquêter » sur un personnage (Gouvernement) peut démasquer un agent.</li>' +
     '<li><b>Syndicat</b> (bouton « Syndicat ») : prêts, mercenaires, contrebande, assassinats, renseignements. Chaque contrat fait grimper son emprise : à 50 %, il détourne la moitié des crédits d\'un monde ; à 80 %, le gouverneur passe à sa solde et le monde peut basculer. Une dette impayée déclenche des représailles.</li>' +
     '<li><b>Événements</b> : un ou deux par tour, souvent sans bonne réponse. Certains choix reviennent plusieurs tours plus tard.</li>' +
@@ -3753,6 +4080,27 @@ function showGov(){
     '<dt>Emprise du Syndicat</dt><dd>' + F.syndicate + ' % <span class="muted">· crédits −' + Math.round(F.syndicate / 3) + ' %</span></dd>' +
     '<dt>Réputation Jedi</dt><dd>' + F.jediRep + '/100' + (F.terror ? ' <span class="bad">· détruite</span>' : '') + '</dd>' +
     '<dt>Influence</dt><dd>' + Math.round(F.inf) + '</dd></dl>';
+  // Objectifs de victoire
+  const held = planetsOf(G, P).length, maj = Math.ceil(SYSTEMS.length / 2);
+  const capsLeft = FACTION_IDS.filter(g => g !== P && G.factions[g].alive && !G.factions[g].shadow && G.factions[g].capital && G.systems[G.factions[g].capital].owner !== P);
+  h += '<h3>Victoire</h3><dl class="kv"><dt>Domination</dt><dd>' + held + '/' + maj + ' systèmes' + (capsLeft.length ? ' · capitales à prendre : ' + capsLeft.map(g => esc(SYS[G.factions[g].capital].name)).join(", ") : ' · aucune capitale rivale debout') + (P === "sith" ? ' · Ordre Jedi : ' + G.jedi.strength + ' chevalier(s)' : '') + '</dd>';
+  if(diplomat(G, P)){
+    const hs = hegemonyStatus(G, P);
+    h += '<dt>Hégémonie</dt><dd>coalition ' + hs.total + '/' + hs.need + ' systèmes · ' + hs.allies.length + ' allié(s)' + (hs.leads ? '' : ' · <span class="warn">un allié te dépasse</span>') + ' · influence ' + Math.round(F.inf) + '/' + CONGRESS_COST +
+      '<div class="row" style="margin-top:.3em"><button class="small primary" data-gov="congress"' + (hs.ready ? "" : " disabled") + '>Convoquer le Congrès galactique</button></div></dd>';
+  }
+  h += '</dl>';
+  const cr = crisesActive(G);
+  if(cr.length) h += '<h3>Grandes crises</h3><ul style="padding-left:1.1em;margin:.3em 0">' + cr.map(x => '<li>' + esc(x) + '</li>').join("") + '</ul>';
+  if(diplomat(G, P)){
+    const others = FACTION_IDS.filter(x => x !== P && diplomat(G, x));
+    h += '<h3>Diplomatie</h3>' + others.map(x => {
+      const al = allied(G, P, x), tr = truceBetween(G, P, x);
+      return '<div class="row" style="justify-content:space-between;font-size:.88rem;margin:.2em 0"><span><span class="dot" style="background:' + FACTIONS[x].color + '"></span>' + esc(FACTIONS[x].name) + ' <span class="muted">· ' + planetsOf(G, x).length + ' mondes' + (al ? ' · <span class="good">allié</span>' : tr ? ' · trêve' : ' · en guerre') + '</span></span>' +
+        (al ? '<button class="small" data-gov="breakally" data-id="' + x + '">Rompre (réputation Jedi −10)</button>'
+            : '<button class="small" data-gov="ally" data-id="' + x + '"' + (canPropose(G, P, x) ? "" : " disabled") + '>Proposer une alliance (' + ALLIANCE_COST + ' inf., ' + Math.round(allianceChance(G, P, x) * 100) + ' %)</button>') + '</div>';
+    }).join("");
+  }
   if(P !== "sith" || !F.shadow){
     const J = G.jedi, T = trucePartners(G, P), hero = G.fleets.find(f => f.owner === P && (f.heroes || []).some(x => x.kind === "jedi"));
     h += '<h3>La Force</h3><dl class="kv"><dt>Ordre Jedi</dt><dd>' + (J.strength > 0 ? J.strength + ' chevaliers' : '<span class="bad">anéanti</span>') + '</dd>' +
@@ -3822,6 +4170,9 @@ function govAction(act, id, v){
   else if(act === "reward") rewardChar(G, charOf(G, +id));
   else if(act === "dismiss") dismissChar(G, charOf(G, +id));
   else if(act === "breaktruce") breakTruce(G, P, id);
+  else if(act === "breakally") breakAlliance(G, P, id);
+  else if(act === "ally"){ const m = proposeAlliance(G, P, id); save(); render(); if(m) return showModal('<h2>Diplomatie</h2><p>' + esc(m) + '</p>', [{label:"Retour", primary:true, fn:showGov}]); }
+  else if(act === "congress"){ if(convokeCongress(G, P)){ render(); return showGameOver(); } }
   else if(act === "probe"){ const m = probeChar(G, P, charOf(G, +id)); save(); render(); if(m) return showModal('<h2>Enquête</h2><p>' + esc(m) + '</p>', [{label:"Retour", primary:true, fn:showGov}]); }
   save(); render(); showGov();
   box.scrollTop = y;
@@ -3851,7 +4202,7 @@ function showShadow(){
   }
   const cor = corruptedChars(G);
   h += '<h3>Tes agents (' + cor.length + ')</h3>' + (cor.length ? cor.map(c => '<div style="font-size:.86rem"><span class="dot" style="background:' + FACTIONS[c.fid].color + '"></span>' + esc(charTitle(G, c)) + ' ' + esc(c.name) + ' <span class="muted">· ' + esc(FACTIONS[c.fid].name) + (c.role === "governor" ? ' · ' + esc(SYS[c.at].name) : '') + '</span></div>').join("") : '<div class="muted">Aucun.</div>');
-  const tabs = FACTION_IDS.filter(x => x !== "sith" && G.factions[x].alive);
+  const tabs = FACTION_IDS.filter(x => x !== "sith" && G.factions[x].alive && !G.factions[x].shadow);
   if(!tabs.includes(shadowUi.tab)) shadowUi.tab = tabs[0];
   h += '<h3>Cibles</h3><div class="row">' + tabs.map(x => '<button class="small ' + (shadowUi.tab === x ? "on" : "") + '" data-sh="tab" data-id="' + x + '">' + esc(FACTIONS[x].name) + '</button>').join("") + '</div>';
   const T = shadowUi.tab;
@@ -4215,7 +4566,7 @@ function battleOver(){
 // ---------- Liaisons ----------
 document.addEventListener("DOMContentLoaded", () => {
   $("factionCards").addEventListener("click", e => { const c = e.target.closest("[data-start]"); if(c) startGame(c.dataset.start); });
-  $("btnContinue").addEventListener("click", () => { const s = loadSave(); if(s){ G = s; ui.sel = null; ui.fleet = null; enterGame(); showReport(true, processDilemmas); } });
+  $("btnContinue").addEventListener("click", () => { const s = loadSave(); if(s){ G = s; ui.sel = null; ui.fleet = null; enterGame(); showReport(true, processNews); } });
   $("panel").addEventListener("click", onPanel);
   $("map").addEventListener("click", onMap);
   $("btnEnd").addEventListener("click", endTurn);

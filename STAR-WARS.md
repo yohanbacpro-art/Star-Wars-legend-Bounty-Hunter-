@@ -1,11 +1,11 @@
-# L'Effondrement — 75 ap. BY (prototype v0.6)
+# L'Effondrement — 75 ap. BY (prototype v0.7)
 
 Jeu de grande stratégie galactique au tour par tour, dans l'esprit de Total War.
 Tout tient dans `star-wars.html` : l'ouvrir dans un navigateur, sans dépendance ni build.
 Jouable sur ordinateur et sur téléphone. Ranch Dynasty (`index.html`) reste inchangé.
 
 Le game design complet vit dans le doc « Game design — Jeu de stratégie Star Wars (75 ap. BY) ».
-Ce prototype couvre les six premières étapes de sa feuille de route.
+Ce prototype couvre les sept étapes de sa feuille de route.
 
 ## v0.1 — la carte galactique
 
@@ -18,7 +18,7 @@ Ce prototype couvre les six premières étapes de sa feuille de route.
 - Flottes : 2 sauts par tour, sièges, fusion et division, vétérance, entretien.
 - Tout est lié : chaque défaite et chaque capitale perdue ébranlent le régime et font baisser la loyauté partout.
 - Aléatoire au lancement : chantiers et carrefours commerciaux placés au hasard, production tirée pour chaque monde.
-- IA simple pour les factions rivales. Victoire par domination : la moitié des systèmes et toutes les capitales rivales.
+- IA simple pour les factions rivales. Victoire par domination : la moitié des systèmes et les capitales des rivaux encore debout (v0.7 : les capitales des factions disparues ne comptent plus).
 
 ## v0.2 — les batailles spatiales
 
@@ -47,7 +47,7 @@ Ce prototype couvre les six premières étapes de sa feuille de route.
 Bouton « Gouvernement » en haut de l'écran.
 
 - Chaque faction a son régime et trois groupes internes, chacun avec une satisfaction et un chef :
-  - Vestiges impériaux, Conseil des Moffs (Militaristes, Technocrates, Loyalistes). Un Moff mécontent détourne 10 % des crédits ; quatre tours sous 20, il fait sécession avec un monde et la flotte qui s'y trouve.
+  - Vestiges impériaux, Conseil des Moffs (Militaristes, Technocrates, Loyalistes). Un Moff mécontent détourne 10 % des crédits ; cinq tours sous 20, il fait sécession avec un monde (v0.7 : les flottes en orbite restent fidèles).
   - République restaurée, Sénat (Faucons, Mondes du Noyau, Humanistes). Les décrets importants passent au vote (50 sièges sur 100) ; l'influence achète les voix qui manquent. Après une défaite, un Sénat mécontent dépose une motion de défiance.
   - Mandalore, Clans (guerriers, mercenaires, Anciens). L'autorité du Mand'alor monte avec les victoires ; sous 30, un chef de clan le défie en duel.
   - Ligue de la Bordure, Assemblée (Bloc frontalier, Guildes marchandes, Mondes libres). Chaque bloc représente des mondes ; trois tours sous 20, il quitte la Ligue avec eux.
@@ -92,13 +92,34 @@ Bouton « Syndicat » en haut de l'écran.
 
 Les choix de v0.4 et v0.5 servent ici : la réputation Jedi accumulée, et l'enfant sensible à la Force des événements (confié aux Jedi, il renforce l'Ordre ; abandonné, il devient un acolyte).
 
+## v0.7 — les grandes crises, l'hégémonie et l'équilibrage
+
+**Cinq grandes crises**, une ou deux par partie : la première entre les tours 25 et 40, la seconde 35 à 50 tours plus tard.
+- **Un seigneur de guerre** surgit dans la Bordure avec deux flottes pirates aguerries et quelques mondes. Il ne négocie avec personne (sixième faction, non jouable, dormante jusque-là).
+- **Une route coupée** : une tempête hyperspatiale ferme pendant 20 tours la Voie Hydienne, la Route Perlemienne ou le Corridor de Rimma. Plus de passage ni de commerce par ces routes.
+- **Une arme ancienne** est découverte sur un monde de Bordure. Qui le tient 4 tours de suite s'en empare : flottes +25 %, une frappe orbitale de plus, même bouclier levé. Toutes les IA la convoitent.
+- **La pandémie** voyage le long des routes commerciales actives (50 %), plus lentement ailleurs (12 %). Un monde touché perd 40 % de sa production pendant 6 tours ; la quarantaine (20 crédits) limite la perte à 20 % et arrête la contagion.
+- **Le soulèvement des droïdes** frappe les mondes à chantier : sans garnison solide, le monde tombe aux mains de ses droïdes. Des répliques suivent pendant 6 tours.
+
+**Diplomatie et hégémonie politique** (écran Gouvernement) :
+- Proposer une alliance coûte 30 d'influence ; l'acceptation dépend de la taille, des trêves, de la lassitude et des combats récents. Une alliance vaut paix permanente ; la rompre coûte 10 de réputation Jedi. Les IA forment aussi des alliances, t'en proposent, et lâchent un allié devenu trop puissant.
+- **Victoire par hégémonie** : mener une coalition d'au moins deux alliés (ou de tous les survivants), en être le plus grand membre, tenir ensemble 65 % des systèmes, puis dépenser 80 d'influence pour convoquer le Congrès galactique.
+- L'écran Gouvernement montre la progression vers chaque victoire.
+
+**Équilibrage** (mesuré sur 80 parties IA contre IA jouées jusqu'au bout) :
+- Les flottes IA sans troupes vont en chercher dans leurs garnisons avant d'attaquer ; les milices indépendantes sont moins massives.
+- Seules les capitales des rivaux encore debout comptent pour la domination.
+- Sécession d'un Moff : cinq tours de mécontentement au lieu de quatre, et les flottes en orbite restent fidèles.
+- Vestiges impériaux : 30 d'influence au départ. Mandalore : troupes au sol +20 % au lieu de +30 %.
+- Résultat : 27 % de parties sans vainqueur au tour 150 (contre 57 % en v0.6). Victoires : République 22, Ligue 13, Mandalore 13, Vestiges impériaux 6, Sith 4 ; 31 par domination, 27 par hégémonie.
+
 ## Architecture
 
 Deux blocs `<script>` dans `star-wars.html` :
 
 | Bloc | Contenu |
 |---|---|
-| Moteur | Données (`SYSTEMS`, `LINKS`, `FACTIONS`, `SHIPS`, `TROOPS`, `UNITS`), `newGame`, économie, loyauté, troupes et invasions (`embark`, `makeInvasion`, `autoGround`, `applyGround`), politique (`REGIMES`, `DECREES`, `TRAITS`, `genChar`, `enactDecree`, `voteSupport`, `politicsTurn`, `resolveDilemma`), Syndicat et événements (`syndCut`, `takeLoan`, `hireMercs`, `assassinate`, `purge`, `syndicateTurn`, `EVENTS`, `DELAYED`, `eventsTurn`, `resolveEvent`), la Force (`hostile`, `jediTurn`, `sithTurn`, `sithCorrupt`, `sithCoup`, `sithClaim`, `probeChar`, `aiSith`, `HEROES`), `runAI`, `finishTurn`, batailles (`autoBattle`, `createBattle`, `createGroundBattle`, `bAttack`, `bOrbital`, `bRunAI`, `bResult`, `applyBattle`). Aucune dépendance au DOM. |
+| Moteur | Données (`SYSTEMS`, `LINKS`, `FACTIONS`, `SHIPS`, `TROOPS`, `UNITS`), `newGame`, économie, loyauté, troupes et invasions (`embark`, `makeInvasion`, `autoGround`, `applyGround`), politique (`REGIMES`, `DECREES`, `TRAITS`, `genChar`, `enactDecree`, `voteSupport`, `politicsTurn`, `resolveDilemma`), Syndicat et événements (`syndCut`, `takeLoan`, `hireMercs`, `assassinate`, `purge`, `syndicateTurn`, `EVENTS`, `DELAYED`, `eventsTurn`, `resolveEvent`), la Force (`hostile`, `jediTurn`, `sithTurn`, `sithCorrupt`, `sithCoup`, `sithClaim`, `probeChar`, `aiSith`, `HEROES`), crises et diplomatie (`CRISES`, `startCrisis`, `crisisTurn`, `nb`, `makeAlliance`, `proposeAlliance`, `hegemonyStatus`, `convokeCongress`, `aiDiplomacy`), `runAI`, `finishTurn`, batailles (`autoBattle`, `createBattle`, `createGroundBattle`, `bAttack`, `bOrbital`, `bRunAI`, `bResult`, `applyBattle`). Aucune dépendance au DOM. |
 | Interface | Écran titre, carte SVG, panneau, écrans Gouvernement, Syndicat et Ombre, dilemmes et événements, bataille sur grille SVG, modales, sauvegarde `localStorage` (`sw75-save`). |
 
 L'aléatoire est un mulberry32 dont l'état vit dans la partie (`st.rng`) : une graine rejoue la même partie.
@@ -109,4 +130,4 @@ L'aléatoire est un mulberry32 dont l'état vit dans la partie (`st.rng`) : une 
 node tests/sw-sim.js [parties] [tours max]
 ```
 
-Joue des parties complètes où l'IA contrôle toutes les factions et vérifie les invariants à chaque tour (soutes jamais surchargées, garnisons positives…). Vérifie aussi que chaque monde a son gouverneur et chaque flotte son amiral. Joue 60 batailles spatiales et 60 batailles terrestres IA contre IA, contrôle les boucliers orientés, les frappes orbitales, le vote du Sénat, chaque option de chaque dilemme et de chaque événement (suivie de 12 tours pour déclencher les effets différés), les services du Syndicat (prêt, dette impayée, mercenaires, assassinat, purge), et la Force (coup d'État, Empire Sith, découverte fatale, succession du Seigneur Sith, trêve, invasion avec héros et Chevalier Jedi, enquête, condition de victoire Sith). Le Sith fait partie de la rotation des factions jouées.
+Joue des parties complètes où l'IA contrôle toutes les factions et vérifie les invariants à chaque tour (soutes jamais surchargées, garnisons positives…). Vérifie aussi que chaque monde a son gouverneur et chaque flotte son amiral. Joue 60 batailles spatiales et 60 batailles terrestres IA contre IA, contrôle les boucliers orientés, les frappes orbitales, le vote du Sénat, chaque option de chaque dilemme et de chaque événement (suivie de 12 tours pour déclencher les effets différés), les services du Syndicat (prêt, dette impayée, mercenaires, assassinat, purge), et la Force (coup d'État, Empire Sith, découverte fatale, succession du Seigneur Sith, trêve, invasion avec héros et Chevalier Jedi, enquête, condition de victoire Sith). Le Sith fait partie de la rotation des factions jouées. Enfin, chaque grande crise est lancée puis jouée 15 tours, et la route coupée, l'arme ancienne, la pandémie avec quarantaine, les alliances et la victoire par le Congrès galactique sont vérifiées.
