@@ -18,6 +18,7 @@
     --bad:#e2574c;
     --warn:#e39a3b;
     --shield:#7fd3ff;
+    --armor:#d8c08a;
     --reach:rgba(127,211,255,.22);
   }
   *{box-sizing:border-box}
@@ -108,6 +109,10 @@
   .hex{fill:#0e1628;stroke:#1f2a44;stroke-width:1}
   .hex.neb{fill:#2a1c44}
   .hex.ast{fill:#2a2418}
+  .hex.forest{fill:#15261a}
+  .hex.hill{fill:#2b2618}
+  .hex.reach.forest{fill:#1f4a4a}
+  .hex.reach.hill{fill:#3a4a4a}
   .hex.reach{fill:#16395a;cursor:pointer}
   .hex.reach.neb{fill:#35407a}
   .hex.reach.ast{fill:#3a4a4a}
@@ -135,7 +140,7 @@
   <div class="factions" id="factionCards"></div>
   <div class="row">
     <button id="btnContinue" class="primary hidden">Continuer la partie</button>
-    <span class="muted" style="font-size:.85rem">Prototype v0.2 — carte galactique et batailles spatiales.</span>
+    <span class="muted" style="font-size:.85rem">Prototype v0.3 — carte galactique, batailles spatiales et invasions.</span>
   </div>
 </div>
 
@@ -200,7 +205,7 @@ const REGIONS = {
   col: {name:"Colonies",           cr:14, mat:8,  inf:2, def:40},
   mid: {name:"Bordure Médiane",    cr:10, mat:9,  inf:2, def:32},
   outer:{name:"Bordure Extérieure",cr:7,  mat:10, inf:1, def:26},
-  unk: {name:"Régions Inconnues",  cr:6,  mat:11, inf:1, def:30},
+  unk: {name:"Régions Inconnues",  cr:9,  mat:11, inf:1, def:30},
 };
 
 // [id, nom, région, x, y] — coordonnées dans le viewBox 1000×660 de la carte.
@@ -246,35 +251,38 @@ LINKS.forEach(([a, b]) => { ADJ[a].push(b); ADJ[b].push(a); });
 const FACTION_IDS = ["emp", "rep", "man", "lig"];
 const FACTIONS = {
   emp:{name:"Vestiges impériaux", color:"#b9c4d0", capital:"kaldor", fleetWord:"Groupe de combat",
-       start:{cr:220, mat:160, inf:10}, planets:["kaldor","nirauan","vassek"],
-       vet:1, morale:10, baseLoyalty:60, conquest:18, costMul:1, frigMul:1, turnsAdd:0, defMul:1,
+       start:{cr:320, mat:160, inf:10}, planets:["kaldor","nirauan","vassek"],
+       vet:1, morale:10, ground:1.1, baseLoyalty:60, conquest:26, costMul:1, frigMul:1, turnsAdd:0, defMul:1,
        pitch:"Une flotte moderne ressort des Régions Inconnues, avec très peu de planètes.",
        strength:"Flotte vétérane et disciplinée", weakness:"Les mondes conquis restent peu loyaux"},
   rep:{name:"République restaurée", color:"#e6b34a", capital:"coruscant", fleetWord:"Flotte",
        start:{cr:340, mat:70, inf:30}, planets:["coruscant","corellia","chandrila","duro","kuat"],
-       vet:0, morale:0, baseLoyalty:60, conquest:35, costMul:1, frigMul:1, turnsAdd:1, defMul:1.1,
+       vet:0, morale:0, ground:1, baseLoyalty:60, conquest:35, costMul:1, frigMul:1, turnsAdd:1, defMul:1.1,
        pitch:"Ce qui reste du Noyau : riche, peuplé et hésitant.",
-       strength:"Économie et influence", weakness:"Décisions militaires lentes (+1 tour de construction)"},
+       strength:"Économie et influence", weakness:"Décisions militaires lentes (+1 tour pour construire et recruter)"},
   man:{name:"Mandalore", color:"#4fb3a9", capital:"mandalore", fleetWord:"Clan de guerre",
        start:{cr:220, mat:110, inf:15}, planets:["mandalore","concord","krownest","kalevala"],
-       vet:1, morale:15, baseLoyalty:64, conquest:35, costMul:1.2, frigMul:1, turnsAdd:0, defMul:1,
+       vet:1, morale:15, ground:1.3, baseLoyalty:64, conquest:35, costMul:1.2, frigMul:1, turnsAdd:0, defMul:1,
        pitch:"Peu de mondes en Bordure Extérieure, mais les meilleurs guerriers de la galaxie.",
-       strength:"Guerriers aguerris : vétérance et moral", weakness:"Peu de production spatiale (vaisseaux +20 %)"},
+       strength:"Meilleures troupes au sol (+30 %), guerriers aguerris", weakness:"Peu de production spatiale (vaisseaux +20 %)"},
   lig:{name:"Ligue de la Bordure", color:"#e0703f", capital:"lothal", fleetWord:"Flottille",
        start:{cr:220, mat:110, inf:15}, planets:["lothal","ryloth","christophsis","eriadu","ithor"],
-       vet:0, morale:0, baseLoyalty:46, conquest:30, costMul:1, frigMul:1, turnsAdd:0, defMul:1.3,
+       vet:0, morale:0, ground:1, baseLoyalty:46, conquest:30, costMul:1, frigMul:1, turnsAdd:0, defMul:1.3,
        pitch:"Beaucoup de petits mondes indépendants qui ont choisi de s'armer ensemble.",
        strength:"Commerce et défenses planétaires (+30 %)", weakness:"Cohésion fragile : loyauté plus basse"},
 };
 const INDEPENDENT_COLOR = "#5d6780";
 // Mondes indépendants qui se défendent bien mieux que leur région ne le laisse croire.
 const HOLDOUTS = {moncala:2, kashyyyk:1.8, csilla:1.8, carida:1.5};
+// [système, vaisseaux, troupes embarquées]
 const START_FLEETS = {
-  emp:[["kaldor",{dest:2, frig:3, esc:4}], ["vassek",{dest:1, frig:2, esc:2}]],
-  rep:[["coruscant",{dest:2, frig:3, esc:4}], ["kuat",{frig:2, esc:2}]],
-  man:[["mandalore",{dest:1, frig:3, esc:6}], ["concord",{frig:2, esc:2}]],
-  lig:[["lothal",{frig:2, esc:3}], ["eriadu",{frig:1, esc:2}]],
+  emp:[["kaldor",{dest:2, frig:3, esc:4},{inf:3, walk:1}], ["vassek",{dest:1, frig:2, esc:2},{inf:2}]],
+  rep:[["coruscant",{dest:2, frig:3, esc:4},{inf:4, tank:1, art:1}], ["kuat",{frig:2, esc:2},{inf:2}]],
+  man:[["mandalore",{dest:1, frig:3, esc:6},{inf:5, tank:1}], ["concord",{frig:2, esc:2},{inf:2}]],
+  lig:[["lothal",{frig:2, esc:3},{inf:2, art:1}], ["eriadu",{frig:1, esc:2},{inf:2}]],
 };
+// Garnisons de départ des mondes de faction : capitale, puis les autres.
+const START_GARRISON = {capital:{inf:4, tank:2, walk:1, art:1}, other:{inf:2, tank:1}};
 
 // ---------- Données : vaisseaux ----------
 const SHIP_TYPES = ["dest", "frig", "esc"];
@@ -284,6 +292,19 @@ const SHIPS = {
   esc: {name:"Escadron",  plural:"Escadrons",  cr:16,  mat:6,  turns:1, upkeep:1, siege:1, power:1.5},
 };
 const FLEET_MP = 2;
+// Capacité de transport de troupes, en places.
+const FLEET_CAP = {dest:6, frig:2, esc:0};
+
+// ---------- Données : troupes (v0.3) ----------
+// `cap` = places occupées dans les soutes ; `yard` = demande un chantier (usines).
+const TROOP_TYPES = ["inf", "tank", "walk", "art"];
+const TROOPS = {
+  inf: {name:"Infanterie", one:"régiment d'infanterie", plural:"Régiments d'infanterie", cr:20, mat:5,  turns:1, upkeep:0.5, power:2, cap:1, yard:false},
+  tank:{name:"Blindés",    one:"blindé",               plural:"Blindés",                cr:45, mat:25, turns:2, upkeep:1,   power:4, cap:2, yard:true},
+  walk:{name:"Marcheurs",  one:"marcheur",             plural:"Marcheurs",              cr:80, mat:45, turns:3, upkeep:2,   power:7, cap:3, yard:true},
+  art: {name:"Artillerie", one:"batterie d'artillerie", plural:"Batteries d'artillerie", cr:40, mat:20, turns:2, upkeep:1,   power:3, cap:2, yard:false},
+};
+const MAX_DRILL = 2;
 const TAX = {
   low:   {label:"Bas",    mul:0.6,  loy:12},
   normal:{label:"Normal", mul:1,    loy:0},
@@ -301,7 +322,7 @@ function costOf(fid, type){
 // ---------- Nouvelle partie ----------
 function newGame(player, seed){
   seed = (seed == null ? Math.floor(Math.random() * 2 ** 32) : seed) >>> 0;
-  const st = {version:2, turn:1, rng:seed, seed, player, systems:{}, fleets:[], nextFleet:1,
+  const st = {version:3, turn:1, rng:seed, seed, player, systems:{}, fleets:[], nextFleet:1,
               fleetCount:{}, factions:{}, log:[], report:[], pending:[], over:null};
   FACTION_IDS.forEach(f => {
     const F = FACTIONS[f];
@@ -333,10 +354,17 @@ function newGame(player, seed){
     st.systems[id] = {
       id, owner, prod, maxDef, def:maxDef, yard:yards.has(id), hub:hubs.has(id),
       loyalty: owner ? FACTIONS[owner].baseLoyalty + (cap ? 15 : 0) : 50,
-      tax:"normal", queue:[], conquered:false, heldSince:1, besieged:false, appeased:0, sabotage:false,
+      tax:"normal", queue:[], drill:[], conquered:false, heldSince:1, besieged:false, appeased:0, sabotage:false,
+      garrison:{inf:0, tank:0, walk:0, art:0},
     };
+    const g = st.systems[id];
+    g.garrison = owner ? troops(cap ? START_GARRISON.capital : START_GARRISON.other) : militia(g);
+    if(owner === "man") g.garrison.inf++;
   });
-  FACTION_IDS.forEach(f => START_FLEETS[f].forEach(([at, ships]) => addFleet(st, f, at, ships, FACTIONS[f].vet)));
+  FACTION_IDS.forEach(f => START_FLEETS[f].forEach(([at, ships, tr]) => {
+    const fl = addFleet(st, f, at, ships, FACTIONS[f].vet);
+    fl.troops = troops(tr);
+  }));
   logEv(st, "La galaxie retient son souffle. Dix ans après l'Effondrement, chacun compte ses vaisseaux.", "info", []);
   st.report = st.log; st.log = [];
   return st;
@@ -350,8 +378,8 @@ function logEv(st, msg, tone, who){ st.log.push({t:st.turn, msg, tone:tone || "i
 const ROMAN = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV","XVI","XVII","XVIII","XIX","XX"];
 function addFleet(st, owner, at, ships, vet){
   const n = ++st.fleetCount[owner];
-  const f = {id:st.nextFleet++, owner, at, from:at, mp:FLEET_MP, vet:vet || 0,
-             ships:{dest:ships.dest || 0, frig:ships.frig || 0, esc:ships.esc || 0},
+  const f = {id:st.nextFleet++, owner, at, from:at, mp:FLEET_MP, vet:vet || 0, landed:0,
+             ships:{dest:ships.dest || 0, frig:ships.frig || 0, esc:ships.esc || 0}, troops:troops(),
              name:FACTIONS[owner].fleetWord + " " + (ROMAN[n - 1] || n)};
   st.fleets.push(f);
   return f;
@@ -368,11 +396,66 @@ function hostilePowerAt(st, sysId, fid){ return hostileFleetsAt(st, sysId, fid).
 function ownFleetsAt(st, sysId, fid){ return st.fleets.filter(f => f.at === sysId && f.owner === fid); }
 function removeFleet(st, f){ st.fleets = st.fleets.filter(x => x !== f); }
 
+// ---------- Troupes ----------
+function troops(o){ o = o || {}; return {inf:o.inf || 0, tank:o.tank || 0, walk:o.walk || 0, art:o.art || 0}; }
+function troopCount(t){ return t.inf + t.tank + t.walk + t.art; }
+function troopPower(t, fid){ return TROOP_TYPES.reduce((s, k) => s + t[k] * TROOPS[k].power, 0) * (fid ? FACTIONS[fid].ground : 1); }
+function troopLoad(t){ return TROOP_TYPES.reduce((s, k) => s + t[k] * TROOPS[k].cap, 0); }
+function fleetCap(f){ return SHIP_TYPES.reduce((s, t) => s + f.ships[t] * FLEET_CAP[t], 0); }
+function fleetLoad(f){ return troopLoad(f.troops); }
+// Milice d'un monde indépendant, à la mesure de ses défenses.
+function militia(s){
+  const k = HOLDOUTS[s.id] || 1;
+  return troops({inf:Math.round((2 + s.maxDef / 15) * Math.min(k, 1.6)), tank:s.maxDef > 40 ? 1 : 0, art:s.maxDef > 30 ? 1 : 0});
+}
+// Des vaisseaux perdus, et les troupes qui ne tiennent plus à bord sont perdues avec eux.
+function trimTroops(f){
+  const lost = troops();
+  for(const t of ["walk", "tank", "art", "inf"]){
+    while(f.troops[t] > 0 && fleetLoad(f) > fleetCap(f)){ f.troops[t]--; lost[t]++; }
+  }
+  return lost;
+}
+function canEmbark(st, f, type){
+  const s = st.systems[f.at];
+  return s.owner === f.owner && s.garrison[type] > 0 && fleetLoad(f) + TROOPS[type].cap <= fleetCap(f);
+}
+function embark(st, f, type){
+  if(!canEmbark(st, f, type)) return false;
+  st.systems[f.at].garrison[type]--; f.troops[type]++;
+  return true;
+}
+function canDisembark(st, f, type){ return st.systems[f.at].owner === f.owner && f.troops[type] > 0; }
+function disembark(st, f, type){
+  if(!canDisembark(st, f, type)) return false;
+  f.troops[type]--; st.systems[f.at].garrison[type]++;
+  return true;
+}
+function recruitCost(fid, type){ const T = TROOPS[type]; return {cr:T.cr, mat:T.mat, turns:T.turns + FACTIONS[fid].turnsAdd}; }
+function canRecruit(st, sysId, type){
+  const s = st.systems[sysId], fid = s.owner;
+  if(!fid || s.drill.length >= MAX_DRILL || s.loyalty < 35 || (TROOPS[type].yard && !s.yard)) return false;
+  const c = recruitCost(fid, type), F = st.factions[fid];
+  return F.cr >= c.cr && F.mat >= c.mat;
+}
+function queueRecruit(st, sysId, type){
+  if(!canRecruit(st, sysId, type)) return false;
+  const s = st.systems[sysId], c = recruitCost(s.owner, type), F = st.factions[s.owner];
+  F.cr -= c.cr; F.mat -= c.mat;
+  s.drill.push({type, left:c.turns, total:c.turns});
+  return true;
+}
+function describeTroops(t){
+  const parts = TROOP_TYPES.filter(k => t[k] > 0).map(k => t[k] + " " + (t[k] > 1 ? TROOPS[k].plural.toLowerCase() : TROOPS[k].one));
+  return parts.length ? parts.join(", ") : "aucune troupe";
+}
+
 // Fusion : la vétérance se dilue au prorata des vaisseaux.
 function mergeFleets(st, keep, other){
   const a = shipCount(keep), b = shipCount(other);
   keep.vet = Math.round((keep.vet * a + other.vet * b) / Math.max(1, a + b));
   SHIP_TYPES.forEach(t => { keep.ships[t] += other.ships[t]; });
+  TROOP_TYPES.forEach(t => { keep.troops[t] += other.troops[t]; });
   keep.mp = Math.min(keep.mp, other.mp);
   removeFleet(st, other);
 }
@@ -390,7 +473,12 @@ function splitFleet(st, f){
   }
   SHIP_TYPES.forEach(t => { f.ships[t] -= half[t]; });
   const g = addFleet(st, f.owner, f.at, half, f.vet);
-  g.mp = f.mp; g.from = f.from;
+  g.mp = f.mp; g.from = f.from; g.landed = f.landed;
+  // Les troupes qui ne tiennent plus dans les soutes passent dans la nouvelle flotte.
+  TROOP_TYPES.slice().reverse().forEach(t => {
+    while(f.troops[t] > 0 && fleetLoad(f) > fleetCap(f) && fleetLoad(g) + TROOPS[t].cap <= fleetCap(g)){ f.troops[t]--; g.troops[t]++; }
+  });
+  trimTroops(f);
   return g;
 }
 
@@ -429,7 +517,10 @@ function income(st, fid){
     cr += y.cr; mat += y.mat; inf += y.inf;
   });
   const trade = tradeRoutes(st, fid).reduce((s, [a, b]) => s + routeValue(st, a, b), 0);
-  const upkeep = st.fleets.filter(f => f.owner === fid).reduce((s, f) => s + SHIP_TYPES.reduce((u, t) => u + f.ships[t] * SHIPS[t].upkeep, 0), 0);
+  const tUp = t => TROOP_TYPES.reduce((u, k) => u + t[k] * TROOPS[k].upkeep, 0);
+  // Une garnison vit en partie sur son monde : elle coûte moitié moins qu'une troupe embarquée.
+  const upkeep = Math.round(st.fleets.filter(f => f.owner === fid).reduce((s, f) => s + SHIP_TYPES.reduce((u, t) => u + f.ships[t] * SHIPS[t].upkeep, 0) + tUp(f.troops), 0)
+    + planetsOf(st, fid).reduce((s, p) => s + tUp(p.garrison) / 2, 0));
   cr = Math.round(cr); mat = Math.round(mat); inf = Math.round(inf);
   return {cr, mat, inf, trade:Math.round(trade), upkeep, net:cr + Math.round(trade) - upkeep};
 }
@@ -470,6 +561,7 @@ function loyaltyTarget(st, s){
   if(s.id === fs.capital) t += 20;
   t += TAX[s.tax].loy;
   if(ownFleetsAt(st, s.id, s.owner).length) t += 6;
+  if(troopCount(s.garrison) >= 3) t += 4;
   if(blockaded(st, s.id)) t -= 10;
   if(fs.cr < 0) t -= 12;
   t -= fs.shock;
@@ -551,10 +643,13 @@ function applyBattle(st, bs, res){
   const sysName = SYS[bs.sys].name;
   const aF = FACTIONS[bs.attFid].name, dF = FACTIONS[bs.defFid].name;
   const lossTxt = {att:{dest:0, frig:0, esc:0}, def:{dest:0, frig:0, esc:0}};
+  const troopLost = {att:0, def:0};
   ["att", "def"].forEach(side => bs[side].forEach(id => {
     const f = fleetById(st, id); const l = res.losses[id];
     if(!f || !l) return;
     SHIP_TYPES.forEach(t => { const n = Math.min(l[t], f.ships[t]); f.ships[t] -= n; lossTxt[side][t] += n; });
+    const lost = trimTroops(f);
+    TROOP_TYPES.forEach(t => { troopLost[side] += lost[t]; });
   }));
   const winSide = res.winner, loseSide = winSide === "att" ? "def" : "att";
   const winFid = winSide === "att" ? bs.attFid : bs.defFid;
@@ -573,9 +668,90 @@ function applyBattle(st, bs, res){
   st.factions[loseFid].shock = Math.min(20, st.factions[loseFid].shock + 4);
   const winner = FACTIONS[winFid].name;
   const msg = "Bataille de " + sysName + " : victoire de " + winner + (res.how === "auto" ? " (résolution automatique)" : "") +
-    ". Pertes — " + aF + " : " + describeShips(lossTxt.att) + " ; " + dF + " : " + describeShips(lossTxt.def) + "." + retreatTxt;
+    ". Pertes — " + aF + " : " + describeShips(lossTxt.att) + " ; " + dF + " : " + describeShips(lossTxt.def) + "." + retreatTxt +
+    (troopLost.att + troopLost.def ? " " + (troopLost.att + troopLost.def) + " unité(s) de troupes coulent avec leurs vaisseaux." : "");
   logEv(st, msg, winFid === st.player ? "good" : loseFid === st.player ? "bad" : "info", [bs.attFid, bs.defFid]);
   return {msg, winFid, loseFid, lossTxt};
+}
+
+// ---------- Invasions (v0.3) ----------
+// Tenir l'orbite, puis débarquer : une invasion par flotte et par tour.
+function facName(fid){ return fid ? FACTIONS[fid].name : "la milice indépendante"; }
+function fortification(s){ return s.maxDef ? s.def / s.maxDef : 0; }
+// Frappes orbitales par round : impossibles tant que le bouclier planétaire tient à 50 % ou plus.
+function orbitalSupport(f, s){
+  if(!f || (s && fortification(s) >= 0.5)) return 0;
+  return Math.min(2, Math.ceil(siegePower(f) / 16));
+}
+function canInvade(st, f){
+  if(!f) return false;
+  const s = st.systems[f.at];
+  return s.owner !== f.owner && f.landed !== st.turn && troopCount(f.troops) > 0 && !hostileFleetsAt(st, f.at, f.owner).length;
+}
+function makeInvasion(st, f){ return {kind:"ground", sys:f.at, fleet:f.id, attFid:f.owner, defFid:st.systems[f.at].owner}; }
+function invasionValid(st, gs){
+  const f = fleetById(st, gs.fleet), s = st.systems[gs.sys];
+  return !!f && f.at === gs.sys && f.owner === gs.attFid && s.owner === gs.defFid && troopCount(f.troops) > 0 &&
+         f.landed !== st.turn && !hostileFleetsAt(st, gs.sys, f.owner).length;
+}
+function groundPower(st, gs){
+  const f = fleetById(st, gs.fleet), s = st.systems[gs.sys];
+  return {att:troopPower(f.troops, f.owner) + orbitalSupport(f, s) * 2,
+          def:troopPower(s.garrison, s.owner) * (1 + 0.6 * fortification(s))};
+}
+function autoGround(st, gs, penalFid){
+  const f = fleetById(st, gs.fleet), s = st.systems[gs.sys];
+  let {att:pa, def:pd} = groundPower(st, gs);
+  if(penalFid === gs.attFid) pa *= 0.85;
+  if(penalFid && penalFid === gs.defFid) pd *= 0.85;
+  pa *= 0.8 + 0.4 * rnd(st); pd *= 0.8 + 0.4 * rnd(st);
+  const winner = pa >= pd ? "att" : "def";
+  const share = Math.max(pa, pd) / Math.max(0.01, pa + pd);
+  const winLoss = 0.8 * (1 - share), loseLoss = clamp(0.5 + (share - 0.5), 0.35, 0.95);
+  const roll = (t, frac) => { const l = troops(); TROOP_TYPES.forEach(k => { for(let i = 0; i < t[k]; i++) if(rnd(st) < frac) l[k]++; }); return l; };
+  return {winner, how:"auto", losses:{
+    att:roll(f.troops, winner === "att" ? winLoss : loseLoss),
+    def:roll(s.garrison, winner === "def" ? winLoss : 1), // une garnison vaincue est anéantie ou capturée
+  }};
+}
+const UNOPPOSED = {winner:"att", how:"sans combat", losses:{att:troops(), def:troops()}};
+function applyGround(st, gs, res){
+  const f = fleetById(st, gs.fleet), s = st.systems[gs.sys];
+  TROOP_TYPES.forEach(t => {
+    f.troops[t] = Math.max(0, f.troops[t] - res.losses.att[t]);
+    s.garrison[t] = Math.max(0, s.garrison[t] - res.losses.def[t]);
+  });
+  f.landed = st.turn; f.mp = 0;
+  const lost = {att:troopCount(res.losses.att), def:troopCount(res.losses.def)};
+  const P = st.player;
+  let msg;
+  if(res.winner === "att"){
+    const survivors = troops(f.troops);
+    f.troops = troops();
+    if(gs.defFid) st.factions[gs.defFid].shock = Math.min(20, st.factions[gs.defFid].shock + 4);
+    msg = res.how === "sans combat"
+      ? FACTIONS[gs.attFid].name + " débarque sur " + SYS[gs.sys].name + " sans rencontrer de résistance."
+      : "Invasion de " + SYS[gs.sys].name + " : " + FACTIONS[gs.attFid].name + " l'emporte" + (res.how === "auto" ? " (résolution automatique)" : "") +
+        ". Pertes : " + lost.att + " unité(s) contre " + lost.def + " pour " + facName(gs.defFid) + ".";
+    logEv(st, msg, gs.attFid === P ? "good" : gs.defFid === P ? "bad" : "info", [gs.attFid, gs.defFid].filter(Boolean));
+    capture(st, s, gs.attFid);
+    s.garrison = survivors;
+  } else {
+    st.factions[gs.attFid].shock = Math.min(20, st.factions[gs.attFid].shock + 4);
+    msg = "Invasion de " + SYS[gs.sys].name + " repoussée par " + facName(gs.defFid) + (res.how === "auto" ? " (résolution automatique)" : "") +
+      ". Pertes : " + lost.att + " unité(s) pour " + FACTIONS[gs.attFid].name + ", " + lost.def + " pour les défenseurs. Les survivants rembarquent.";
+    logEv(st, msg, gs.attFid === P ? "bad" : gs.defFid === P ? "good" : "info", [gs.attFid, gs.defFid].filter(Boolean));
+  }
+  return {msg, winFid:res.winner === "att" ? gs.attFid : gs.defFid};
+}
+// Résolution automatique d'une bataille en attente, spatiale ou terrestre.
+function pendingValid(st, bs){ return bs.kind === "ground" ? invasionValid(st, bs) : battleValid(st, bs); }
+function resolveAuto(st, bs, penalFid){
+  if(bs.kind === "ground"){
+    const res = troopCount(st.systems[bs.sys].garrison) ? autoGround(st, bs, penalFid) : UNOPPOSED;
+    return applyGround(st, bs, res);
+  }
+  return applyBattle(st, bs, autoBattle(st, bs, penalFid));
 }
 
 // ---------- Fin de tour ----------
@@ -583,7 +759,7 @@ function capture(st, s, fid){
   const old = s.owner;
   s.owner = fid; s.conquered = true; s.heldSince = st.turn;
   s.loyalty = FACTIONS[fid].conquest; s.def = Math.round(s.maxDef * 0.3);
-  s.queue = []; s.tax = "normal"; s.besieged = false; s.sabotage = false;
+  s.queue = []; s.drill = []; s.tax = "normal"; s.besieged = false; s.sabotage = false;
   const who = old ? [fid, old] : [fid];
   if(old && st.factions[old].capital === s.id){
     st.factions[old].shock = Math.min(20, st.factions[old].shock + 12);
@@ -596,7 +772,8 @@ function capture(st, s, fid){
 
 function finishTurn(st){
   const P = st.player;
-  // 1. Sièges : une flotte hostile seule en orbite use la défense, puis prend la planète.
+  // 1. Sièges : une flotte hostile seule en orbite use les défenses planétaires.
+  //    Depuis v0.3, prendre le monde demande un débarquement (voir invasions).
   Object.values(st.systems).forEach(s => {
     const hostile = hostileFleetsAt(st, s.id, s.owner);
     const defenders = s.owner ? ownFleetsAt(st, s.id, s.owner) : [];
@@ -607,9 +784,8 @@ function finishTurn(st){
       const top = Object.keys(byOwner).sort((a, b) => byOwner[b] - byOwner[a])[0];
       s.def = Math.max(0, s.def - total);
       s.besieged = true;
-      if(s.def <= 0) capture(st, s, top);
-      else if(s.owner === P || top === P)
-        logEv(st, "Siège de " + SYS[s.id].name + " : défenses à " + s.def + "/" + s.maxDef + ".", s.owner === P ? "bad" : "info", [top, s.owner]);
+      if(s.owner === P || top === P)
+        logEv(st, "Siège de " + SYS[s.id].name + " : défenses à " + s.def + "/" + s.maxDef + (s.def ? "" : ", les fortifications sont tombées") + ".", s.owner === P ? "bad" : "info", [top, s.owner]);
     } else {
       s.besieged = false;
       s.def = Math.min(s.maxDef, s.def + Math.ceil(s.maxDef * 0.1));
@@ -638,6 +814,21 @@ function finishTurn(st){
     } else addFleet(st, s.owner, s.id, ships, 0);
     if(s.owner === P) logEv(st, SHIPS[q.type].name + " sorti des chantiers de " + SYS[s.id].name + ".", "good", [P]);
   });
+  // 3b. Recrutement des troupes et milices indépendantes qui se reforment
+  Object.values(st.systems).forEach(s => {
+    if(!s.owner){
+      const m = militia(s);
+      if(st.turn % 4 === 0 && !s.besieged) TROOP_TYPES.forEach(t => { if(s.garrison[t] < m[t]) s.garrison[t]++; });
+      return;
+    }
+    if(!s.drill.length) return;
+    const q = s.drill[0];
+    q.left--;
+    if(q.left > 0) return;
+    s.drill.shift();
+    s.garrison[q.type]++;
+    if(s.owner === P) logEv(st, TROOPS[q.type].name + " prête à " + SYS[s.id].name + ".", "good", [P]);
+  });
   // 4. Loyauté, sabotages, révoltes
   Object.values(st.systems).forEach(s => {
     if(!s.owner) return;
@@ -648,9 +839,10 @@ function finishTurn(st){
       s.sabotage = true;
       if(s.owner === P) logEv(st, "Sabotages sur " + SYS[s.id].name + " : la production est divisée par deux.", "bad", [P]);
     } else if(s.loyalty >= 40) s.sabotage = false;
-    if(s.loyalty < 20 && !ownFleetsAt(st, s.id, s.owner).length && rnd(st) < 0.25){
+    if(s.loyalty < 20 && !ownFleetsAt(st, s.id, s.owner).length && troopPower(s.garrison, s.owner) < 8 && rnd(st) < 0.25){
       const old = s.owner;
-      s.owner = null; s.queue = []; s.def = Math.round(s.maxDef * 0.6); s.loyalty = 50; s.tax = "normal"; s.conquered = false; s.sabotage = false;
+      // La garnison est massacrée ou passe aux rebelles : la milice prend sa place.
+      s.owner = null; s.queue = []; s.drill = []; s.garrison = militia(s); s.def = Math.round(s.maxDef * 0.6); s.loyalty = 50; s.tax = "normal"; s.conquered = false; s.sabotage = false;
       if(st.factions[old].capital === s.id) st.factions[old].shock = Math.min(20, st.factions[old].shock + 12);
       logEv(st, SYS[s.id].name + " se soulève et fait sécession de " + FACTIONS[old].name + ".", old === P ? "bad" : "info", [old]);
     }
@@ -717,7 +909,9 @@ function distToFrontier(st, from, fid){
 function aiChoose(st, f){
   const my = fleetPower(st, f);
   const here = st.systems[f.at];
-  if(here.owner !== f.owner && !hostileFleetsAt(st, f.at, f.owner).length) return null; // siège en cours : on reste
+  // Siège en cours : on reste tant que nos troupes peuvent espérer prendre le monde.
+  if(here.owner !== f.owner && !hostileFleetsAt(st, f.at, f.owner).length &&
+     (!troopCount(here.garrison) || troopPower(f.troops, f.owner) >= troopPower(here.garrison, here.owner) * 1.1)) return null;
   const hereThreat = maxHostileAdj(st, f.at, f.owner);
   let best = null;
   let bestScore = (hereThreat > 0 && hereThreat < my * 1.5 ? 8 : 0) + (3 - Math.min(3, distToFrontier(st, f.at, f.owner)));
@@ -733,14 +927,35 @@ function aiChoose(st, f){
       const turns = s.def / Math.max(1, siegePower(f));
       sc = sysValue(st, s) - turns * 1.5 + (s.owner === null ? 4 : 0);
       if(maxHostileAdj(st, n, f.owner) > my * 1.2) sc -= 20;
+      // Sans assez de troupes pour débarquer, assiéger ne sert pas à grand-chose.
+      if(troopPower(f.troops, f.owner) < troopPower(s.garrison, s.owner) * 1.1) sc -= 18;
     } else {
       const threat = maxHostileAdj(st, n, f.owner);
       sc = (threat > 0 && threat < my * 1.5 ? 6 : 0.5) + (3 - Math.min(3, distToFrontier(st, n, f.owner)));
+      if(fleetLoad(f) < fleetCap(f) / 2 && spareTroops(st, s) > 0) sc += 4;
     }
     sc += rnd(st) * 2;
     if(sc > bestScore){ bestScore = sc; best = n; }
   });
   return best;
+}
+// Troupes qu'un monde peut céder à une flotte : on garde une garnison minimale.
+function spareTroops(st, s){
+  const keep = s.id === st.factions[s.owner].capital ? 3 : 1;
+  return Math.max(0, s.garrison.inf - keep) + s.garrison.tank + s.garrison.walk + s.garrison.art;
+}
+function aiEmbark(st, f){
+  const s = st.systems[f.at];
+  if(s.owner !== f.owner) return;
+  const keep = s.id === st.factions[s.owner].capital ? 3 : 1;
+  for(const t of ["walk", "tank", "art", "inf"]){
+    while(canEmbark(st, f, t) && (t !== "inf" || s.garrison.inf > keep)) embark(st, f, t);
+  }
+}
+function aiShouldInvade(st, f){
+  if(!canInvade(st, f)) return false;
+  const gs = makeInvasion(st, f), p = groundPower(st, gs);
+  return p.def === 0 || p.att >= p.def * 1.15;
 }
 function aiManage(st, fid){
   const F = st.factions[fid];
@@ -759,6 +974,16 @@ function aiManage(st, fid){
     else if(F.cr >= e.cr + 20 && F.mat >= e.mat) t = "esc";
     if(t) queueBuild(st, s.id, t);
   });
+  // Recrutement : de l'infanterie partout, du lourd dans les chantiers quand les caisses le permettent.
+  mine.filter(s => s.drill.length === 0 && s.loyalty >= 35).forEach(s => {
+    if(F.cr < 60) return;
+    let t = null;
+    const r = rnd(st);
+    if(s.yard && F.cr > 180 && r < 0.35) t = r < 0.12 ? "walk" : "tank";
+    else if(r < 0.5 && F.cr > 120) t = "art";
+    else if(s.garrison.inf < 4 || F.cr > 250) t = "inf";
+    if(t) queueRecruit(st, s.id, t);
+  });
 }
 // Joue le tour d'une faction IA. `onBattle(bs)` reçoit chaque bataille déclenchée.
 function aiFaction(st, fid, onBattle){
@@ -775,13 +1000,17 @@ function aiFaction(st, fid, onBattle){
       if(safe){ f.from = f.at; f.at = safe; f.mp = 0; }
       return;
     }
+    aiEmbark(st, f);
+    if(aiShouldInvade(st, f)){ onBattle(makeInvasion(st, f)); return; }
     let guard = FLEET_MP + 1;
     while(f.mp > 0 && guard-- > 0 && st.fleets.includes(f)){
       const to = aiChoose(st, f);
       if(!to) break;
       const foe = moveFleet(st, f, to);
-      if(foe){ onBattle(makeBattle(st, f, foe)); break; }
+      if(foe){ onBattle(makeBattle(st, f, foe)); return; }
+      aiEmbark(st, f);
     }
+    if(st.fleets.includes(f) && aiShouldInvade(st, f)) onBattle(makeInvasion(st, f));
   });
 }
 // Phase des IA. Les batailles contre le joueur sont mises en attente (st.pending) ;
@@ -794,26 +1023,44 @@ function runAI(st, opts){
     aiFaction(st, fid, bs => {
       const involvesPlayer = (bs.attFid === st.player || bs.defFid === st.player) && !opts.includePlayer;
       if(involvesPlayer) st.pending.push(bs);
-      else if(battleValid(st, bs)) applyBattle(st, bs, autoBattle(st, bs, null));
+      else if(pendingValid(st, bs)) resolveAuto(st, bs, null);
     });
   });
 }
 
 // =====================================================================
 // v0.2 — Bataille spatiale tactique sur grille hexagonale
+// v0.3 — Le même moteur sert aux batailles terrestres (invasions)
 // =====================================================================
-const BCOLS = 11, BROWS = 8, BMAX_ROUNDS = 12, BMAX_ON_BOARD = 16;
+const BCOLS = 11, BROWS = 8, BMAX_ROUNDS = 12, BMAX_ROUNDS_GROUND = 10, BMAX_ON_BOARD = 16;
+// `sh` = boucliers (espace) ou blindage (sol), par arc ; une unité sans `sh` n'a pas d'orientation.
+// `bypass` = part des dégâts qui ignore boucliers et blindage ; `hitRun` = peut bouger après avoir tiré ;
+// `static` = ne peut pas tirer après avoir bougé ; `heavy` = gêné par la forêt et la boue.
 const UNITS = {
   dest:{hull:120, sh:{f:60, s:40, r:20}, mp:2, range:4, dmg:30},
   frig:{hull:60,  sh:{f:30, s:20, r:10}, mp:3, range:3, dmg:16},
-  esc: {hull:24,  sh:null,               mp:5, range:1, dmg:9},
+  esc: {hull:24,  sh:null,               mp:5, range:1, dmg:9, bypass:0.5, hitRun:true},
+  inf: {hull:40,  sh:null,               mp:2, range:2, dmg:11, bypass:0.3, ground:true},
+  tank:{hull:75,  sh:{f:30, s:18, r:8},  mp:3, range:2, dmg:18, ground:true, heavy:true, regen:0},
+  walk:{hull:120, sh:{f:40, s:25, r:10}, mp:2, range:3, dmg:24, ground:true, heavy:true, regen:0},
+  art: {hull:35,  sh:null,               mp:1, range:5, dmg:22, ground:true, minRange:2, static:true},
 };
-// Multiplicateur de dégâts attaquant → cible : les frégates chassent les chasseurs,
+// Multiplicateur de dégâts attaquant → cible. Espace : les frégates chassent les chasseurs,
 // les chasseurs harcèlent les destroyers, les destroyers écrasent les frégates.
+// Sol : l'infanterie tient le terrain, les blindés percent, l'artillerie pilonne de loin.
 const VS = {
   dest:{dest:1, frig:1.3, esc:0.5},
   frig:{dest:0.8, frig:1, esc:2},
   esc: {dest:1.6, frig:0.9, esc:1},
+  inf: {inf:1, tank:0.7, walk:0.6, art:1.3},
+  tank:{inf:1.2, tank:1, walk:0.9, art:1.4},
+  walk:{inf:1.3, tank:1.2, walk:1, art:1.2},
+  art: {inf:1.3, tank:1, walk:1.1, art:1},
+};
+const WEATHER = {
+  clear:{name:"Temps clair", desc:"aucun effet"},
+  storm:{name:"Tempête", desc:"portée de tir −1"},
+  mud:  {name:"Boue", desc:"blindés et marcheurs −1 mouvement"},
 };
 // Directions en « odd-r » (lignes impaires décalées) : 0 E, 1 NE, 2 NO, 3 O, 4 SO, 5 SE.
 const HDIR_EVEN = [[1,0],[0,-1],[-1,-1],[-1,0],[-1,1],[0,1]];
@@ -831,58 +1078,101 @@ const hk = (c, r) => c + "," + r;
 function bUnitAt(b, c, r){ return b.units.find(u => u.on && !u.gone && u.c === c && u.r === r) || null; }
 function bTerrain(b, c, r){ return b.terrain[hk(c, r)] || null; }
 function bLog(b, msg, tone){ b.log.push({msg, tone:tone || "info", round:b.round}); }
+function unitName(type){ return (SHIPS[type] || TROOPS[type]).name; }
+function isAgile(u){ return !UNITS[u.type].sh; } // pas d'orientation : chasseurs, infanterie, artillerie
+function bSideName(b, side){ return b.sides[side].fid ? FACTIONS[b.sides[side].fid].name : "Milice"; }
 
-function makeUnit(b, side, type, fleet){
-  const U = UNITS[type];
+// `src` = d'où vient l'unité : {id, vet, fid}. `id` sert à rendre les pertes à la carte.
+function makeUnit(b, side, type, src){
+  const U = UNITS[type], F = src.fid ? FACTIONS[src.fid] : null;
   return {
-    id:b.nextId++, side, type, fleetId:fleet.id, c:-1, r:-1, on:false, gone:null,
+    id:b.nextId++, side, type, src:src.id, c:-1, r:-1, on:false, gone:null,
     facing: side === 0 ? 0 : 3, hull:U.hull, maxHull:U.hull,
     sh: U.sh ? {...U.sh} : null, maxSh: U.sh ? {...U.sh} : null,
-    mp:0, fired:false, hit:false, vet:fleet.vet,
-    morale: clamp(70 + fleet.vet * 8 + FACTIONS[fleet.owner].morale, 0, 100),
+    mp:0, fired:false, hit:false, vet:src.vet || 0,
+    dmgMul: U.ground && F ? F.ground : 1,
+    morale: clamp((F ? 70 + F.morale : 60) + (src.vet || 0) * 8, 0, 100),
     routing:false, eng:false, wpn:false, flag:false,
   };
 }
-
-// Construit la bataille à partir des flottes de la carte. Côté 0 = attaquant (à gauche).
-function createBattle(st, bs){
-  const b = {rng:Math.floor(rnd(st) * 4294967296) >>> 0, round:1, active:0, cols:BCOLS, rows:BROWS,
-             terrain:{}, units:[], reserve:[], log:[], over:null, nextId:1, sys:bs.sys,
-             sides:[{fid:bs.attFid, ids:bs.att.slice(), ai:true}, {fid:bs.defFid, ids:bs.def.slice(), ai:true}]};
-  // Terrain : nébuleuses (senseurs coupés) et champs d'astéroïdes (couverture), au centre.
-  const blobs = rint(b, 1, 2) + rint(b, 1, 2);
-  for(let i = 0; i < blobs; i++){
-    const kind = i % 2 === 0 ? "neb" : "ast";
-    let c = rint(b, 3, b.cols - 4), r = rint(b, 0, b.rows - 1);
+function baseBattle(st, sys, sides){
+  return {rng:Math.floor(rnd(st) * 4294967296) >>> 0, round:1, active:0, cols:BCOLS, rows:BROWS,
+          terrain:{}, units:[], reserve:[], log:[], over:null, nextId:1, sys, sides,
+          ground:false, maxRounds:BMAX_ROUNDS, points:[], orbital:null, weather:null, fort:0};
+}
+function bBlobs(b, kind, count, minC, maxC){
+  for(let i = 0; i < count; i++){
+    let c = rint(b, minC, maxC), r = rint(b, 0, b.rows - 1);
     const size = rint(b, 3, 5);
     for(let k = 0; k < size; k++){
-      if(inBoard(b, c, r) && c >= 3 && c <= b.cols - 4) b.terrain[hk(c, r)] = kind;
+      if(inBoard(b, c, r) && c >= minC && c <= maxC) b.terrain[hk(c, r)] = kind;
       [c, r] = hexNeighbor(c, r, rint(b, 0, 5));
     }
   }
+}
+// Déploiement : les unités lourdes ou à longue portée derrière, le reste devant.
+const BACK_TYPES = ["dest", "walk", "art"];
+const FLAG_ORDER = ["dest", "frig", "esc", "walk", "tank", "inf", "art"];
+function bDeploy(b, side, list){
   const order = [3, 4, 2, 5, 1, 6, 0, 7];
+  const back = side === 0 ? 0 : b.cols - 1, front = side === 0 ? 1 : b.cols - 2;
+  const slots = {back:order.map(r => [back, r]), front:order.map(r => [front, r])};
+  list.forEach(({type, src, round}) => {
+    const u = makeUnit(b, side, type, src);
+    b.units.push(u);
+    if(round){ b.reserve.push({id:u.id, round}); return; }
+    const pref = BACK_TYPES.includes(type) ? ["back", "front"] : ["front", "back"];
+    let slot = null;
+    for(const p of pref) if(slots[p].length){ slot = slots[p].shift(); break; }
+    if(slot){ u.c = slot[0]; u.r = slot[1]; u.on = true; }
+    else b.reserve.push({id:u.id, round:1});
+  });
+  const flag = b.units.filter(u => u.side === side && u.on).sort((a, c) => FLAG_ORDER.indexOf(a.type) - FLAG_ORDER.indexOf(c.type))[0];
+  if(flag) flag.flag = true;
+}
+
+// Bataille spatiale à partir des flottes de la carte. Côté 0 = attaquant (à gauche).
+function createBattle(st, bs){
+  const b = baseBattle(st, bs.sys, [{fid:bs.attFid, ids:bs.att.slice(), ai:true}, {fid:bs.defFid, ids:bs.def.slice(), ai:true}]);
+  // Terrain : nébuleuses (senseurs coupés) et champs d'astéroïdes (couverture), au centre.
+  bBlobs(b, "neb", rint(b, 1, 2), 3, b.cols - 4);
+  bBlobs(b, "ast", rint(b, 1, 2), 3, b.cols - 4);
   [0, 1].forEach(side => {
-    const back = side === 0 ? 0 : b.cols - 1, front = side === 0 ? 1 : b.cols - 2;
-    const slots = {back:order.map(r => [back, r]), front:order.map(r => [front, r])};
-    const fleets = sideFleets(st, b.sides[side].ids);
-    fleets.forEach((f, i) => {
-      SHIP_TYPES.forEach(t => {
-        for(let k = 0; k < f.ships[t]; k++){
-          const u = makeUnit(b, side, t, f);
-          b.units.push(u);
-          if(i > 0){ b.reserve.push({id:u.id, round:3}); continue; }
-          const pref = t === "dest" ? ["back", "front"] : ["front", "back"];
-          let slot = null;
-          for(const p of pref) if(slots[p].length){ slot = slots[p].shift(); break; }
-          if(slot){ u.c = slot[0]; u.r = slot[1]; u.on = true; }
-          else b.reserve.push({id:u.id, round:1});
-        }
-      });
-    });
-    const flagship = b.units.filter(u => u.side === side && u.on).sort((a, c) => SHIP_TYPES.indexOf(a.type) - SHIP_TYPES.indexOf(c.type))[0];
-    if(flagship) flagship.flag = true;
+    const list = [];
+    sideFleets(st, b.sides[side].ids).forEach((f, i) => SHIP_TYPES.forEach(t => {
+      for(let k = 0; k < f.ships[t]; k++) list.push({type:t, src:{id:f.id, vet:f.vet, fid:f.owner}, round:i > 0 ? 3 : 0});
+    }));
+    bDeploy(b, side, list);
   });
   bLog(b, "La bataille de " + SYS[bs.sys].name + " commence.", "info");
+  bBeginSide(b);
+  return b;
+}
+
+// Bataille terrestre : les troupes de la flotte débarquent face à la garnison.
+function createGroundBattle(st, gs){
+  const f = fleetById(st, gs.fleet), s = st.systems[gs.sys];
+  const b = baseBattle(st, gs.sys, [{fid:gs.attFid, ids:[], ai:true}, {fid:gs.defFid, ids:[], ai:true}]);
+  b.ground = true; b.maxRounds = BMAX_ROUNDS_GROUND;
+  b.fort = Math.round(30 * fortification(s)) / 100;          // jusqu'à −30 % de dégâts pour les défenseurs
+  b.weather = ["clear", "clear", "storm", "mud"][rint(b, 0, 3)];
+  const per = orbitalSupport(f, s);
+  if(per) b.orbital = {side:0, per, left:0};
+  else if(siegePower(f)) b.shieldUp = true;
+  bBlobs(b, "forest", rint(b, 2, 3), 2, b.cols - 3);
+  bBlobs(b, "hill", rint(b, 1, 2), 2, b.cols - 3);
+  // Trois points de contrôle au centre, tenus au départ par le défenseur.
+  [1, 4, 6].forEach(r => {
+    const c = rint(b, 4, 6);
+    b.points.push({c, r, owner:1});
+  });
+  const list = (t, src) => { const out = []; TROOP_TYPES.forEach(k => { for(let i = 0; i < t[k]; i++) out.push({type:k, src}); }); return out; };
+  bDeploy(b, 0, list(f.troops, {id:"att", vet:0, fid:gs.attFid}));
+  bDeploy(b, 1, list(s.garrison, {id:"def", vet:0, fid:gs.defFid}));
+  bLog(b, "Débarquement sur " + SYS[gs.sys].name + ". " + WEATHER[b.weather].name + " (" + WEATHER[b.weather].desc + ").", "info");
+  if(b.fort) bLog(b, "Les défenseurs sont retranchés : −" + Math.round(b.fort * 100) + " % de dégâts subis.", "info");
+  if(b.orbital) bLog(b, "La flotte en orbite peut appuyer l'assaut : " + per + " frappe(s) orbitale(s) par round.", "info");
+  if(b.shieldUp) bLog(b, "Le bouclier planétaire tient encore : pas d'appui orbital. Assiéger d'abord l'aurait fait tomber.", "info");
   bBeginSide(b);
   return b;
 }
@@ -892,8 +1182,14 @@ function bFighting(b, side){
   return b.units.filter(u => u.side === side && !u.gone && !u.routing && u.on).length +
          b.reserve.filter(e => b.units.find(u => u.id === e.id).side === side).length;
 }
+function bStepCost(b, u, c, r){
+  const ter = bTerrain(b, c, r), U = UNITS[u.type];
+  if(ter === "ast" || ter === "hill") return 2;
+  if(ter === "forest" && U.heavy) return 2;
+  return 1;
+}
 
-// Déplacements possibles : Dijkstra sur la grille, astéroïdes = 2 points, cases occupées bloquées.
+// Déplacements possibles : Dijkstra sur la grille, terrain difficile = 2 points, cases occupées bloquées.
 function bReach(b, u){
   const mp = u.mp;
   const out = new Map();
@@ -907,7 +1203,7 @@ function bReach(b, u){
     for(let dir = 0; dir < 6; dir++){
       const [nc, nr] = hexNeighbor(c, r, dir);
       if(!inBoard(b, nc, nr) || bUnitAt(b, nc, nr)) continue;
-      const nd = d + (bTerrain(b, nc, nr) === "ast" ? 2 : 1);
+      const nd = d + bStepCost(b, u, nc, nr);
       if(nd > mp) continue;
       const key = hk(nc, nr);
       if(!dist.has(key) || nd < dist.get(key)){
@@ -919,16 +1215,29 @@ function bReach(b, u){
   }
   return out;
 }
+// Un point de contrôle appartient au dernier camp qui s'y tient (unité qui ne fuit pas).
+function bCapturePoints(b){
+  b.points.forEach(p => {
+    const u = bUnitAt(b, p.c, p.r);
+    if(u && !u.routing && p.owner !== u.side){
+      p.owner = u.side;
+      bLog(b, bSideName(b, u.side) + " prend un point de contrôle.", u.side === bPlayerSide(b) ? "good" : "bad");
+    }
+  });
+}
+function bPointsHeld(b, side){ return b.points.filter(p => p.owner === side).length; }
 function bMove(b, u, c, r){
   if(b.over || u.side !== b.active || u.routing) return false;
   const e = bReach(b, u).get(hk(c, r));
   if(!e) return false;
   u.mp -= e.cost; u.c = c; u.r = r;
-  if(u.type !== "esc") u.facing = e.dir;
+  if(!isAgile(u)) u.facing = e.dir;
+  if(UNITS[u.type].static) u.fired = true; // l'artillerie qui se déplace ne tire pas ce round
+  bCapturePoints(b);
   return true;
 }
 function bRotate(b, u, delta){
-  if(b.over || u.type === "esc" || u.mp < 1 || u.routing || u.side !== b.active) return false;
+  if(b.over || isAgile(u) || u.mp < 1 || u.routing || u.side !== b.active) return false;
   u.mp--; u.facing = (u.facing + delta + 6) % 6;
   return true;
 }
@@ -946,28 +1255,44 @@ function bFacingToward(fc, fr, tc, tr){
   const a = Math.atan2(y2 - y1, x2 - x1);
   return ((Math.round(-a / (Math.PI / 3)) % 6) + 6) % 6;
 }
-function bRangeOk(b, u, fc, fr, t){
+function bRange(b, u, fc, fr){
   let range = UNITS[u.type].range;
+  if(b.weather === "storm") range = Math.max(1, range - 1);
+  if(bTerrain(b, fc, fr) === "hill") range++;
+  return range;
+}
+function bRangeOk(b, u, fc, fr, t){
+  let range = bRange(b, u, fc, fr);
   if(bTerrain(b, fc, fr) === "neb" || bTerrain(b, t.c, t.r) === "neb") range = 1;
-  return hexDist(fc, fr, t.c, t.r) <= range;
+  const d = hexDist(fc, fr, t.c, t.r);
+  return d <= range && d >= (UNITS[u.type].minRange || 1);
 }
 function bTargets(b, u, fc, fr){
   if(fc == null){ fc = u.c; fr = u.r; }
   return bSideUnits(b, 1 - u.side).filter(t => bRangeOk(b, u, fc, fr, t));
 }
+// Couvert de la cible : astéroïdes, forêt (surtout pour l'infanterie), hauteurs.
+function bCover(b, t){
+  const ter = bTerrain(b, t.c, t.r);
+  if(ter === "ast") return 0.7;
+  if(ter === "forest") return t.type === "inf" ? 0.6 : 0.8;
+  if(ter === "hill") return 0.85;
+  return 1;
+}
 // Dégâts d'un tir. `preview` = valeur moyenne, sans tirage.
 function bDamage(b, u, t, fc, fr, aim, preview){
-  let dmg = UNITS[u.type].dmg * (1 + 0.15 * u.vet) * (u.wpn ? 0.5 : 1) * VS[u.type][t.type];
+  const U = UNITS[u.type];
+  let dmg = U.dmg * u.dmgMul * (1 + 0.15 * u.vet) * (u.wpn ? 0.5 : 1) * VS[u.type][t.type];
   if(!preview) dmg *= 0.85 + 0.3 * rnd(b);
-  if(bTerrain(b, t.c, t.r) === "ast") dmg *= 0.7;
+  dmg *= bCover(b, t);
+  if(b.fort && t.side === 1) dmg *= 1 - b.fort;
   const arc = bArc(fc, fr, t);
   if(arc === "r") dmg *= 1.25;
-  let toShield = dmg, hull = 0;
-  if(u.type === "esc"){ hull = dmg * 0.5; toShield = dmg * 0.5; } // les chasseurs passent sous les boucliers
-  let shDmg = 0;
-  if(t.sh){ shDmg = Math.min(t.sh[arc], toShield); hull += toShield - shDmg; }
+  const through = U.bypass || 0;
+  let hull = dmg * through, toShield = dmg * (1 - through), shDmg = 0;
+  if(t.sh){ shDmg = Math.min(Math.max(0, t.sh[arc]), toShield); hull += toShield - shDmg; }
   else hull += toShield;
-  if(aim && aim !== "hull" && t.type !== "esc") hull *= 0.6;
+  if(aim && aim !== "hull" && t.sh) hull *= 0.6;
   return {arc, shDmg:Math.round(shDmg), hull:Math.round(hull)};
 }
 const ARC_NAME = {f:"avant", s:"flanc", r:"arrière"};
@@ -979,40 +1304,77 @@ function bRoutCheck(b, u){
     bLog(b, unitLabel(b, u) + " perd courage et prend la fuite.", u.side === bPlayerSide(b) ? "bad" : "good");
   }
 }
-function unitLabel(b, u){ return SHIPS[u.type].name + (u.flag ? " amiral" : "") + " (" + FACTIONS[b.sides[u.side].fid].name + ")"; }
+function unitLabel(b, u){ return unitName(u.type) + (u.flag ? (b.ground ? " du commandant" : " amiral") : "") + " (" + bSideName(b, u.side) + ")"; }
 function bPlayerSide(b){ return b.sides[0].ai === false ? 0 : b.sides[1].ai === false ? 1 : -1; }
+
+function bDestroy(b, t){
+  const ps = bPlayerSide(b);
+  t.hull = 0; t.gone = "destroyed";
+  bLog(b, unitLabel(b, t) + " est détruit.", t.side === ps ? "bad" : "good");
+  bSideUnits(b, t.side).forEach(a => {
+    if(t.flag) a.morale -= 20;
+    else if(hexDist(a.c, a.r, t.c, t.r) <= 2) a.morale -= 10;
+    bRoutCheck(b, a);
+  });
+  if(t.flag) bLog(b, (b.ground ? "Le commandant est tombé" : "Le vaisseau amiral est perdu") + " : tout le camp vacille.", t.side === ps ? "bad" : "good");
+}
 
 function bAttack(b, u, t, aim){
   if(b.over || u.fired || u.routing || u.side !== b.active || t.gone || !t.on || t.side === u.side) return false;
   if(!bRangeOk(b, u, u.c, u.r, t)) return false;
   aim = aim || "hull";
   const res = bDamage(b, u, t, u.c, u.r, aim, false);
-  if(t.sh) t.sh[res.arc] -= res.shDmg;
+  if(t.sh) t.sh[res.arc] = Math.max(0, t.sh[res.arc] - res.shDmg);
   t.hull -= res.hull;
   t.hit = true;
   u.fired = true;
-  if(u.type !== "esc") u.mp = 0;
+  if(!UNITS[u.type].hitRun) u.mp = 0;
   let extra = "";
-  if(aim !== "hull" && t.type !== "esc" && res.hull > 0){
+  if(aim !== "hull" && t.sh && res.hull > 0){
     if(aim === "eng" && !t.eng){ t.eng = true; extra = " Moteurs touchés !"; }
     if(aim === "wpn" && !t.wpn){ t.wpn = true; extra = " Armes touchées !"; }
   }
   t.morale -= Math.round(res.hull / t.maxHull * 40) + (res.arc === "r" ? 12 : res.arc === "s" ? 5 : 0);
-  const ps = bPlayerSide(b);
-  bLog(b, unitLabel(b, u) + " → " + unitLabel(b, t) + " : " + (res.shDmg ? res.shDmg + " sur le bouclier " + ARC_NAME[res.arc] + ", " : "tir " + ARC_NAME[res.arc] + ", ") + res.hull + " sur la coque." + extra,
+  const ps = bPlayerSide(b), prot = b.ground ? "le blindage" : "le bouclier";
+  bLog(b, unitLabel(b, u) + " → " + unitLabel(b, t) + " : " + (res.shDmg ? res.shDmg + " sur " + prot + " " + ARC_NAME[res.arc] + ", " : "tir " + ARC_NAME[res.arc] + ", ") + res.hull + " de dégâts." + extra,
     u.side === ps ? "good" : t.side === ps ? "bad" : "info");
-  if(t.hull <= 0){
-    t.hull = 0; t.gone = "destroyed";
-    bLog(b, unitLabel(b, t) + " est détruit.", t.side === ps ? "bad" : "good");
-    bSideUnits(b, t.side).forEach(a => {
-      if(t.flag) a.morale -= 20;
-      else if(hexDist(a.c, a.r, t.c, t.r) <= 2) a.morale -= 10;
-      bRoutCheck(b, a);
-    });
-    if(t.flag) bLog(b, "Le vaisseau amiral est perdu : tout le camp vacille.", t.side === ps ? "bad" : "good");
-  } else bRoutCheck(b, t);
+  if(t.hull <= 0) bDestroy(b, t);
+  else bRoutCheck(b, t);
   bCheckEnd(b);
   return true;
+}
+
+// Frappe orbitale : 20 dégâts sur la case visée, 8 sur les cases voisines — alliés compris.
+const ORBITAL_DMG = 20, ORBITAL_SPLASH = 8;
+function bCanOrbital(b){ return !!b.orbital && !b.over && b.active === b.orbital.side && b.orbital.left > 0; }
+function bOrbital(b, c, r){
+  if(!bCanOrbital(b) || !inBoard(b, c, r)) return false;
+  b.orbital.left--;
+  const ps = bPlayerSide(b);
+  bLog(b, "Frappe orbitale sur le secteur " + (c + 1) + "-" + (r + 1) + ".", b.orbital.side === ps ? "good" : "bad");
+  const hits = [[c, r, ORBITAL_DMG]];
+  for(let d = 0; d < 6; d++){ const [nc, nr] = hexNeighbor(c, r, d); hits.push([nc, nr, ORBITAL_SPLASH]); }
+  hits.forEach(([hc, hr, dmg]) => {
+    const t = bUnitAt(b, hc, hr);
+    if(!t) return;
+    const real = Math.round(dmg * (b.fort && t.side === 1 ? 1 - b.fort : 1));
+    t.hull -= real; t.hit = true; t.morale -= dmg === ORBITAL_DMG ? 8 : 4;
+    bLog(b, unitLabel(b, t) + " encaisse " + real + " dégâts.", t.side === ps ? "bad" : "good");
+    if(t.hull <= 0) bDestroy(b, t); else bRoutCheck(b, t);
+  });
+  bCheckEnd(b);
+  return true;
+}
+function bOrbitalValue(b, c, r, side){
+  let v = 0;
+  const center = bUnitAt(b, c, r);
+  if(center) v += (center.side !== side ? 1 : -2) * (ORBITAL_DMG + (center.hull <= ORBITAL_DMG ? 20 : 0));
+  for(let d = 0; d < 6; d++){
+    const [nc, nr] = hexNeighbor(c, r, d);
+    const u = inBoard(b, nc, nr) ? bUnitAt(b, nc, nr) : null;
+    if(u) v += (u.side !== side ? 1 : -2) * ORBITAL_SPLASH;
+  }
+  return v;
 }
 
 function bBeginSide(b){
@@ -1032,11 +1394,13 @@ function bBeginSide(b){
     }
     return true;
   });
+  if(b.orbital && b.orbital.side === side) b.orbital.left = b.orbital.per;
   bSideUnits(b, side).forEach(u => {
     const U = UNITS[u.type];
     u.mp = u.eng ? Math.ceil(U.mp / 2) : U.mp;
+    if(b.weather === "mud" && U.heavy) u.mp = Math.max(1, u.mp - 1);
     u.fired = false;
-    if(u.sh) ["f", "s", "r"].forEach(k => { u.sh[k] = Math.min(u.maxSh[k], u.sh[k] + 5); });
+    if(u.sh && U.regen !== 0) ["f", "s", "r"].forEach(k => { u.sh[k] = Math.min(u.maxSh[k], u.sh[k] + 5); });
     if(!u.hit) u.morale = Math.min(100, u.morale + 4);
     u.hit = false;
     let adj = 0;
@@ -1049,7 +1413,7 @@ function bBeginSide(b){
     if(u.c === edge){ u.gone = "escaped"; bLog(b, unitLabel(b, u) + " s'échappe du champ de bataille.", "info"); return; }
     let best = null;
     bReach(b, u).forEach(e => { if(!best || Math.abs(e.c - edge) < Math.abs(best.c - edge) || (Math.abs(e.c - edge) === Math.abs(best.c - edge) && e.cost < best.cost)) best = e; });
-    if(best){ u.c = best.c; u.r = best.r; if(u.type !== "esc") u.facing = side === 0 ? 3 : 0; }
+    if(best){ u.c = best.c; u.r = best.r; if(!isAgile(u)) u.facing = side === 0 ? 3 : 0; }
     u.mp = 0; u.fired = true;
   });
   bCheckEnd(b);
@@ -1059,9 +1423,17 @@ function bEndSide(b){
   if(b.over) return;
   if(b.active === 1){
     b.round++;
-    if(b.round > BMAX_ROUNDS){
-      b.over = {winner:1, reason:"timeout"};
-      bLog(b, "L'attaquant n'a pas percé : il rompt le combat.", "info");
+    if(b.round > b.maxRounds){
+      if(b.ground){
+        // Au sol, le temps écoulé départage aux points de contrôle.
+        const held = bPointsHeld(b, 0);
+        b.over = {winner:held >= 2 ? 0 : 1, reason:"points"};
+        bLog(b, held >= 2 ? "L'assaillant tient " + held + " points de contrôle sur 3 : la planète tombe."
+                          : "Les défenseurs tiennent encore " + bPointsHeld(b, 1) + " point(s) de contrôle : l'assaut échoue.", "info");
+      } else {
+        b.over = {winner:1, reason:"timeout"};
+        bLog(b, "L'attaquant n'a pas percé : il rompt le combat.", "info");
+      }
       return;
     }
   }
@@ -1078,23 +1450,32 @@ function bCheckEnd(b){
   // La poursuite : ceux qui fuient encore sur le champ sont massacrés.
   const caught = bSideUnits(b, 1 - winner).filter(u => u.routing);
   caught.forEach(u => { u.gone = "destroyed"; });
-  if(caught.length) bLog(b, caught.length + " vaisseau(x) en déroute rattrapé(s) et détruit(s) dans la poursuite.", "info");
-  bLog(b, "Victoire de " + FACTIONS[b.sides[winner].fid].name + ".", winner === bPlayerSide(b) ? "good" : "bad");
+  if(caught.length) bLog(b, caught.length + " unité(s) en déroute rattrapée(s) et détruite(s) dans la poursuite.", "info");
+  bLog(b, "Victoire de " + bSideName(b, winner) + ".", winner === bPlayerSide(b) ? "good" : "bad");
 }
 
 // IA d'une unité : choisit la case et la cible qui rapportent le plus, se tourne vers l'ennemi, tire.
+// Au sol, elle tient compte des points de contrôle.
 function bAIUnit(b, u){
   if(u.gone || u.routing || !u.on || b.over) return;
   const enemies = bSideUnits(b, 1 - u.side);
   if(!enemies.length) return;
+  const U = UNITS[u.type];
   const opts = [{c:u.c, r:u.r, cost:0}].concat([...bReach(b, u).values()]);
+  const pointBonus = o => {
+    const p = b.points.find(q => q.c === o.c && q.r === o.r);
+    if(!p) return 0;
+    return p.owner !== u.side ? 0.4 : u.side === 1 ? 0.2 : 0;
+  };
   let best = null;
   opts.forEach(o => {
+    if(U.static && o.cost > 0) return; // l'artillerie tire depuis sa position
     enemies.forEach(t => {
       if(!bRangeOk(b, u, o.c, o.r, t)) return;
       const d = bDamage(b, u, t, o.c, o.r, "hull", true);
       let v = (d.hull + 0.3 * d.shDmg) / t.maxHull + (d.hull >= t.hull ? 1 : 0) + (t.flag ? 0.15 : 0) - (t.routing ? 0.3 : 0) - o.cost * 0.01;
-      if(u.type !== "esc"){
+      v += pointBonus(o) + (1 - bCover(b, {c:o.c, r:o.r, type:u.type})) * 0.3;
+      if(!U.hitRun){
         // Rester hors de portée d'une masse d'ennemis
         const threats = enemies.filter(e => e !== t && hexDist(e.c, e.r, o.c, o.r) <= UNITS[e.type].range).length;
         v -= threats * 0.03;
@@ -1103,7 +1484,7 @@ function bAIUnit(b, u){
     });
   });
   const faceTo = (tc, tr) => {
-    if(u.type === "esc") return;
+    if(isAgile(u)) return;
     const want = bFacingToward(u.c, u.r, tc, tr);
     let guard = 3;
     while(u.facing !== want && u.mp > 0 && guard-- > 0){
@@ -1117,19 +1498,29 @@ function bAIUnit(b, u){
     bAttack(b, u, best.t, "hull");
     return;
   }
-  // Personne à portée : on avance vers l'ennemi le plus proche.
+  // Personne à portée. Au sol, l'assaillant marche sur les points qu'il ne tient pas ;
+  // sinon on avance vers l'ennemi le plus proche.
+  const goals = b.ground && b.points.some(p => p.owner !== u.side) && (u.side === 0 || u.type === "inf")
+    ? b.points.filter(p => p.owner !== u.side) : enemies;
   let go = null, gd = Infinity;
   opts.forEach(o => {
-    const d = Math.min(...enemies.map(e => hexDist(o.c, o.r, e.c, e.r)));
+    const d = Math.min(...goals.map(e => hexDist(o.c, o.r, e.c, e.r)));
     if(d < gd || (d === gd && go && o.cost < go.cost)){ gd = d; go = o; }
   });
-  if(go && go.cost > 0) bMove(b, u, go.c, go.r);
+  if(go && go.cost > 0 && !(U.static && enemies.some(e => hexDist(u.c, u.r, e.c, e.r) <= bRange(b, u, u.c, u.r) + 2))) bMove(b, u, go.c, go.r);
   const near = enemies.slice().sort((a, z) => hexDist(u.c, u.r, a.c, a.r) - hexDist(u.c, u.r, z.c, z.r))[0];
   if(near) faceTo(near.c, near.r);
 }
 function bAIPlay(b){
   const side = b.active;
-  const mine = bSideUnits(b, side).filter(u => !u.routing).sort((a, z) => SHIP_TYPES.indexOf(z.type) - SHIP_TYPES.indexOf(a.type));
+  // Frappes orbitales d'abord, là où elles font le plus de mal sans toucher nos troupes.
+  while(bCanOrbital(b)){
+    let best = null;
+    bSideUnits(b, 1 - side).forEach(t => { const v = bOrbitalValue(b, t.c, t.r, side); if(!best || v > best.v) best = {v, c:t.c, r:t.r}; });
+    if(!best || best.v < 20) break;
+    bOrbital(b, best.c, best.r);
+  }
+  const mine = bSideUnits(b, side).filter(u => !u.routing).sort((a, z) => FLAG_ORDER.indexOf(z.type) - FLAG_ORDER.indexOf(a.type));
   for(const u of mine){ if(b.over) return; bAIUnit(b, u); }
 }
 // Fait jouer l'IA tant que le camp actif est contrôlé par l'IA.
@@ -1137,13 +1528,18 @@ function bRunAI(b){
   let guard = 200;
   while(!b.over && b.sides[b.active].ai && guard-- > 0){ bAIPlay(b); bEndSide(b); }
 }
-// Traduit l'issue tactique en pertes par flotte pour la carte.
+// Traduit l'issue tactique en pertes pour la carte : par flotte (espace) ou par camp, "att"/"def" (sol).
 function bResult(b){
   const losses = {};
   b.units.forEach(u => {
-    if(!losses[u.fleetId]) losses[u.fleetId] = {dest:0, frig:0, esc:0};
-    if(u.gone === "destroyed") losses[u.fleetId][u.type]++;
+    if(!losses[u.src]) losses[u.src] = {dest:0, frig:0, esc:0, inf:0, tank:0, walk:0, art:0};
+    if(u.gone === "destroyed") losses[u.src][u.type]++;
   });
+  if(b.ground){
+    // Une garnison vaincue est anéantie ou capturée.
+    if(b.over && b.over.winner === 0 && losses.def) b.units.filter(u => u.side === 1 && u.gone !== "destroyed").forEach(u => { losses.def[u.type]++; });
+    ["att", "def"].forEach(k => { if(!losses[k]) losses[k] = troops(); });
+  }
   return {winner:b.over && b.over.winner === 0 ? "att" : "def", losses, how:"tactique", reason:b.over ? b.over.reason : null};
 }
 </script>
@@ -1158,7 +1554,7 @@ const SAVE_KEY = "sw75-save";
 let G = null;                 // la partie
 let B = null, BS = null, BDone = null; // bataille tactique en cours, ses flottes, et la suite
 const ui = {sel:null, fleet:null};
-const bui = {sel:null, aim:"hull"};
+const bui = {sel:null, aim:"hull", orbital:false};
 
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 function fcolor(fid){ return fid ? FACTIONS[fid].color : INDEPENDENT_COLOR; }
@@ -1174,7 +1570,7 @@ function loadSave(){
     const s = store(); const raw = s && s.getItem(SAVE_KEY);
     if(!raw) return null;
     const st = JSON.parse(raw);
-    return st && st.version === 2 ? st : null;
+    return st && st.version === 3 ? st : null;
   }catch(e){ return null; }
 }
 function clearSave(){ try{ const s = store(); if(s) s.removeItem(SAVE_KEY); }catch(e){} }
@@ -1199,7 +1595,7 @@ function startGame(fid){
   showModal('<h2>' + esc(FACTIONS[fid].name) + '</h2><p>' + esc(FACTIONS[fid].pitch) + '</p>' +
     '<ul><li>Touche un système pour voir sa planète et ses flottes.</li>' +
     '<li>Sélectionne une de tes flottes, puis un système voisin (cercle bleu) pour la déplacer : 2 sauts par tour, un système hostile arrête la flotte.</li>' +
-    '<li>Une flotte seule en orbite d\'un monde ennemi l\'assiège ; quand ses défenses tombent à zéro, il est à toi.</li>' +
+    '<li>Une flotte seule en orbite d\'un monde ennemi l\'assiège et use ses défenses. Pour le prendre, débarque des troupes (bouton « Débarquer ») : embarque-les d\'abord depuis la garnison d\'un de tes mondes.</li>' +
     '<li>Entrer face à une flotte ennemie déclenche une bataille : commande-la sur la grille, ou laisse la résolution automatique trancher (moins bien).</li>' +
     '<li>Surveille la loyauté : sous 35, sabotages ; sous 20, révolte.</li></ul>' +
     '<p class="muted">Victoire : tenir la moitié des systèmes et toutes les capitales rivales.</p>',
@@ -1290,6 +1686,7 @@ function fleetCard(f){
   let h = '<div class="card' + (sel ? " sel" : "") + '"><div class="row" style="justify-content:space-between"><b><span class="dot" style="background:' + fcolor(f.owner) + '"></span>' + esc(f.name) + '</b>' +
     '<span class="muted" title="Vétérance">' + (f.vet ? "★".repeat(f.vet) : "recrues") + '</span></div>' +
     '<div style="font-size:.9rem">' + esc(describeShips(f.ships)) + '</div>' +
+    (fleetCap(f) ? '<div style="font-size:.88rem">Troupes : ' + esc(describeTroops(f.troops)) + ' <span class="muted">(' + fleetLoad(f) + '/' + fleetCap(f) + ' places)</span></div>' : '') +
     '<div class="muted" style="font-size:.85rem">Puissance ' + Math.round(fleetPower(G, f)) + (mine ? ' · ' + f.mp + '/' + FLEET_MP + ' sauts' : ' · ' + esc(fname(f.owner))) + '</div>';
   if(mine){
     h += '<div class="row" style="margin-top:.4em">';
@@ -1297,7 +1694,18 @@ function fleetCard(f){
     if(shipCount(f) >= 2) h += '<button class="small" data-act="split" data-id="' + f.id + '">Diviser</button>';
     const foe = hostileFleetsAt(G, f.at, P)[0];
     if(foe && f.mp > 0) h += '<button class="small" data-act="engage" data-id="' + f.id + '">Attaquer ' + esc(foe.name) + '</button>';
+    if(canInvade(G, f)) h += '<button class="small primary" data-act="invade" data-id="' + f.id + '">Débarquer</button>';
     h += '</div>';
+    const s = G.systems[f.at];
+    if(s.owner === P && fleetCap(f) && (troopCount(s.garrison) || troopCount(f.troops))){
+      h += '<div style="font-size:.85rem;margin-top:.4em" class="muted">Embarquer (+) ou débarquer (−) :</div><div class="row" style="margin-top:.2em">' +
+        TROOP_TYPES.filter(t => s.garrison[t] || f.troops[t]).map(t =>
+          '<span style="font-size:.85rem">' + TROOPS[t].name + '</span>' +
+          '<button class="small" data-act="disembark" data-id="' + f.id + '" data-v="' + t + '"' + (canDisembark(G, f, t) ? "" : " disabled") + '>−</button>' +
+          '<button class="small" data-act="embark" data-id="' + f.id + '" data-v="' + t + '"' + (canEmbark(G, f, t) ? "" : " disabled") + '>+</button>').join("") + '</div>';
+    }
+    if(s.owner !== P && !canInvade(G, f) && troopCount(f.troops) && f.landed === G.turn)
+      h += '<div class="muted" style="font-size:.85rem;margin-top:.3em">Les troupes ont déjà débarqué ce tour.</div>';
     if(sel && f.mp > 0) h += '<div class="muted" style="font-size:.85rem;margin-top:.3em">Choisis une destination (cercle bleu) sur la carte ou dans les routes ci-dessous.</div>';
   }
   return h + '</div>';
@@ -1324,7 +1732,8 @@ function renderPanel(){
     if(s.owner){
       h += '<dt>Loyauté</dt><dd>' + s.loyalty + (mine ? ' <span class="muted">→ ' + loyaltyTarget(G, s) + '</span>' : '') + loyBar(s.loyalty) + '</dd>';
     }
-    h += '<dt>Défense</dt><dd>' + s.def + ' / ' + s.maxDef + '</dd>';
+    h += '<dt>Défense</dt><dd>' + s.def + ' / ' + s.maxDef + (fortification(s) >= 0.5 ? ' <span class="muted">· bouclier levé</span>' : ' <span class="warn">· bouclier tombé</span>') + '</dd>';
+    h += '<dt>Garnison</dt><dd>' + esc(describeTroops(s.garrison)) + ' <span class="muted">· force ' + Math.round(troopPower(s.garrison, s.owner)) + '</span></dd>';
     h += '<dt>Production</dt><dd>' + (s.owner ? Math.round(y.cr) + ' cr · ' + Math.round(y.mat) + ' mat · ' + Math.round(y.inf) + ' inf' : s.prod.cr + ' cr · ' + s.prod.mat + ' mat · ' + s.prod.inf + ' inf (potentiel)') + '</dd>';
     h += '</dl>';
     if(mine){
@@ -1336,9 +1745,17 @@ function renderPanel(){
         if(s.queue.length) h += '<div style="font-size:.9rem">' + s.queue.map((q, i) => (i === 0 ? '<b>' : '') + SHIPS[q.type].name + ' — ' + (i === 0 ? q.left + ' tour(s)' : 'en attente') + (i === 0 ? '</b>' : '')).join('<br>') + '</div>';
         h += '<div class="list">' + SHIP_TYPES.map(t => {
           const c = costOf(P, t);
-          return '<button data-act="build" data-id="' + id + '" data-v="' + t + '"' + (canBuild(G, id, t) ? "" : " disabled") + '><span>' + SHIPS[t].name + '</span><span class="muted">' + c.cr + ' cr · ' + c.mat + ' mat · ' + c.turns + ' t</span></button>';
+          return '<button data-act="build" data-id="' + id + '" data-v="' + t + '"' + (canBuild(G, id, t) ? "" : " disabled") + '><span>' + SHIPS[t].name + ' <span class="muted">· ' + FLEET_CAP[t] + ' places</span></span><span class="muted">' + c.cr + ' cr · ' + c.mat + ' mat · ' + c.turns + ' t</span></button>';
         }).join("") + '</div>';
       }
+      h += '<h3>Caserne</h3>';
+      if(s.drill.length) h += '<div style="font-size:.9rem">' + s.drill.map((q, i) => (i === 0 ? '<b>' : '') + TROOPS[q.type].name + ' — ' + (i === 0 ? q.left + ' tour(s)' : 'en attente') + (i === 0 ? '</b>' : '')).join('<br>') + '</div>';
+      if(s.loyalty < 35) h += '<div class="muted" style="font-size:.85rem">Loyauté trop basse pour recruter.</div>';
+      h += '<div class="list">' + TROOP_TYPES.filter(t => !TROOPS[t].yard || s.yard).map(t => {
+        const c = recruitCost(P, t);
+        return '<button data-act="recruit" data-id="' + id + '" data-v="' + t + '"' + (canRecruit(G, id, t) ? "" : " disabled") + '><span>' + TROOPS[t].name + ' <span class="muted">· ' + TROOPS[t].cap + ' pl.</span></span><span class="muted">' + c.cr + ' cr · ' + c.mat + ' mat · ' + c.turns + ' t</span></button>';
+      }).join("") + '</div>';
+      if(!s.yard) h += '<div class="muted" style="font-size:.85rem">Blindés et marcheurs demandent un chantier.</div>';
     }
     const here = G.fleets.filter(f => f.at === id);
     h += '<h3>Flottes en orbite</h3>';
@@ -1385,6 +1802,13 @@ function onPanel(e){
   else if(act === "tax"){ setTax(G, id, v); }
   else if(act === "appease"){ appease(G, id); }
   else if(act === "build"){ queueBuild(G, id, v); }
+  else if(act === "recruit"){ queueRecruit(G, id, v); }
+  else if(act === "embark"){ embark(G, fleetById(G, +id), v); }
+  else if(act === "disembark"){ disembark(G, fleetById(G, +id), v); }
+  else if(act === "invade"){
+    const f = fleetById(G, +id);
+    if(canInvade(G, f)) return promptBattle(makeInvasion(G, f), () => { save(); render(); });
+  }
   else if(act === "split"){ const f = fleetById(G, +id); const g = splitFleet(G, f); if(g) ui.fleet = g.id; }
   else if(act === "merge"){ const k = mergeAllAt(G, id, P); if(k) ui.fleet = k.id; }
   else if(act === "move"){ return tryMove(id); }
@@ -1431,7 +1855,7 @@ function endTurn(){
 function processPending(done){
   const bs = G.pending.shift();
   if(!bs) return done();
-  if(!battleValid(G, bs)) return processPending(done);
+  if(!pendingValid(G, bs)) return processPending(done);
   promptBattle(bs, () => processPending(done));
 }
 
@@ -1477,12 +1901,15 @@ function showMenu(){
     '<li><b>Routes</b> : une route dont tu tiens les deux bouts rapporte ; une flotte ennemie en orbite la bloque et divise la production par deux.</li>' +
     '<li><b>Loyauté</b> : sous 35, sabotages ; sous 20, révolte possible si aucune flotte ne garde le monde. Défaites et capitale perdue ébranlent le régime.</li>' +
     '<li><b>Batailles</b> : boucliers avant / flancs / arrière ; frapper de dos fait mal et brise le moral. Une unité à moins de 25 de moral fuit ; celles rattrapées sont massacrées.</li>' +
-    '<li><b>Terrain</b> : nébuleuse = portée réduite à 1 ; astéroïdes = couverture (−30 % de dégâts) mais 2 points de mouvement.</li></ul>',
+    '<li><b>Terrain spatial</b> : nébuleuse = portée réduite à 1 ; astéroïdes = couverture (−30 % de dégâts) mais 2 points de mouvement.</li>' +
+    '<li><b>Invasions</b> : le siège n\'use que les défenses. Pour prendre un monde, il faut tenir l\'orbite puis débarquer des troupes. Destroyers : 6 places, frégates : 2.</li>' +
+    '<li><b>Au sol</b> : tenir 2 points de contrôle sur 3 à la fin du 10e round fait tomber la planète. Forêt = couvert (surtout l\'infanterie), hauteurs = +1 portée. Frappes orbitales possibles une fois le bouclier planétaire sous 50 %.</li></ul>',
     [{label:"Abandonner et recommencer", fn:() => { clearSave(); G = null; showTitle(); }}, {label:"Fermer", primary:true}]);
 }
 
 // ---------- Bataille : invite ----------
 function promptBattle(bs, done){
+  if(bs.kind === "ground") return promptGround(bs, done);
   const P = G.player;
   const pSide = bs.attFid === P ? "att" : "def";
   const sideHtml = side => {
@@ -1504,14 +1931,40 @@ function promptBattle(bs, done){
     ]);
 }
 
+function promptGround(gs, done){
+  const P = G.player, f = fleetById(G, gs.fleet), s = G.systems[gs.sys];
+  const name = SYS[gs.sys].name;
+  // Pas de garnison : le monde tombe sans combat.
+  if(!troopCount(s.garrison)){
+    const r = applyGround(G, gs, UNOPPOSED);
+    return showModal('<h2>' + esc(name) + '</h2><p class="good">' + esc(r.msg) + '</p>', [{label:"Continuer", primary:true, fn:() => { render(); done(); }}]);
+  }
+  const pw = groundPower(G, gs), orb = orbitalSupport(f, s);
+  showModal('<h2>Invasion de ' + esc(name) + '</h2>' +
+    '<p class="muted">' + (gs.attFid === P ? "Tes troupes débarquent." : "Ta garnison est attaquée.") + ' Tenir 2 points de contrôle sur 3 à la fin du 10e round fait tomber la planète.</p>' +
+    '<div class="vs"><div><b style="color:' + fcolor(gs.attFid) + '">' + esc(fname(gs.attFid)) + '</b><div style="font-size:.88rem">' + esc(describeTroops(f.troops)) + '</div>' +
+      '<div class="muted" style="font-size:.85rem">Force ' + Math.round(pw.att) + (orb ? ' · ' + orb + ' frappe(s) orbitale(s)/round' : ' · bouclier planétaire levé : pas d\'appui orbital') + '</div></div>' +
+    '<div class="mid">contre</div>' +
+    '<div><b style="color:' + fcolor(gs.defFid) + '">' + esc(fname(gs.defFid)) + '</b><div style="font-size:.88rem">' + esc(describeTroops(s.garrison)) + '</div>' +
+      '<div class="muted" style="font-size:.85rem">Force ' + Math.round(pw.def) + (fortification(s) > 0 ? ' · retranchés (défenses ' + s.def + '/' + s.maxDef + ')' : '') + '</div></div></div>',
+    [
+      {label:"Résolution automatique", fn:() => {
+        const r = applyGround(G, gs, autoGround(G, gs, P));
+        showModal('<h2>Invasion de ' + esc(name) + '</h2><p class="' + (r.winFid === P ? "good" : "bad") + '">' + esc(r.msg) + '</p>',
+          [{label:"Continuer", primary:true, fn:() => { render(); done(); }}]);
+      }},
+      {label:"Commander l'assaut", primary:true, fn:() => startTactical(gs, done)},
+    ]);
+}
+
 // ---------- Bataille tactique : interface ----------
 const HS = 30; // rayon d'un hexagone en pixels SVG
 function startTactical(bs, done){
   BS = bs; BDone = done;
-  B = createBattle(G, bs);
+  B = bs.kind === "ground" ? createGroundBattle(G, bs) : createBattle(G, bs);
   const ps = bs.attFid === G.player ? 0 : 1;
   B.sides[ps].ai = false;
-  bui.sel = null; bui.aim = "hull";
+  bui.sel = null; bui.aim = "hull"; bui.orbital = false;
   $("game").classList.add("hidden"); $("battle").classList.remove("hidden");
   bRunAI(B);
   renderBattle();
@@ -1544,6 +1997,22 @@ function renderBattle(){
     h += '<polygon data-h="' + c + ',' + r + '" class="hex' + (ter ? " " + ter : "") + (reach.has(hk(c, r)) ? " reach" : "") + '" points="' + hexPoints(x, y, HS - 1) + '"/>';
     if(ter === "ast") h += '<g pointer-events="none" fill="#6b5a3a"><circle cx="' + (x - 8) + '" cy="' + (y - 4) + '" r="3"/><circle cx="' + (x + 6) + '" cy="' + (y + 5) + '" r="4"/><circle cx="' + (x + 2) + '" cy="' + (y - 10) + '" r="2"/></g>';
     if(ter === "neb") h += '<circle pointer-events="none" cx="' + x + '" cy="' + y + '" r="' + (HS * 0.8) + '" fill="#7a55c0" opacity=".18"/>';
+    if(ter === "forest") h += '<g pointer-events="none" fill="#2f5a34"><circle cx="' + (x - 9) + '" cy="' + (y - 6) + '" r="6"/><circle cx="' + (x + 7) + '" cy="' + (y - 8) + '" r="5"/><circle cx="' + (x + 2) + '" cy="' + (y + 7) + '" r="6"/></g>';
+    if(ter === "hill") h += '<path pointer-events="none" d="M' + (x - 16) + ' ' + (y + 8) + ' Q' + x + ' ' + (y - 16) + ' ' + (x + 16) + ' ' + (y + 8) + '" fill="none" stroke="#8a7a55" stroke-width="2.5"/>';
+  }
+  B.points.forEach(pt => {
+    const [x, y] = bPx(pt.c, pt.r);
+    const col = fcolor(B.sides[pt.owner].fid);
+    h += '<g pointer-events="none"><polygon points="' + hexPoints(x, y, HS - 4) + '" fill="none" stroke="' + col + '" stroke-width="3" stroke-dasharray="5 4"/>' +
+      '<path d="M' + (x - 14) + ' ' + (y + 14) + ' v-16 l10 4 l-10 4" fill="' + col + '" stroke="#070b14" stroke-width="1"/></g>';
+  });
+  if(bui.orbital && bCanOrbital(B)){
+    for(let r = 0; r < B.rows; r++) for(let c = 0; c < B.cols; c++){
+      const v = bOrbitalValue(B, c, r, B.orbital.side);
+      if(v <= 0) continue;
+      const [x, y] = bPx(c, r);
+      h += '<polygon pointer-events="none" points="' + hexPoints(x, y, HS - 6) + '" fill="rgba(226,87,76,' + Math.min(0.45, v / 120).toFixed(2) + ')"/>';
+    }
   }
   B.units.filter(u => u.on && !u.gone).forEach(u => {
     const [x, y] = bPx(u.c, u.r);
@@ -1560,14 +2029,19 @@ function renderBattle(){
     h += '<g transform="rotate(' + rot + ')">';
     if(u.sh){
       const op = k => (0.15 + 0.85 * u.sh[k] / u.maxSh[k]).toFixed(2);
-      h += '<path d="' + arcPath(20, -50, 50) + '" stroke="var(--shield)" stroke-width="3" fill="none" opacity="' + op("f") + '"/>';
-      h += '<path d="' + arcPath(20, 55, 125) + '" stroke="var(--shield)" stroke-width="2" fill="none" opacity="' + op("s") + '"/>';
-      h += '<path d="' + arcPath(20, -125, -55) + '" stroke="var(--shield)" stroke-width="2" fill="none" opacity="' + op("s") + '"/>';
-      h += '<path d="' + arcPath(20, 130, 230) + '" stroke="var(--shield)" stroke-width="1.5" fill="none" opacity="' + op("r") + '"/>';
+      const sc = B.ground ? "var(--armor)" : "var(--shield)";
+      h += '<path d="' + arcPath(20, -50, 50) + '" stroke="' + sc + '" stroke-width="3" fill="none" opacity="' + op("f") + '"/>';
+      h += '<path d="' + arcPath(20, 55, 125) + '" stroke="' + sc + '" stroke-width="2" fill="none" opacity="' + op("s") + '"/>';
+      h += '<path d="' + arcPath(20, -125, -55) + '" stroke="' + sc + '" stroke-width="2" fill="none" opacity="' + op("s") + '"/>';
+      h += '<path d="' + arcPath(20, 130, 230) + '" stroke="' + sc + '" stroke-width="1.5" fill="none" opacity="' + op("r") + '"/>';
     }
     if(u.type === "dest") h += '<polygon points="16,0 -11,-10 -8,0 -11,10" fill="' + col + '" stroke="#070b14" stroke-width="1.5"/>';
     else if(u.type === "frig") h += '<polygon points="12,0 4,-6 -10,-6 -10,6 4,6" fill="' + col + '" stroke="#070b14" stroke-width="1.5"/>';
-    else h += '<g fill="' + col + '" stroke="#070b14" stroke-width="1"><polygon points="7,-6 -3,-10 -3,-2"/><polygon points="11,2 1,-2 1,6"/><polygon points="5,9 -5,5 -5,13"/></g>';
+    else if(u.type === "esc") h += '<g fill="' + col + '" stroke="#070b14" stroke-width="1"><polygon points="7,-6 -3,-10 -3,-2"/><polygon points="11,2 1,-2 1,6"/><polygon points="5,9 -5,5 -5,13"/></g>';
+    else if(u.type === "inf") h += '<g fill="' + col + '" stroke="#070b14" stroke-width="1"><circle cx="-6" cy="-6" r="4"/><circle cx="6" cy="-6" r="4"/><circle cx="0" cy="5" r="4"/></g>';
+    else if(u.type === "tank") h += '<g fill="' + col + '" stroke="#070b14" stroke-width="1.5"><rect x="-11" y="-8" width="20" height="16" rx="3"/><rect x="4" y="-2" width="12" height="4"/></g>';
+    else if(u.type === "walk") h += '<g fill="' + col + '" stroke="#070b14" stroke-width="1.5"><rect x="-12" y="-7" width="18" height="12" rx="2"/><rect x="6" y="-5" width="9" height="7" rx="1"/><path d="M-9 5 v8 M-3 5 v8 M3 5 v8" stroke="' + col + '" stroke-width="3"/></g>';
+    else if(u.type === "art") h += '<g fill="' + col + '" stroke="#070b14" stroke-width="1.5"><circle r="8"/><rect x="2" y="-2.5" width="16" height="5"/></g>';
     h += '</g>';
     const hp = u.hull / u.maxHull;
     h += '<rect x="-13" y="' + (HS - 12) + '" width="26" height="4" fill="#1e2840"/><rect x="-13" y="' + (HS - 12) + '" width="' + (26 * hp).toFixed(1) + '" height="4" fill="' + (hp > .5 ? "var(--good)" : hp > .25 ? "var(--warn)" : "var(--bad)") + '"/>';
@@ -1578,35 +2052,48 @@ function renderBattle(){
   svg.innerHTML = h;
 
   const sA = B.sides[0], sD = B.sides[1];
-  $("bTitle").innerHTML = '<b>Bataille de ' + esc(SYS[B.sys].name) + '</b>';
-  $("bInfo").innerHTML = '<span>Round <b>' + Math.min(B.round, BMAX_ROUNDS) + '</b>/' + BMAX_ROUNDS + '</span>' +
-    '<span style="color:' + fcolor(sA.fid) + '">' + esc(FACTIONS[sA.fid].name) + ' ' + bFighting(B, 0) + '</span>' +
-    '<span style="color:' + fcolor(sD.fid) + '">' + esc(FACTIONS[sD.fid].name) + ' ' + bFighting(B, 1) + '</span>';
+  $("bTitle").innerHTML = '<b>' + (B.ground ? "Invasion de " : "Bataille de ") + esc(SYS[B.sys].name) + '</b>';
+  $("bInfo").innerHTML = '<span>Round <b>' + Math.min(B.round, B.maxRounds) + '</b>/' + B.maxRounds + '</span>' +
+    '<span style="color:' + fcolor(sA.fid) + '">' + esc(fname(sA.fid)) + ' ' + bFighting(B, 0) + (B.ground ? ' · ' + bPointsHeld(B, 0) + ' pt' : '') + '</span>' +
+    '<span style="color:' + fcolor(sD.fid) + '">' + esc(fname(sD.fid)) + ' ' + bFighting(B, 1) + (B.ground ? ' · ' + bPointsHeld(B, 1) + ' pt' : '') + '</span>' +
+    (B.ground ? '<span class="muted">' + WEATHER[B.weather].name + '</span>' : '');
   $("bEnd").disabled = !myTurn; $("bAuto").disabled = !!B.over;
 
   let p = "";
   if(sel){
     const U = UNITS[sel.type];
-    p += '<h2>' + esc(SHIPS[sel.type].name) + (sel.flag ? ' amiral' : '') + '</h2>';
-    p += '<div class="muted" style="font-size:.88rem">' + esc(FACTIONS[B.sides[sel.side].fid].name) + (sel.vet ? ' · ' + "★".repeat(sel.vet) : '') + '</div>';
-    p += '<dl class="kv"><dt>Coque</dt><dd>' + sel.hull + ' / ' + sel.maxHull + '</dd>';
-    if(sel.sh) p += '<dt>Boucliers</dt><dd>avant ' + sel.sh.f + ' · flancs ' + sel.sh.s + ' · arrière ' + sel.sh.r + '</dd>';
+    p += '<h2>' + esc(unitName(sel.type)) + (sel.flag ? (B.ground ? ' du commandant' : ' amiral') : '') + '</h2>';
+    p += '<div class="muted" style="font-size:.88rem">' + esc(fname(B.sides[sel.side].fid)) + (sel.vet ? ' · ' + "★".repeat(sel.vet) : '') + '</div>';
+    p += '<dl class="kv"><dt>' + (B.ground ? 'Santé' : 'Coque') + '</dt><dd>' + Math.max(0, sel.hull) + ' / ' + sel.maxHull + '</dd>';
+    if(sel.sh) p += '<dt>' + (B.ground ? 'Blindage' : 'Boucliers') + '</dt><dd>avant ' + sel.sh.f + ' · flancs ' + sel.sh.s + ' · arrière ' + sel.sh.r + '</dd>';
     p += '<dt>Moral</dt><dd class="' + (sel.morale < 40 ? "bad" : "") + '">' + Math.max(0, sel.morale) + (sel.routing ? ' — en déroute' : '') + '</dd>';
     p += '<dt>Mouvement</dt><dd>' + sel.mp + ' / ' + U.mp + (sel.eng ? ' <span class="bad">(moteurs touchés)</span>' : '') + '</dd>';
-    p += '<dt>Tir</dt><dd>portée ' + U.range + ', dégâts ' + U.dmg + (sel.wpn ? ' <span class="bad">(armes touchées)</span>' : '') + (sel.fired ? ' · a tiré' : '') + '</dd></dl>';
+    p += '<dt>Tir</dt><dd>portée ' + (U.minRange ? U.minRange + '–' : '') + bRange(B, sel, sel.c, sel.r) + ', dégâts ' + U.dmg + (sel.wpn ? ' <span class="bad">(armes touchées)</span>' : '') + (sel.fired ? ' · a tiré' : '') + '</dd></dl>';
+    if(U.static) p += '<div class="muted" style="font-size:.84rem">L\'artillerie qui se déplace ne peut plus tirer ce round.</div>';
     if(sel.side === ps && myTurn && !sel.routing){
-      if(sel.type !== "esc") p += '<h3>Orientation (1 point)</h3><div class="row"><button class="small" data-b="rotl"' + (sel.mp ? "" : " disabled") + '>↺ Pivoter</button><button class="small" data-b="rotr"' + (sel.mp ? "" : " disabled") + '>Pivoter ↻</button></div>';
+      if(!isAgile(sel)) p += '<h3>Orientation (1 point)</h3><div class="row"><button class="small" data-b="rotl"' + (sel.mp ? "" : " disabled") + '>↺ Pivoter</button><button class="small" data-b="rotr"' + (sel.mp ? "" : " disabled") + '>Pivoter ↻</button></div>';
       p += '<h3>Viser</h3><div class="row">' + ["hull", "eng", "wpn"].map(k => '<button class="small ' + (bui.aim === k ? "on" : "") + '" data-b="aim" data-v="' + k + '">' + AIM_NAME[k] + '</button>').join("") + '</div>';
-      p += '<div class="muted" style="font-size:.84rem;margin-top:.3em">Viser moteurs ou armes : 40 % de dégâts de coque en moins, mais le système touché est endommagé.</div>';
+      p += '<div class="muted" style="font-size:.84rem;margin-top:.3em">Viser moteurs ou armes (cibles ' + (B.ground ? 'blindées' : 'à boucliers') + ') : 40 % de dégâts en moins, mais le système touché est endommagé.</div>';
     }
   } else {
     p += '<h2>À toi de jouer</h2>';
   }
+  if(B.orbital && B.orbital.side === ps && myTurn){
+    p += '<h3>Appui orbital</h3><div class="row"><button class="small ' + (bui.orbital ? "on" : "") + '" data-b="orbital"' + (bCanOrbital(B) ? "" : " disabled") + '>Frappe orbitale (' + B.orbital.left + '/' + B.orbital.per + ')</button></div>' +
+      '<div class="muted" style="font-size:.84rem;margin-top:.3em">' + (bui.orbital ? 'Touche une case : ' + ORBITAL_DMG + ' dégâts, ' + ORBITAL_SPLASH + ' autour — tes troupes comprises. Rouge = bonne cible.' : 'Pilonne un secteur depuis l\'orbite.') + '</div>';
+  }
+  if(B.ground){
+    p += '<h3>Champ de bataille</h3><ul style="padding-left:1.1em;font-size:.86rem;margin:.3em 0">' +
+      '<li>Drapeaux = points de contrôle. À la fin du round ' + B.maxRounds + ', qui en tient 2 sur 3 gagne.</li>' +
+      '<li>' + WEATHER[B.weather].name + ' : ' + WEATHER[B.weather].desc + '.</li>' +
+      (B.fort ? '<li>Défenseurs retranchés : −' + Math.round(B.fort * 100) + ' % de dégâts subis.</li>' : '') +
+      '<li>Forêt : couvert (−40 % pour l\'infanterie), 2 mouvements pour les engins. Hauteurs : +1 portée, 2 mouvements.</li></ul>';
+  }
   p += '<h3>Comment jouer</h3><ul style="padding-left:1.1em;font-size:.86rem;margin:.3em 0">' +
     '<li>Touche une de tes unités, puis une case bleue pour la déplacer (elle s\'oriente dans le sens du mouvement).</li>' +
-    '<li>Un ennemi cerclé de rouge est à portée : touche-le pour tirer. Le chiffre annonce les dégâts de coque attendus et l\'arc touché.</li>' +
-    '<li>Tirer immobilise un vaisseau ; les chasseurs peuvent encore bouger.</li>' +
-    '<li>Arcs bleus = boucliers avant, flancs, arrière. Présente ta proue, frappe les flancs et l\'arrière.</li></ul>';
+    '<li>Un ennemi cerclé de rouge est à portée : touche-le pour tirer. Le chiffre annonce les dégâts attendus et l\'arc touché.</li>' +
+    '<li>Tirer immobilise l\'unité ; les chasseurs peuvent encore bouger.</li>' +
+    '<li>Arcs ' + (B.ground ? 'beiges = blindage' : 'bleus = boucliers') + ' avant, flancs, arrière. Présente ta face avant, frappe les flancs et l\'arrière.</li></ul>';
   $("bPanel").innerHTML = p;
 
   $("bLog").innerHTML = B.log.slice(-40).reverse().map(l => '<div class="' + (l.tone === "info" ? "muted" : l.tone) + '">' + esc(l.msg) + '</div>').join("");
@@ -1615,6 +2102,14 @@ function onBoard(e){
   if(!B || B.over) return;
   const ps = bPlayerSide(B);
   if(B.active !== ps) return;
+  if(bui.orbital){
+    const t = e.target.closest("[data-u]"), hg0 = e.target.closest("[data-h]");
+    let c, r;
+    if(t){ const u = B.units.find(x => x.id === +t.dataset.u); c = u.c; r = u.r; }
+    else if(hg0) [c, r] = hg0.dataset.h.split(",").map(Number);
+    if(c != null && bOrbital(B, c, r)){ if(!bCanOrbital(B)) bui.orbital = false; afterBattleAction(); }
+    return;
+  }
   const ug = e.target.closest("[data-u]");
   const sel = bui.sel ? B.units.find(u => u.id === bui.sel && !u.gone) : null;
   if(ug){
@@ -1637,6 +2132,7 @@ function onBPanel(e){
   if(k === "rotl" && sel) bRotate(B, sel, 1);
   else if(k === "rotr" && sel) bRotate(B, sel, -1);
   else if(k === "aim") bui.aim = btn.dataset.v;
+  else if(k === "orbital"){ bui.orbital = !bui.orbital; if(bui.orbital) bui.sel = null; }
   renderBattle();
 }
 function afterBattleAction(){
@@ -1647,7 +2143,7 @@ function afterBattleAction(){
 }
 function bEndTurnClick(){
   if(!B || B.over) return;
-  bui.sel = null;
+  bui.sel = null; bui.orbital = false;
   bEndSide(B);
   bRunAI(B);
   renderBattle();
@@ -1665,7 +2161,7 @@ function bAutoClick(){
 function battleOver(){
   const res = bResult(B);
   const bs = BS, done = BDone;
-  const r = applyBattle(G, bs, res);
+  const r = bs.kind === "ground" ? applyGround(G, bs, res) : applyBattle(G, bs, res);
   const P = G.player;
   setTimeout(() => showModal('<h2>' + (r.winFid === P ? "Victoire" : "Défaite") + ' à ' + esc(SYS[bs.sys].name) + '</h2><p>' + esc(r.msg) + '</p>',
     [{label:"Retour à la carte", primary:true, fn:() => {
