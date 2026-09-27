@@ -11,7 +11,7 @@ const HTML = fs.readFileSync(path.join(__dirname, "..", "star-wars.html"), "utf8
 const ENGINE = [...HTML.matchAll(/<script>([\s\S]*?)<\/script>/g)][0][1];
 const ctx = {Math, JSON, Object, Array, String, Number, Set, Map, console};
 vm.createContext(ctx);
-vm.runInContext(ENGINE + "\n;globalThis.__E = {newGame, runAI, finishTurn, applyBattle, autoBattle, battleValid, createBattle, bRunAI, bResult, bDamage, bArc, bSideUnits, makeBattle, addFleet, fleetById, shipCount, planetsOf, income, FACTION_IDS, SYSTEMS, SYS, ADJ, FLEET_MP, BMAX_ROUNDS, BMAX_ROUNDS_GROUND, troops, troopCount, fleetLoad, fleetCap, makeInvasion, invasionValid, createGroundBattle, applyGround, bOrbital, bUnitAt, TROOP_TYPES, charOf, voteSupport, canEnact, enactDecree, hasDecree, resolveDilemma, dilemmaOptions, MAX_DECREES, DECREE_IDS};", ctx);
+vm.runInContext(ENGINE + "\n;globalThis.__E = {newGame, runAI, finishTurn, applyBattle, autoBattle, battleValid, createBattle, bRunAI, bResult, bDamage, bArc, bSideUnits, makeBattle, addFleet, fleetById, shipCount, planetsOf, income, FACTION_IDS, SYSTEMS, SYS, ADJ, FLEET_MP, BMAX_ROUNDS, BMAX_ROUNDS_GROUND, troops, troopCount, fleetLoad, fleetCap, makeInvasion, invasionValid, createGroundBattle, applyGround, bOrbital, bUnitAt, TROOP_TYPES, charOf, voteSupport, canEnact, enactDecree, hasDecree, resolveDilemma, dilemmaOptions, MAX_DECREES, DECREE_IDS, EVENTS, eventOptions, resolveEvent, takeLoan, repayLoan, hireMercs, assassinate, assassinTargets, purge, buyIntel, syndicateTurn, finishTurnOnly:finishTurn, LOAN};", ctx);
 const E = ctx.__E;
 
 const GAMES = +process.argv[2] || 24;
@@ -45,6 +45,8 @@ function checkInvariants(st, where){
   });
   Object.values(st.systems).forEach(s => {
     if(E.TROOP_TYPES.some(t => !(s.garrison[t] >= 0))) fail(where + " : garnison négative " + s.id);
+    if(!(s.synd >= 0 && s.synd <= 100)) fail(where + " : emprise hors bornes " + s.id + " " + s.synd);
+    if(s.cartel && s.owner) fail(where + " : " + s.id + " tenu à la fois par le Syndicat et par " + s.owner);
     const g = E.charOf(st, s.governor);
     if(s.owner && (!g || g.fid !== s.owner || g.at !== s.id)) fail(where + " : " + s.id + " sans gouverneur valide");
   });
@@ -194,6 +196,64 @@ console.log("Batailles tactiques : " + tactical + " terminées, " + (rounds / Ma
     });
   });
   console.log("Politique : vote " + v.yes + "/100 sans achat, " + n + " options de dilemme résolues");
+}
+
+// ---------- Événements : chaque option de chaque événement ----------
+{
+  let n = 0, missing = [];
+  E.EVENTS.forEach(ev => {
+    let game = null, ctx = null;
+    for(let seed = 0; seed < 40 && !ctx; seed++){
+      game = E.newGame(E.FACTION_IDS[seed % 4], 800 + seed);
+      const fid = game.player;
+      // Un peu d'histoire pour rendre tous les événements possibles
+      game.factions[fid].inf = 60; game.factions[fid].cr = 300; game.factions[fid].mat = 50;
+      Object.values(game.chars).forEach(c => { if(c.fid === fid && c.role === "admiral") c.xp = 2; });
+      E.planetsOf(game, fid).forEach(p => { p.synd = 60; p.queue.push({type:"frig", left:2, total:3}); });
+      if(ev.weight(game, fid) > 0) ctx = ev.ctx(game, fid);
+    }
+    if(!ctx){ missing.push(ev.id); return; }
+    const opts = E.eventOptions(game, {id:ev.id, fid:game.player, ctx});
+    opts.forEach(o => {
+      const g2 = JSON.parse(JSON.stringify(game));
+      try{
+        const msg = E.resolveEvent(g2, {id:ev.id, fid:g2.player, ctx}, o.key);
+        if(!msg) fail("événement " + ev.id + "/" + o.key + " sans message");
+        // Laisser passer quelques tours pour déclencher les effets différés
+        for(let t = 0; t < 12 && !g2.over; t++){ E.runAI(g2, {includePlayer:true}); E.finishTurnOnly(g2); }
+        checkInvariants(g2, "événement " + ev.id + "/" + o.key);
+        n++;
+      }catch(e){ fail("événement " + ev.id + "/" + o.key + " : " + e.stack); }
+    });
+  });
+  if(missing.length) fail("événements jamais déclenchables : " + missing.join(", "));
+  console.log("Événements : " + E.EVENTS.length + " types, " + n + " options résolues");
+}
+
+// ---------- Syndicat : prêt, dette impayée, mercenaires, assassinat, purge ----------
+{
+  const st = E.newGame("lig", 5150), F = st.factions.lig;
+  const cr0 = F.cr;
+  if(!E.takeLoan(st, "lig")) fail("prêt refusé");
+  if(F.cr !== cr0 + E.LOAN.amount || !F.debt) fail("prêt mal versé");
+  if(E.takeLoan(st, "lig")) fail("deux prêts à la fois");
+  F.cr = -500;                                         // insolvable
+  st.turn = F.debt.due;
+  const planets0 = JSON.stringify(E.planetsOf(st, "lig").map(p => [p.def, p.loyalty]));
+  E.syndicateTurn(st);
+  if(!F.debt || F.debt.late !== 1 || F.debt.amount <= E.LOAN.repay) fail("la dette impayée devrait grossir");
+  F.cr = 2000;
+  if(!E.repayLoan(st, "lig") || F.debt) fail("remboursement impossible");
+  const cap = st.systems.lothal;
+  const merc = E.hireMercs(st, "lig", "fleet", "lothal");
+  if(!merc || merc.owner !== "lig") fail("flotte de mercenaires absente");
+  const t = E.assassinTargets(st, "lig").find(c => c.role === "admiral");
+  if(!t || E.assassinate(st, "lig", t) === null) fail("assassinat refusé");
+  cap.synd = 90; F.inf = 50;
+  const loy = cap.loyalty;
+  if(!E.purge(st, "lothal") || cap.synd !== 55 || cap.loyalty !== Math.max(0, loy - 15)) fail("purge incorrecte");
+  checkInvariants(st, "services du Syndicat");
+  console.log("Syndicat : prêt, dette impayée, mercenaires, assassinat et purge vérifiés");
 }
 
 // ---------- Boucliers orientés : un tir dans le dos fait plus mal ----------

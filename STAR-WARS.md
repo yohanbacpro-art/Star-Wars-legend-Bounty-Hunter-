@@ -1,11 +1,11 @@
-# L'Effondrement — 75 ap. BY (prototype v0.4)
+# L'Effondrement — 75 ap. BY (prototype v0.5)
 
 Jeu de grande stratégie galactique au tour par tour, dans l'esprit de Total War.
 Tout tient dans `star-wars.html` : l'ouvrir dans un navigateur, sans dépendance ni build.
 Jouable sur ordinateur et sur téléphone. Ranch Dynasty (`index.html`) reste inchangé.
 
 Le game design complet vit dans le doc « Game design — Jeu de stratégie Star Wars (75 ap. BY) ».
-Ce prototype couvre les quatre premières étapes de sa feuille de route.
+Ce prototype couvre les cinq premières étapes de sa feuille de route.
 
 ## v0.1 — la carte galactique
 
@@ -57,7 +57,20 @@ Bouton « Gouvernement » en haut de l'écran.
 - Un amiral qui gagne prend de l'expérience et de l'ambition ; trop ambitieux et peu loyal, il devient un rival puis fait défection avec sa flotte. Un gouverneur corrompu et déloyal peut vendre son monde. Les personnages meurent au combat ou partent à la retraite, et leurs traits partent avec eux.
 - Dilemmes à trancher en début de tour : duel pour le titre de Mand'alor, motion de défiance, amiral rival.
 - Lassitude de guerre : elle monte à chaque tour de combat, même victorieux, et fait baisser la loyauté (jusqu'à −10).
-- Deux jauges préparent la suite : l'emprise du Syndicat (qui ronge les crédits, v0.5) et la réputation auprès des Jedi (v0.6).
+- La réputation auprès des Jedi est suivie dès maintenant ; elle servira en v0.6.
+
+## v0.5 — les événements aléatoires et le Syndicat
+
+Bouton « Syndicat » en haut de l'écran.
+
+- **Emprise, monde par monde** (0 à 100 %) : plus forte en Bordure et sur les carrefours commerciaux. Elle grimpe avec chaque contrat, les gouverneurs corrompus, la loyauté basse et l'Amnistie ; elle recule avec la Guerre au crime et la purge.
+- **Seuils** : l'emprise ronge les crédits du monde ; à 50 %, le Syndicat en détourne la moitié ; à 80 %, le gouverneur passe à sa solde et le monde peut basculer sous son contrôle. Il faut alors une invasion pour le reprendre.
+- **Services** : prêt (200 crédits, 260 à rendre en 8 tours), flotte ou compagnie de mercenaires, contrebande pour lever un blocus 5 tours, renseignements sur les rivaux, assassinat d'un dirigeant, chef de groupe ou amiral. Le Syndicat refuse de traiter pendant la Guerre au crime.
+- **Dette impayée** : elle grossit de 10 % par tour et déclenche des représailles (piraterie, sabotage, assassinat d'un gouverneur ou d'un amiral).
+- **Il sert tout le monde** : ce qu'on lui paie remplit son trésor, qui finance ensuite la faction la plus faible.
+- **La reprise** : purger un monde coûte 10 d'influence et 15 de loyauté ; un monde du Syndicat se reprend par la force ; la Guerre au crime fait reculer l'emprise partout.
+- **16 événements**, un ou deux par tour, en six familles : personnage (massacre, autonomie, jeune officier, espion), économie (grève, boom, pénurie), Syndicat (contrat d'assassinat, contrebandiers, pots-de-vin), Force (enfant sensible à la Force), catastrophe (épidémie, séisme, famine), opportunité (chantier abandonné, relique). Ils dépendent de l'état de l'empire : mondes peu loyaux, forte emprise, impôts élevés.
+- **Effets différés** : un massacre couvert qui éclate au grand jour, un officier négligé qui passe à l'ennemi, un espion retourné qui était un agent double, un contrat refusé que ton rival accepte, une épidémie abandonnée qui se propage.
 
 ## Architecture
 
@@ -65,8 +78,8 @@ Deux blocs `<script>` dans `star-wars.html` :
 
 | Bloc | Contenu |
 |---|---|
-| Moteur | Données (`SYSTEMS`, `LINKS`, `FACTIONS`, `SHIPS`, `TROOPS`, `UNITS`), `newGame`, économie, loyauté, troupes et invasions (`embark`, `makeInvasion`, `autoGround`, `applyGround`), politique (`REGIMES`, `DECREES`, `TRAITS`, `genChar`, `enactDecree`, `voteSupport`, `politicsTurn`, `resolveDilemma`), `runAI`, `finishTurn`, batailles (`autoBattle`, `createBattle`, `createGroundBattle`, `bAttack`, `bOrbital`, `bRunAI`, `bResult`, `applyBattle`). Aucune dépendance au DOM. |
-| Interface | Écran titre, carte SVG, panneau, écran Gouvernement, dilemmes, bataille sur grille SVG, modales, sauvegarde `localStorage` (`sw75-save`). |
+| Moteur | Données (`SYSTEMS`, `LINKS`, `FACTIONS`, `SHIPS`, `TROOPS`, `UNITS`), `newGame`, économie, loyauté, troupes et invasions (`embark`, `makeInvasion`, `autoGround`, `applyGround`), politique (`REGIMES`, `DECREES`, `TRAITS`, `genChar`, `enactDecree`, `voteSupport`, `politicsTurn`, `resolveDilemma`), Syndicat et événements (`syndCut`, `takeLoan`, `hireMercs`, `assassinate`, `purge`, `syndicateTurn`, `EVENTS`, `DELAYED`, `eventsTurn`, `resolveEvent`), `runAI`, `finishTurn`, batailles (`autoBattle`, `createBattle`, `createGroundBattle`, `bAttack`, `bOrbital`, `bRunAI`, `bResult`, `applyBattle`). Aucune dépendance au DOM. |
+| Interface | Écran titre, carte SVG, panneau, écrans Gouvernement et Syndicat, dilemmes et événements, bataille sur grille SVG, modales, sauvegarde `localStorage` (`sw75-save`). |
 
 L'aléatoire est un mulberry32 dont l'état vit dans la partie (`st.rng`) : une graine rejoue la même partie.
 
@@ -76,4 +89,4 @@ L'aléatoire est un mulberry32 dont l'état vit dans la partie (`st.rng`) : une 
 node tests/sw-sim.js [parties] [tours max]
 ```
 
-Joue des parties complètes où l'IA contrôle toutes les factions et vérifie les invariants à chaque tour (soutes jamais surchargées, garnisons positives…). Vérifie aussi que chaque monde a son gouverneur et chaque flotte son amiral. Joue 60 batailles spatiales et 60 batailles terrestres IA contre IA, contrôle les boucliers orientés, les frappes orbitales, le vote du Sénat et chaque option de chaque dilemme.
+Joue des parties complètes où l'IA contrôle toutes les factions et vérifie les invariants à chaque tour (soutes jamais surchargées, garnisons positives…). Vérifie aussi que chaque monde a son gouverneur et chaque flotte son amiral. Joue 60 batailles spatiales et 60 batailles terrestres IA contre IA, contrôle les boucliers orientés, les frappes orbitales, le vote du Sénat, chaque option de chaque dilemme et de chaque événement (suivie de 12 tours pour déclencher les effets différés), et les services du Syndicat (prêt, dette impayée, mercenaires, assassinat, purge).

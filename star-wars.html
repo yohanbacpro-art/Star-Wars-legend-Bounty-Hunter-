@@ -144,7 +144,7 @@
   <div class="factions" id="factionCards"></div>
   <div class="row">
     <button id="btnContinue" class="primary hidden">Continuer la partie</button>
-    <span class="muted" style="font-size:.85rem">Prototype v0.4 — carte, batailles spatiales, invasions et politique.</span>
+    <span class="muted" style="font-size:.85rem">Prototype v0.5 — carte, batailles, invasions, politique, Syndicat et événements.</span>
   </div>
 </div>
 
@@ -154,6 +154,7 @@
     <div class="res" id="gRes"></div>
     <div class="row">
       <button id="btnGov" class="small">Gouvernement</button>
+      <button id="btnSynd" class="small">Syndicat</button>
       <button id="btnReport" class="small">Rapport</button>
       <button id="btnMenu" class="small">Menu</button>
       <button id="btnEnd" class="primary">Fin du tour</button>
@@ -329,9 +330,10 @@ function costOf(fid, type, st){
 // ---------- Nouvelle partie ----------
 function newGame(player, seed){
   seed = (seed == null ? Math.floor(Math.random() * 2 ** 32) : seed) >>> 0;
-  const st = {version:4, turn:1, rng:seed, seed, player, systems:{}, fleets:[], nextFleet:1,
+  const st = {version:5, turn:1, rng:seed, seed, player, systems:{}, fleets:[], nextFleet:1,
               fleetCount:{}, factions:{}, log:[], report:[], pending:[], over:null,
-              chars:{}, nextChar:1, dilemmas:[]};
+              chars:{}, nextChar:1, dilemmas:[], events:[], delayed:[],
+              synd:{cash:100, paid:{emp:0, rep:0, man:0, lig:0}}};
   FACTION_IDS.forEach(f => {
     const F = FACTIONS[f];
     st.factions[f] = {cr:F.start.cr, mat:F.start.mat, inf:F.start.inf, alive:true, capital:F.capital, shock:0};
@@ -364,6 +366,9 @@ function newGame(player, seed){
       loyalty: owner ? FACTIONS[owner].baseLoyalty + (cap ? 15 : 0) : 50,
       tax:"normal", queue:[], drill:[], conquered:false, heldSince:1, besieged:false, appeased:0, sabotage:false,
       garrison:{inf:0, tank:0, walk:0, art:0},
+      // Emprise du Syndicat : forte en Bordure et sur les carrefours commerciaux.
+      synd:clamp(({core:10, col:10, mid:12, outer:14, unk:6})[region] + rint(st, 0, 10) + (hubs.has(id) ? 10 : 0), 0, 100),
+      cartel:false, bought:false, smuggle:0, malus:null, taxLock:0,
     };
     const g = st.systems[id];
     g.garrison = owner ? troops(cap ? START_GARRISON.capital : START_GARRISON.other) : militia(g);
@@ -374,6 +379,7 @@ function newGame(player, seed){
     fl.troops = troops(tr);
   }));
   initPolitics(st);
+  FACTION_IDS.forEach(f => { st.factions[f].syndicate = syndAvg(st, f); });
   logEv(st, "La galaxie retient son souffle. Dix ans après l'Effondrement, chacun compte ses vaisseaux.", "info", []);
   st.report = st.log; st.log = [];
   return st;
@@ -521,12 +527,13 @@ function planetYield(st, s){
   if(!s.owner) return {cr:0, mat:0, inf:0};
   let m = 1;
   if(s.loyalty < 35) m *= 0.5;
-  if(blockaded(st, s.id)) m *= 0.5;
-  return {cr:s.prod.cr * TAX[s.tax].mul * m, mat:s.prod.mat * m, inf:s.prod.inf * (s.loyalty < 35 ? 0.5 : 1)};
+  if(tradeBlocked(st, s.id)) m *= 0.5;
+  if(s.malus && s.malus.until >= st.turn) m *= s.malus.mul;
+  return {cr:s.prod.cr * TAX[s.tax].mul * m * syndCut(s), mat:s.prod.mat * m, inf:s.prod.inf * (s.loyalty < 35 ? 0.5 : 1)};
 }
 // Une route rapporte quand ses deux bouts sont tenus par la même faction et qu'aucun n'est bloqué.
 function tradeRoutes(st, fid){
-  return LINKS.filter(([a, b]) => st.systems[a].owner === fid && st.systems[b].owner === fid && !blockaded(st, a) && !blockaded(st, b));
+  return LINKS.filter(([a, b]) => st.systems[a].owner === fid && st.systems[b].owner === fid && !tradeBlocked(st, a) && !tradeBlocked(st, b));
 }
 function routeValue(st, a, b){ return 3 * (st.systems[a].hub ? 1.5 : 1) * (st.systems[b].hub ? 1.5 : 1); }
 function income(st, fid){
@@ -563,7 +570,10 @@ function queueBuild(st, sysId, type){
   s.queue.push({type, left:c.turns, total:c.turns});
   return true;
 }
-function setTax(st, sysId, level){ if(TAX[level]) st.systems[sysId].tax = level; }
+function setTax(st, sysId, level){
+  const s = st.systems[sysId];
+  if(TAX[level] && !(s.taxLock >= st.turn)) s.tax = level;
+}
 function canAppease(st, sysId){
   const s = st.systems[sysId];
   return !!s.owner && s.appeased !== st.turn && st.factions[s.owner].inf >= APPEASE_COST && s.loyalty < 100;
@@ -717,11 +727,12 @@ function governorMul(st, s){
   const g = charOf(st, s.governor);
   return 1 + (hasTrait(g, "brilliant") ? 0.2 : 0) - (hasTrait(g, "inept") ? 0.15 : 0);
 }
-// Multiplicateur global des crédits : décrets, Syndicat, Moffs mécontents, dirigeant corrompu.
+// Multiplicateur global des crédits : décrets, Moffs mécontents, dirigeant corrompu.
+// (L'emprise du Syndicat, elle, se compte monde par monde : voir syndCut.)
 function creditMul(st, fid){
   const F = st.factions[fid];
   if(!F.groups) return 1;
-  let m = 1 - F.syndicate / 300;
+  let m = 1;
   if(hasDecree(st, fid, "conscription")) m *= 0.9;
   if(hasDecree(st, fid, "amnesty")) m *= 1.15;
   if(hasDecree(st, fid, "crime")) m *= 0.9;
@@ -778,7 +789,7 @@ function politicsOnCapture(st, s, fid, old){
 // Un monde se libère (révolte, sécession) : il redevient indépendant avec une milice.
 function planetSecedes(st, s){
   const old = s.owner;
-  s.owner = null; s.queue = []; s.drill = []; s.garrison = militia(s);
+  s.owner = null; s.queue = []; s.drill = []; s.garrison = militia(s); s.bought = false; s.taxLock = 0;
   s.def = Math.round(s.maxDef * 0.6); s.loyalty = 50; s.tax = "normal"; s.conquered = false; s.sabotage = false;
   if(old && st.factions[old].capital === s.id) st.factions[old].shock = Math.min(20, st.factions[old].shock + 12);
   politicsOnCapture(st, s, null, old);
@@ -1131,9 +1142,8 @@ function politicsTurn(st){
       if(!D.permanent) d.left--;
       if(D.upkeep) F.inf -= D.upkeep;
       if(D.perTurn) Object.keys(D.perTurn).forEach(role => groupsByRole(F, role).forEach(g => { g.sat = clamp(g.sat + D.perTurn[role], 0, 100); }));
-      if(d.id === "amnesty") F.syndicate += 3;
+      // Amnistie et Guerre au crime agissent sur l'emprise monde par monde (syndicateTurn).
       if(d.id === "crime"){
-        F.syndicate -= 6;
         if(rnd(st) < 0.3){
           const list = planetsOf(st, fid);
           const s = list[rint(st, 0, list.length - 1)];
@@ -1150,7 +1160,6 @@ function politicsTurn(st){
       if(mine) logEv(st, "Le décret « " + DECREES[d.id].name + " » arrive à son terme.", "info", [P]);
       return false;
     });
-    F.syndicate = clamp(F.syndicate, 0, 100);
     if(F.terror) F.jediRep = 0;
     // Lassitude de guerre : elle monte à chaque tour de conflit, même victorieux.
     const besieging = st.fleets.some(f => f.owner === fid && st.systems[f.at].owner !== fid && st.systems[f.at].besieged);
@@ -1196,6 +1205,565 @@ function aiPolitics(st, fid){
   // Récompenser un personnage clé qui vacille
   const shaky = Object.values(st.chars).filter(c => c.fid === fid && (c.role === "chief" || c.role === "admiral") && c.loyalty < 30);
   if(shaky.length && F.inf >= REWARD_COST + 12) rewardChar(st, shaky[0]);
+}
+
+// =====================================================================
+// v0.5 — Le Syndicat et les événements aléatoires
+// =====================================================================
+// Le Syndicat n'est pas une faction : il n'a pas de flotte, seulement une emprise
+// de 0 à 100 % sur chaque monde, un trésor, et des services à vendre à tout le monde.
+const CARTEL_COLOR = "#8e3a63";
+const LOAN = {amount:200, repay:260, turns:8};
+const SYND_COST = {fleet:160, troops:100, smuggle:40, intel:60};
+const ASSASSIN = {leader:{cost:220, chance:0.35}, chief:{cost:120, chance:0.55}, admiral:{cost:100, chance:0.6}};
+const PURGE_COST = 10;
+const MERC_FLEET = {frig:2, esc:3}, MERC_TROOPS = {inf:3, tank:1}, CARTEL_GARRISON = {inf:4, tank:2};
+
+// Part des crédits d'un monde qui échappe à son propriétaire : à 50 %, le Syndicat en détourne la moitié.
+function syndCut(s){ return s.synd >= 50 ? 0.5 : 1 - s.synd / 300; }
+function syndAvg(st, fid){
+  const list = planetsOf(st, fid);
+  return list.length ? Math.round(list.reduce((a, s) => a + s.synd, 0) / list.length) : 0;
+}
+function syndRaise(s, n){ if(s) s.synd = clamp(Math.round(s.synd + n), 0, 100); }
+function syndWilling(st, fid){ return !hasDecree(st, fid, "crime"); }
+function capitalOf(st, fid){
+  const c = st.systems[st.factions[fid].capital];
+  return c && c.owner === fid ? c : planetsOf(st, fid)[0] || null;
+}
+function syndPay(st, fid, cr){ st.factions[fid].cr -= cr; st.synd.cash += cr; st.synd.paid[fid] += cr; }
+function tradeBlocked(st, sysId){ return blockaded(st, sysId) && !(st.systems[sysId].smuggle >= st.turn); }
+
+// ---------- Services ----------
+function canLoan(st, fid){ return syndWilling(st, fid) && !st.factions[fid].debt; }
+function takeLoan(st, fid){
+  if(!canLoan(st, fid)) return false;
+  const F = st.factions[fid];
+  F.cr += LOAN.amount; st.synd.cash -= LOAN.amount;
+  F.debt = {amount:LOAN.repay, due:st.turn + LOAN.turns, late:0};
+  syndRaise(capitalOf(st, fid), 10);
+  planetsOf(st, fid).forEach(s => syndRaise(s, 3));
+  return true;
+}
+function canRepay(st, fid){ const F = st.factions[fid]; return !!F.debt && F.cr >= F.debt.amount; }
+function repayLoan(st, fid){
+  if(!canRepay(st, fid)) return false;
+  syndPay(st, fid, st.factions[fid].debt.amount);
+  st.factions[fid].debt = null;
+  return true;
+}
+function canHire(st, fid, kind, sysId){
+  const s = st.systems[sysId];
+  return syndWilling(st, fid) && !!s && s.owner === fid && st.factions[fid].cr >= SYND_COST[kind];
+}
+function hireMercs(st, fid, kind, sysId){
+  if(!canHire(st, fid, kind, sysId)) return null;
+  const s = st.systems[sysId];
+  syndPay(st, fid, SYND_COST[kind]);
+  syndRaise(s, 12);
+  if(kind === "fleet"){
+    const f = addFleet(st, fid, sysId, MERC_FLEET, 1);
+    f.name = "Mercenaires de " + SYS[sysId].name;
+    f.mp = 0;
+    return f;
+  }
+  TROOP_TYPES.forEach(t => { s.garrison[t] += MERC_TROOPS[t] || 0; });
+  return s;
+}
+function canSmuggle(st, fid, sysId){
+  const s = st.systems[sysId];
+  return syndWilling(st, fid) && s.owner === fid && blockaded(st, sysId) && !(s.smuggle >= st.turn) && st.factions[fid].cr >= SYND_COST.smuggle;
+}
+function smuggle(st, fid, sysId){
+  if(!canSmuggle(st, fid, sysId)) return false;
+  syndPay(st, fid, SYND_COST.smuggle);
+  st.systems[sysId].smuggle = st.turn + 5;
+  syndRaise(st.systems[sysId], 10);
+  return true;
+}
+function canIntel(st, fid){ const F = st.factions[fid]; return syndWilling(st, fid) && F.cr >= SYND_COST.intel && !(F.intel >= st.turn); }
+function buyIntel(st, fid){
+  if(!canIntel(st, fid)) return false;
+  syndPay(st, fid, SYND_COST.intel);
+  st.factions[fid].intel = st.turn + 5;
+  syndRaise(capitalOf(st, fid), 5);
+  return true;
+}
+function assassinTargets(st, fid){
+  return Object.values(st.chars).filter(c => c.fid !== fid && st.factions[c.fid].alive && ASSASSIN[c.role]);
+}
+function canAssassinate(st, fid, c){
+  return !!c && c.fid !== fid && !!ASSASSIN[c.role] && syndWilling(st, fid) && st.factions[fid].cr >= ASSASSIN[c.role].cost;
+}
+function assassinate(st, fid, c){
+  if(!canAssassinate(st, fid, c)) return null;
+  const F = st.factions[fid], A = ASSASSIN[c.role], P = st.player;
+  syndPay(st, fid, A.cost);
+  syndRaise(capitalOf(st, fid), 10);
+  const who = charTitle(st, c) + " " + c.name + " (" + FACTIONS[c.fid].name + ")";
+  let msg;
+  if(rnd(st) < A.chance){
+    st.factions[c.fid].shock = Math.min(20, st.factions[c.fid].shock + 5);
+    msg = "Le Syndicat a tenu parole : " + who + " est mort.";
+    charDies(st, c, "est assassiné");
+  } else {
+    F.shock = Math.min(20, F.shock + 6);
+    if(!F.terror) F.jediRep = Math.max(0, F.jediRep - 10);
+    msg = "L'assassinat de " + who + " échoue, et ton nom circule : le régime est ébranlé, les Jedi s'indignent.";
+  }
+  logEv(st, msg, fid === P ? "info" : "info", [fid, c.fid]);
+  return msg;
+}
+// Purge : reprendre un monde au Syndicat coûte de l'influence et beaucoup de loyauté.
+function canPurge(st, sysId){
+  const s = st.systems[sysId];
+  return !!s.owner && s.synd > 0 && st.factions[s.owner].inf >= PURGE_COST && s.purged !== st.turn;
+}
+function purge(st, sysId){
+  if(!canPurge(st, sysId)) return false;
+  const s = st.systems[sysId];
+  st.factions[s.owner].inf -= PURGE_COST;
+  s.synd = Math.max(0, s.synd - 35);
+  s.loyalty = Math.max(0, s.loyalty - 15);
+  s.purged = st.turn;
+  if(s.bought){ const g = charOf(st, s.governor); if(g) replaceChar(st, g); s.bought = false; }
+  return true;
+}
+
+// Représailles d'une dette impayée : piraterie, sabotage ou assassinat.
+function reprisal(st, fid){
+  const F = st.factions[fid], P = st.player, mine = fid === P;
+  const k = rint(st, 0, 2);
+  if(k === 0){
+    const cr = Math.max(0, Math.min(Math.round(F.cr), 60));
+    F.cr -= cr; F.mat = Math.max(0, F.mat - 20);
+    if(mine) logEv(st, "Dette impayée : des pirates du Syndicat attaquent un convoi (−" + cr + " crédits, −20 matériaux).", "bad", [P]);
+  } else if(k === 1){
+    const list = planetsOf(st, fid), s = list[rint(st, 0, list.length - 1)];
+    if(!s) return;
+    if(s.queue[0]) s.queue[0].left += 2;
+    s.def = Math.round(s.def * 0.6); s.loyalty = Math.max(0, s.loyalty - 10);
+    if(mine) logEv(st, "Dette impayée : sabotage du Syndicat à " + SYS[s.id].name + " (défenses −40 %, loyauté −10, chantier retardé).", "bad", [P]);
+  } else {
+    const cs = Object.values(st.chars).filter(c => c.fid === fid && (c.role === "governor" || c.role === "admiral"));
+    const c = cs[rint(st, 0, cs.length - 1)];
+    if(c) charDies(st, c, "est assassiné par le Syndicat pour dette impayée");
+  }
+}
+
+// ---------- Tour du Syndicat ----------
+function syndicateTurn(st){
+  const P = st.player;
+  Object.values(st.systems).forEach(s => {
+    if(!s.owner){ s.synd = s.cartel ? 100 : Math.max(0, s.synd - 1); return; }
+    const fid = s.owner;
+    // Ce que le Syndicat détourne remplit son trésor.
+    st.synd.cash += s.prod.cr * TAX[s.tax].mul * (1 - syndCut(s)) * 0.5;
+    let d = 0;
+    if(s.loyalty < 35) d += 1;
+    if(hasTrait(charOf(st, s.governor), "corrupt")) d += 2;
+    if(hasDecree(st, fid, "amnesty")) d += 3;
+    if(hasDecree(st, fid, "crime")) d -= 6;
+    if(s.hub && rnd(st) < 0.5) d += 1;
+    if(s.synd < 30 && s.loyalty >= 50) d -= 1;
+    s.synd = clamp(s.synd + d, 0, 100);
+    if(s.synd >= 80 && !s.bought){
+      s.bought = true;
+      const g = charOf(st, s.governor);
+      if(g) g.loyalty = Math.min(g.loyalty, 15);
+      if(fid === P) logEv(st, "Le gouverneur de " + SYS[s.id].name + " passe à la solde du Syndicat.", "bad", [P]);
+    } else if(s.synd < 70) s.bought = false;
+    if(s.bought && s.id !== st.factions[fid].capital && !ownFleetsAt(st, s.id, fid).length && rnd(st) < 0.08){
+      planetSecedes(st, s);
+      s.cartel = true; s.garrison = troops(CARTEL_GARRISON); s.synd = 100;
+      logEv(st, SYS[s.id].name + " bascule sous le contrôle du Syndicat. Il faudra une bataille pour le reprendre.", fid === P ? "bad" : "info", [fid]);
+    }
+  });
+  // Dettes : remboursées d'office à l'échéance si les caisses le permettent, sinon représailles.
+  FACTION_IDS.forEach(fid => {
+    const F = st.factions[fid];
+    if(!F.alive || !F.debt || st.turn < F.debt.due) return;
+    if(F.cr >= F.debt.amount){
+      const a = F.debt.amount;
+      syndPay(st, fid, a); F.debt = null;
+      if(fid === P) logEv(st, "Échéance : ta dette envers le Syndicat est remboursée (" + a + " crédits).", "info", [P]);
+      return;
+    }
+    F.debt.late++;
+    F.debt.amount = Math.round(F.debt.amount * 1.1);
+    reprisal(st, fid);
+  });
+  // Il sert tout le monde : plus on l'enrichit, plus il finance les autres.
+  if(st.synd.cash >= 300){
+    const alive = FACTION_IDS.filter(f => st.factions[f].alive);
+    const payer = alive.slice().sort((a, b) => st.synd.paid[b] - st.synd.paid[a])[0];
+    const target = alive.filter(f => f !== payer).sort((a, b) => planetsOf(st, a).length - planetsOf(st, b).length)[0];
+    if(target){
+      st.factions[target].cr += 150; st.synd.cash -= 150;
+      st.synd.paid[payer] = Math.round(st.synd.paid[payer] / 2);
+      if(payer === P) logEv(st, "Enrichi par tes contrats, le Syndicat finance maintenant " + FACTIONS[target].name + " (+150 crédits).", "bad", [P]);
+      else if(target === P) logEv(st, "Le Syndicat te fait discrètement parvenir 150 crédits. Rien n'est gratuit.", "info", [P]);
+    }
+  }
+  FACTION_IDS.forEach(fid => { if(st.factions[fid].alive) st.factions[fid].syndicate = syndAvg(st, fid); });
+}
+
+// ---------- IA et Syndicat ----------
+function aiSyndicate(st, fid){
+  const F = st.factions[fid];
+  if(F.debt && F.cr >= F.debt.amount + 150) repayLoan(st, fid);
+  if(!syndWilling(st, fid)) return;
+  if(!F.debt && F.cr < 0 && rnd(st) < 0.5) takeLoan(st, fid);
+  planetsOf(st, fid).filter(s => s.synd >= 70).forEach(s => { if(F.inf >= PURGE_COST + 10) purge(st, s.id); });
+  const cap = capitalOf(st, fid);
+  if(cap && F.cr > 350 && rnd(st) < 0.1) hireMercs(st, fid, "fleet", cap.id);
+  if(F.cr > 450 && rnd(st) < 0.05){
+    const ts = assassinTargets(st, fid).filter(c => c.role !== "leader");
+    if(ts.length) assassinate(st, fid, ts[rint(st, 0, ts.length - 1)]);
+  }
+}
+
+// ---------- Événements aléatoires ----------
+const EVENT_TYPES = {character:"Personnage", economy:"Économie", syndicate:"Syndicat", force:"Force", disaster:"Catastrophe", opportunity:"Opportunité"};
+function pickOne(st, list){ return list.length ? list[rint(st, 0, list.length - 1)] : null; }
+function pickPlanet(st, fid, filter){ return pickOne(st, planetsOf(st, fid).filter(filter || (() => true))); }
+function groupsDelta(F, roles, n){ roles.forEach(r => groupsByRole(F, r).forEach(g => { g.sat = clamp(g.sat + n, 0, 100); })); }
+function later(st, fid, kind, inTurns, data){ st.delayed.push({at:st.turn + inTurns, fid, kind, data:data || {}}); }
+// Pertes d'une flotte prise en embuscade : environ un tiers de chaque type.
+function ambush(st, f){
+  const lost = {dest:0, frig:0, esc:0};
+  SHIP_TYPES.forEach(t => { const n = Math.floor(f.ships[t] / 3) + (f.ships[t] > 0 && rnd(st) < 0.3 ? 1 : 0); lost[t] = Math.min(n, f.ships[t]); f.ships[t] -= lost[t]; });
+  trimTroops(f);
+  if(!shipCount(f)) removeFleet(st, f);
+  return lost;
+}
+const afford = (F, cr, mat) => F.cr >= cr && F.mat >= (mat || 0);
+
+const EVENTS = [
+  {id:"massacre", type:"character", title:"Un massacre après la victoire",
+    weight:(st, fid) => Object.values(st.chars).some(c => c.fid === fid && c.role === "admiral" && c.xp >= 1) ? 1.5 : 0,
+    ctx:(st, fid) => {
+      const adm = Object.values(st.chars).filter(c => c.fid === fid && c.role === "admiral" && c.xp >= 1);
+      const c = adm.find(x => hasTrait(x, "cruel")) || adm.sort((a, b) => b.xp - a.xp)[0];
+      return c ? {char:c.id} : null;
+    },
+    text:(st, fid, x) => "Après sa dernière victoire, l'amiral " + charOf(st, x.char).name + " a laissé ses troupes massacrer des civils. La nouvelle se répand.",
+    options:() => [
+      {key:"punish", label:"Le punir", desc:"L'amiral perd 25 de loyauté et l'armée grince (−10), mais les Jedi apprécient (+5)."},
+      {key:"cover", label:"Le couvrir", desc:"Réputation Jedi −10, l'ordre et le peuple s'indignent (−8). L'affaire peut ressortir."}],
+    apply:(st, fid, x, k) => {
+      const F = st.factions[fid], c = charOf(st, x.char);
+      if(k === "punish"){ c.loyalty = Math.max(0, c.loyalty - 25); groupsDelta(F, ["military"], -10); if(!F.terror) F.jediRep = Math.min(100, F.jediRep + 5); return "L'amiral " + c.name + " est blâmé publiquement. La flotte gronde."; }
+      if(!F.terror) F.jediRep = Math.max(0, F.jediRep - 10);
+      groupsDelta(F, ["order", "people"], -8);
+      if(rnd(st) < 0.4) later(st, fid, "scandal", rint(st, 4, 6), {name:c.name});
+      return "L'affaire est étouffée. Pour l'instant.";
+    }},
+  {id:"autonomy", type:"character", title:"Un gouverneur réclame l'autonomie",
+    weight:(st, fid) => 1 + (planetsOf(st, fid).some(s => s.loyalty < 40) ? 1.5 : 0),
+    ctx:(st, fid) => { const s = pickPlanet(st, fid, p => p.id !== st.factions[fid].capital && charOf(st, p.governor)); return s ? {planet:s.id, char:s.governor} : null; },
+    text:(st, fid, x) => "Le gouverneur " + charOf(st, x.char).name + " de " + SYS[x.planet].name + " réclame plus d'autonomie, et ses administrés l'applaudissent.",
+    options:() => [
+      {key:"grant", label:"Accorder l'autonomie", desc:"Loyauté du monde +12, mais ses impôts restent bas 8 tours et l'ambition du gouverneur grimpe."},
+      {key:"refuse", label:"Refuser", desc:"Le gouverneur perd 20 de loyauté, le monde 6."}],
+    apply:(st, fid, x, k) => {
+      const s = st.systems[x.planet], c = charOf(st, x.char);
+      if(k === "grant"){ s.loyalty = Math.min(100, s.loyalty + 12); s.tax = "low"; s.taxLock = st.turn + 8; c.ambition = Math.min(100, c.ambition + 20); return SYS[s.id].name + " obtient son autonomie."; }
+      c.loyalty = Math.max(0, c.loyalty - 20); s.loyalty = Math.max(0, s.loyalty - 6);
+      return "Tu rappelles " + c.name + " à l'ordre. Il ne l'oubliera pas.";
+    }},
+  {id:"prodigy", type:"character", title:"Un jeune officier prometteur",
+    weight:(st, fid) => st.fleets.some(f => f.owner === fid) ? 1 : 0,
+    ctx:(st, fid) => { const N = NAMES[fid]; return {name:N.first[rint(st, 0, N.first.length - 1)] + " " + N.last[rint(st, 0, N.last.length - 1)]}; },
+    text:(st, fid, x) => "Un jeune officier, " + x.name + ", s'est illustré au combat. Ses hommes le suivraient n'importe où.",
+    options:(st, fid) => [
+      {key:"promote", label:"Lui confier une flotte (10 influence)", desc:"Il remplace ton amiral le moins expérimenté, avec le trait Brillant.", disabled:st.factions[fid].inf < 10},
+      {key:"ignore", label:"Le laisser à son rang", desc:"Rien ne se passe. Un talent qu'on néglige finit parfois ailleurs."}],
+    apply:(st, fid, x, k) => {
+      const F = st.factions[fid];
+      if(k === "promote"){
+        const f = st.fleets.filter(v => v.owner === fid).sort((a, b) => (charOf(st, a.admiral) || {xp:0}).xp - (charOf(st, b.admiral) || {xp:0}).xp)[0];
+        if(!f) return "Il n'y a plus de flotte à lui confier.";
+        F.inf -= 10;
+        const old = charOf(st, f.admiral);
+        if(old) delete st.chars[old.id];
+        const c = genChar(st, fid, "admiral", {at:f.id});
+        c.name = x.name; if(!c.traits.includes("brilliant")){ c.traits = c.traits.filter(t => t !== "inept").slice(0, 1).concat("brilliant"); }
+        f.admiral = c.id;
+        return x.name + " prend le commandement de " + f.name + ".";
+      }
+      if(rnd(st) < 0.5) later(st, fid, "defector", rint(st, 6, 10), {name:x.name});
+      return x.name + " reste à son rang.";
+    }},
+  {id:"spy", type:"character", title:"Un espion capturé",
+    weight:(st, fid) => 0.8 + 0.4 * planetsOf(st, fid).filter(s => s.loyalty < 40).length,
+    ctx:(st, fid) => {
+      const s = pickPlanet(st, fid), foe = pickOne(st, FACTION_IDS.filter(f => f !== fid && st.factions[f].alive));
+      return s && foe ? {planet:s.id, foe} : null;
+    },
+    text:(st, fid, x) => "Un agent de " + FACTIONS[x.foe].name + " a été arrêté sur " + SYS[x.planet].name + ".",
+    options:() => [
+      {key:"execute", label:"L'exécuter", desc:"L'ordre apprécie (+5), les Jedi beaucoup moins (−5)."},
+      {key:"turn", label:"Le retourner", desc:"Renseignements sur tes rivaux pendant 6 tours. Un agent double est toujours un risque."},
+      {key:"trade", label:"L'échanger", desc:"+8 influence."}],
+    apply:(st, fid, x, k) => {
+      const F = st.factions[fid];
+      if(k === "execute"){ groupsDelta(F, ["order"], 5); if(!F.terror) F.jediRep = Math.max(0, F.jediRep - 5); return "L'espion est exécuté."; }
+      if(k === "turn"){ F.intel = Math.max(F.intel || 0, st.turn + 6); if(rnd(st) < 0.3) later(st, fid, "double", rint(st, 3, 5), {planet:x.planet}); return "L'espion travaille désormais pour toi. Du moins, il le dit."; }
+      F.inf += 8; return "L'espion est rendu contre des concessions (+8 influence).";
+    }},
+  {id:"strike", type:"economy", title:"Grève dans les chantiers",
+    weight:(st, fid) => planetsOf(st, fid).some(s => s.queue.length) ? 2 : 0,
+    ctx:(st, fid) => { const s = pickPlanet(st, fid, p => p.queue.length); return s ? {planet:s.id} : null; },
+    text:(st, fid, x) => "Une grève paralyse les chantiers orbitaux de " + SYS[x.planet].name + ".",
+    options:(st, fid) => [
+      {key:"cede", label:"Céder (60 crédits)", desc:"Le peuple est content (+5), l'économie un peu moins (−3).", disabled:!afford(st.factions[fid], 60)},
+      {key:"repress", label:"Réprimer", desc:"Loyauté du monde −15, le peuple gronde (−8)."},
+      {key:"wait", label:"Attendre", desc:"Le chantier prend deux tours de retard."}],
+    apply:(st, fid, x, k) => {
+      const F = st.factions[fid], s = st.systems[x.planet];
+      if(k === "cede"){ F.cr -= 60; groupsDelta(F, ["people"], 5); groupsDelta(F, ["economy"], -3); return "Les ouvriers obtiennent gain de cause."; }
+      if(k === "repress"){ s.loyalty = Math.max(0, s.loyalty - 15); groupsDelta(F, ["people"], -8); return "La grève est brisée."; }
+      if(s.queue[0]) s.queue[0].left += 2; return "La grève dure. Le chantier prend du retard.";
+    }},
+  {id:"boom", type:"economy", title:"Boom commercial",
+    weight:(st, fid) => planetsOf(st, fid).some(s => s.hub) || tradeRoutes(st, fid).length >= 2 ? 1.2 : 0,
+    ctx:(st, fid) => { const s = pickPlanet(st, fid, p => p.hub) || pickPlanet(st, fid); return s ? {planet:s.id} : null; },
+    text:(st, fid, x) => "Les marchands affluent à " + SYS[x.planet].name + " : le commerce explose.",
+    options:() => [
+      {key:"tax", label:"Taxer l'aubaine", desc:"+80 crédits tout de suite, loyauté du monde −5."},
+      {key:"invest", label:"Réinvestir", desc:"Production de crédits du monde +2, pour toujours."}],
+    apply:(st, fid, x, k) => {
+      const s = st.systems[x.planet];
+      if(k === "tax"){ st.factions[fid].cr += 80; s.loyalty = Math.max(0, s.loyalty - 5); return "Le fisc passe : +80 crédits."; }
+      s.prod.cr += 2; return SYS[s.id].name + " produit désormais " + s.prod.cr + " crédits.";
+    }},
+  {id:"shortage", type:"economy", title:"Pénurie de matériaux",
+    weight:(st, fid) => st.factions[fid].mat < 80 ? 1.5 : 0.3,
+    ctx:() => ({}),
+    text:() => "Les convois de minerai n'arrivent plus. Les chantiers réclament des matériaux.",
+    options:(st, fid) => [
+      {key:"buy", label:"Acheter au Syndicat (40 crédits)", desc:"+60 matériaux, l'emprise du Syndicat sur ta capitale grimpe (+8).", disabled:!afford(st.factions[fid], 40) || !syndWilling(st, fid)},
+      {key:"ration", label:"Rationner", desc:"+25 matériaux, loyauté −4 sur tous tes mondes."}],
+    apply:(st, fid, x, k) => {
+      const F = st.factions[fid];
+      if(k === "buy"){ syndPay(st, fid, 40); F.mat += 60; syndRaise(capitalOf(st, fid), 8); return "Le Syndicat livre, et prend note."; }
+      F.mat += 25; planetsOf(st, fid).forEach(s => { s.loyalty = Math.max(0, s.loyalty - 4); }); return "Le rationnement est impopulaire.";
+    }},
+  {id:"hit", type:"syndicate", title:"Une offre du Syndicat",
+    weight:(st, fid) => syndWilling(st, fid) && assassinTargets(st, fid).some(c => c.role === "chief" || c.role === "leader") ? 1 + syndAvg(st, fid) / 30 : 0,
+    ctx:(st, fid) => { const c = pickOne(st, assassinTargets(st, fid).filter(v => v.role === "chief" || v.role === "leader")); return c ? {char:c.id} : null; },
+    text:(st, fid, x) => { const c = charOf(st, x.char); return "Le Syndicat propose d'éliminer " + charTitle(st, c) + " " + c.name + " (" + FACTIONS[c.fid].name + "). Il ne demande rien aujourd'hui."; },
+    options:() => [
+      {key:"accept", label:"Accepter", desc:"La cible meurt. Tu contractes une dette de 120 crédits, et l'affaire peut être découverte."},
+      {key:"refuse", label:"Refuser", desc:"Le Syndicat pourrait proposer le même service à tes rivaux."}],
+    apply:(st, fid, x, k) => {
+      const F = st.factions[fid], c = charOf(st, x.char);
+      if(k === "accept"){
+        const name = charTitle(st, c) + " " + c.name;
+        st.factions[c.fid].shock = Math.min(20, st.factions[c.fid].shock + 5);
+        charDies(st, c, "est retrouvé mort");
+        if(F.debt) F.debt.amount += 120; else F.debt = {amount:120, due:st.turn + 6, late:0};
+        if(rnd(st) < 0.3) later(st, fid, "exposed", rint(st, 3, 6), {name});
+        return name + " ne verra pas le prochain tour. Le Syndicat note ta dette.";
+      }
+      if(rnd(st) < 0.5) later(st, fid, "counterhit", rint(st, 2, 4), {});
+      return "Tu déclines. Le Syndicat sourit poliment.";
+    }},
+  {id:"smugglers", type:"syndicate", title:"Des contrebandiers s'installent",
+    weight:(st, fid) => planetsOf(st, fid).some(s => s.hub || s.synd >= 30) ? 1.3 : 0.3,
+    ctx:(st, fid) => { const s = pickPlanet(st, fid, p => p.hub || p.synd >= 30) || pickPlanet(st, fid); return s ? {planet:s.id} : null; },
+    text:(st, fid, x) => "Des contrebandiers ont fait de " + SYS[x.planet].name + " leur port d'attache. Ils proposent une part de leurs profits.",
+    options:() => [
+      {key:"allow", label:"Laisser faire", desc:"+50 crédits, emprise du Syndicat sur ce monde +15."},
+      {key:"raid", label:"Faire une descente", desc:"Emprise −15, loyauté du monde −8, l'économie grince (−5)."}],
+    apply:(st, fid, x, k) => {
+      const F = st.factions[fid], s = st.systems[x.planet];
+      if(k === "allow"){ F.cr += 50; syndRaise(s, 15); return "Les contrebandiers paient, et restent."; }
+      syndRaise(s, -15); s.loyalty = Math.max(0, s.loyalty - 8); groupsDelta(F, ["economy"], -5); return "La descente fait des remous.";
+    }},
+  {id:"bribes", type:"syndicate", title:"Un gouverneur soudoyé",
+    weight:(st, fid) => planetsOf(st, fid).some(s => s.synd >= 45 && charOf(st, s.governor)) ? 2 : 0,
+    ctx:(st, fid) => { const s = pickPlanet(st, fid, p => p.synd >= 45 && charOf(st, p.governor)); return s ? {planet:s.id, char:s.governor} : null; },
+    text:(st, fid, x) => "Le gouverneur " + charOf(st, x.char).name + " de " + SYS[x.planet].name + " est accusé de toucher des pots-de-vin du Syndicat.",
+    options:() => [
+      {key:"dismiss", label:"Le démettre", desc:"Nouveau gouverneur, emprise −10, l'ordre approuve (+3)."},
+      {key:"blind", label:"Fermer les yeux", desc:"+40 crédits de « contribution », emprise +10."}],
+    apply:(st, fid, x, k) => {
+      const F = st.factions[fid], s = st.systems[x.planet], c = charOf(st, x.char);
+      if(k === "dismiss"){ const n = replaceChar(st, c); syndRaise(s, -10); groupsDelta(F, ["order"], 3); s.bought = false; return c.name + " est démis. " + (n ? n.name + " le remplace." : ""); }
+      F.cr += 40; syndRaise(s, 10); return "Le dossier se perd dans un tiroir.";
+    }},
+  {id:"child", type:"force", title:"Un enfant sensible à la Force",
+    weight:() => 0.8,
+    ctx:(st, fid) => { const s = pickPlanet(st, fid); return s ? {planet:s.id} : null; },
+    text:(st, fid, x) => "Un enfant sensible à la Force a été découvert sur " + SYS[x.planet].name + ".",
+    options:() => [
+      {key:"jedi", label:"Le confier aux Jedi", desc:"Réputation Jedi +15, le peuple approuve (+3)."},
+      {key:"army", label:"Le garder pour ton armée", desc:"L'armée s'en réjouit (+5), les Jedi s'en inquiètent (−5)."},
+      {key:"sith", label:"Ne rien faire", desc:"D'autres le chercheront peut-être."}],
+    apply:(st, fid, x, k) => {
+      const F = st.factions[fid];
+      if(k === "jedi"){ if(!F.terror) F.jediRep = Math.min(100, F.jediRep + 15); groupsDelta(F, ["people"], 3); return "L'enfant part pour le Temple. Les Jedi s'en souviendront."; }
+      if(k === "army"){ F.adepts = (F.adepts || 0) + 1; groupsDelta(F, ["military"], 5); if(!F.terror) F.jediRep = Math.max(0, F.jediRep - 5); return "L'enfant sera formé par tes officiers."; }
+      st.sithLeads = (st.sithLeads || 0) + 1;
+      return "Quelques jours plus tard, l'enfant a disparu. On parle d'une silhouette encapuchonnée.";
+    }},
+  {id:"plague", type:"disaster", title:"Épidémie",
+    weight:() => 1,
+    ctx:(st, fid) => { const s = pickPlanet(st, fid); return s ? {planet:s.id} : null; },
+    text:(st, fid, x) => "Une épidémie frappe " + SYS[x.planet].name + ".",
+    options:(st, fid) => [
+      {key:"aid", label:"Envoyer de l'aide (80 crédits, 20 matériaux)", desc:"Loyauté du monde +10.", disabled:!afford(st.factions[fid], 80, 20)},
+      {key:"quarantine", label:"Quarantaine", desc:"Production −15 % pendant 5 tours, loyauté −5. Rien ne se propage."},
+      {key:"abandon", label:"L'abandonner", desc:"Loyauté −20, production −30 % pendant 5 tours, et l'épidémie peut se propager."}],
+    apply:(st, fid, x, k) => {
+      const F = st.factions[fid], s = st.systems[x.planet];
+      if(k === "aid"){ F.cr -= 80; F.mat -= 20; s.loyalty = Math.min(100, s.loyalty + 10); return "L'aide arrive à temps."; }
+      if(k === "quarantine"){ s.malus = {until:st.turn + 5, mul:0.85}; s.loyalty = Math.max(0, s.loyalty - 5); return SYS[s.id].name + " est placé en quarantaine."; }
+      s.malus = {until:st.turn + 5, mul:0.7}; s.loyalty = Math.max(0, s.loyalty - 20);
+      if(rnd(st) < 0.4) later(st, fid, "spread", 2, {planet:s.id});
+      return SYS[s.id].name + " est livré à lui-même.";
+    }},
+  {id:"quake", type:"disaster", title:"Séisme",
+    weight:() => 0.8,
+    ctx:(st, fid) => { const s = pickPlanet(st, fid); return s ? {planet:s.id} : null; },
+    text:(st, fid, x) => "Un séisme ravage " + SYS[x.planet].name + ".",
+    options:(st, fid) => [
+      {key:"rebuild", label:"Reconstruire (100 crédits, 40 matériaux)", desc:"Rien n'est perdu.", disabled:!afford(st.factions[fid], 100, 40)},
+      {key:"leave", label:"Laisser les habitants se débrouiller", desc:"Défenses −50 %, un régiment d'infanterie perdu, loyauté −12."}],
+    apply:(st, fid, x, k) => {
+      const F = st.factions[fid], s = st.systems[x.planet];
+      if(k === "rebuild"){ F.cr -= 100; F.mat -= 40; return SYS[s.id].name + " se relève."; }
+      s.def = Math.round(s.def / 2); s.garrison.inf = Math.max(0, s.garrison.inf - 1); s.loyalty = Math.max(0, s.loyalty - 12);
+      return "Les ruines de " + SYS[s.id].name + " fument encore.";
+    }},
+  {id:"famine", type:"disaster", title:"Famine",
+    weight:(st, fid) => 0.6 + 0.5 * planetsOf(st, fid).filter(s => s.tax === "high" || s.loyalty < 35).length,
+    ctx:(st, fid) => { const s = pickPlanet(st, fid, p => p.tax === "high" || p.loyalty < 35) || pickPlanet(st, fid); return s ? {planet:s.id} : null; },
+    text:(st, fid, x) => "La famine menace " + SYS[x.planet].name + ".",
+    options:(st, fid) => [
+      {key:"feed", label:"Distribuer des vivres (60 crédits)", desc:"Loyauté du monde +8.", disabled:!afford(st.factions[fid], 60)},
+      {key:"seize", label:"Réquisitionner", desc:"+40 matériaux, loyauté du monde −15."}],
+    apply:(st, fid, x, k) => {
+      const F = st.factions[fid], s = st.systems[x.planet];
+      if(k === "feed"){ F.cr -= 60; s.loyalty = Math.min(100, s.loyalty + 8); return "Les vivres arrivent."; }
+      F.mat += 40; s.loyalty = Math.max(0, s.loyalty - 15); return "Les greniers sont vidés au profit de l'effort de guerre.";
+    }},
+  {id:"derelict", type:"opportunity", title:"Un chantier abandonné",
+    weight:(st, fid) => st.fleets.some(f => f.owner === fid) ? 1 : 0,
+    ctx:(st, fid) => { const f = pickOne(st, st.fleets.filter(v => v.owner === fid)); return f ? {fleet:f.id} : null; },
+    text:(st, fid, x) => "Les éclaireurs de " + fleetById(st, x.fleet).name + " ont repéré un chantier abandonné non loin de " + SYS[fleetById(st, x.fleet).at].name + ".",
+    options:() => [
+      {key:"send", label:"Envoyer la flotte", desc:"Six chances sur dix de récupérer des vaisseaux ; sinon, une embuscade. La flotte ne bouge plus ce tour."},
+      {key:"ignore", label:"Passer son chemin", desc:"Rien ne se passe."}],
+    apply:(st, fid, x, k) => {
+      const f = fleetById(st, x.fleet);
+      if(k === "ignore") return "La flotte poursuit sa route.";
+      f.mp = 0;
+      if(rnd(st) < 0.6){ if(rnd(st) < 0.5) f.ships.dest++; else f.ships.frig += 2; return "Le chantier contenait des coques en état : " + f.name + " s'agrandit."; }
+      const lost = ambush(st, f);
+      return "C'était un piège. " + f.name + " perd " + describeShips(lost) + ".";
+    }},
+  {id:"relic", type:"opportunity", title:"Une relique repérée",
+    weight:(st, fid) => st.fleets.some(f => f.owner === fid) ? 0.8 : 0,
+    ctx:(st, fid) => { const f = pickOne(st, st.fleets.filter(v => v.owner === fid)); return f ? {fleet:f.id} : null; },
+    text:(st, fid, x) => "Une relique de l'ancienne République a été localisée dans un système proche de " + SYS[fleetById(st, x.fleet).at].name + ".",
+    options:(st, fid) => [
+      {key:"send", label:"Envoyer la flotte", desc:"Six chances sur dix : +15 influence et le respect des Jedi (+5). Sinon, une embuscade."},
+      {key:"sell", label:"Vendre l'emplacement au Syndicat", desc:"+60 crédits, emprise sur ta capitale +5.", disabled:!syndWilling(st, fid)}],
+    apply:(st, fid, x, k) => {
+      const F = st.factions[fid], f = fleetById(st, x.fleet);
+      if(k === "sell"){ F.cr += 60; syndRaise(capitalOf(st, fid), 5); return "Le Syndicat paie bien. Pour une fois."; }
+      f.mp = 0;
+      if(rnd(st) < 0.6){ F.inf += 15; if(!F.terror) F.jediRep = Math.min(100, F.jediRep + 5); return "La relique est rapportée en grande pompe (+15 influence)."; }
+      const lost = ambush(st, f);
+      return "Des pillards attendaient. " + (st.fleets.includes(f) ? f.name + " perd " : "La flotte perd ") + describeShips(lost) + ".";
+    }},
+];
+const EVENTS_BY_ID = {};
+EVENTS.forEach(e => { EVENTS_BY_ID[e.id] = e; });
+
+// Effets différés : une décision revient plusieurs tours plus tard.
+const DELAYED = {
+  scandal:(st, fid, d) => { planetsOf(st, fid).forEach(s => { s.loyalty = Math.max(0, s.loyalty - 8); }); st.factions[fid].shock = Math.min(20, st.factions[fid].shock + 4); return "Le massacre couvert par l'amiral " + d.name + " éclate au grand jour : scandale (loyauté −8 partout)."; },
+  defector:(st, fid, d) => {
+    const foes = FACTION_IDS.filter(f => f !== fid && st.factions[f].alive), foe = pickOne(st, foes);
+    const f = foe ? pickOne(st, st.fleets.filter(v => v.owner === foe)) : null;
+    if(!f) return null;
+    const old = charOf(st, f.admiral); if(old) delete st.chars[old.id];
+    const c = genChar(st, foe, "admiral", {at:f.id}); c.name = d.name; c.traits = ["brilliant"]; f.admiral = c.id;
+    return d.name + ", l'officier que tu as négligé, commande désormais " + f.name + " pour " + FACTIONS[foe].name + ".";
+  },
+  double:(st, fid, d) => { const s = st.systems[d.planet]; if(!s || s.owner !== fid) return null; s.loyalty = Math.max(0, s.loyalty - 12); s.def = Math.round(s.def * 0.6); return "L'espion retourné était un agent double : sabotage à " + SYS[s.id].name + "."; },
+  exposed:(st, fid, d) => { const F = st.factions[fid]; planetsOf(st, fid).forEach(s => { s.loyalty = Math.max(0, s.loyalty - 8); }); if(!F.terror) F.jediRep = Math.max(0, F.jediRep - 10); return "Le meurtre de " + d.name + " est remonté jusqu'à toi. Loyauté −8 partout, les Jedi s'indignent."; },
+  counterhit:(st, fid) => {
+    const c = pickOne(st, Object.values(st.chars).filter(v => v.fid === fid && (v.role === "chief" || v.role === "admiral")));
+    if(!c) return null;
+    const name = charTitle(st, c) + " " + c.name;
+    charDies(st, c, "est assassiné");
+    return "Tu avais refusé l'offre du Syndicat. Ton rival, lui, l'a acceptée : " + name + " est mort.";
+  },
+  spread:(st, fid, d) => {
+    const s = pickOne(st, ADJ[d.planet].map(n => st.systems[n]).filter(p => p.owner === fid));
+    if(!s) return null;
+    s.malus = {until:st.turn + 5, mul:0.7}; s.loyalty = Math.max(0, s.loyalty - 10);
+    return "L'épidémie s'est propagée à " + SYS[s.id].name + ".";
+  },
+};
+
+function eventValid(st, ev){
+  const x = ev.ctx || {};
+  if(!st.factions[ev.fid].alive) return false;
+  if(x.planet && st.systems[x.planet].owner !== ev.fid) return false;
+  if(x.char != null && !charOf(st, x.char)) return false;
+  if(x.fleet != null && (!fleetById(st, x.fleet) || fleetById(st, x.fleet).owner !== ev.fid)) return false;
+  return true;
+}
+function eventOptions(st, ev){ return EVENTS_BY_ID[ev.id].options(st, ev.fid, ev.ctx); }
+function eventText(st, ev){ return EVENTS_BY_ID[ev.id].text(st, ev.fid, ev.ctx); }
+function resolveEvent(st, ev, key){
+  if(!eventValid(st, ev)) return "";
+  const opts = eventOptions(st, ev);
+  const opt = opts.find(o => o.key === key && !o.disabled) || opts.find(o => !o.disabled);
+  const msg = EVENTS_BY_ID[ev.id].apply(st, ev.fid, ev.ctx, opt.key);
+  logEv(st, EVENTS_BY_ID[ev.id].title + " : " + msg, "info", [ev.fid]);
+  return msg;
+}
+function drawEvent(st, fid, exclude){
+  let pool = EVENTS.filter(e => !exclude.includes(e.id)).map(e => ({e, w:e.weight(st, fid)})).filter(x => x.w > 0);
+  for(let tries = 0; tries < 4 && pool.length; tries++){
+    let r = rnd(st) * pool.reduce((a, x) => a + x.w, 0), pick = pool[0];
+    for(const x of pool){ r -= x.w; if(r <= 0){ pick = x; break; } }
+    const ctx = pick.e.ctx(st, fid);
+    if(ctx) return {id:pick.e.id, fid, ctx};
+    pool = pool.filter(x => x !== pick);
+  }
+  return null;
+}
+// Un ou deux événements par tour pour le joueur ; l'IA en tranche un tous les deux tours environ.
+function eventsTurn(st){
+  const P = st.player;
+  st.delayed = st.delayed.filter(d => {
+    if(d.at > st.turn) return true;
+    if(st.factions[d.fid].alive){
+      const msg = DELAYED[d.kind](st, d.fid, d.data);
+      if(msg) logEv(st, msg, d.kind === "defector" ? "bad" : "bad", [d.fid]);
+    }
+    return false;
+  });
+  FACTION_IDS.forEach(fid => {
+    if(!st.factions[fid].alive) return;
+    const n = fid === P ? 1 + (rnd(st) < 0.3 ? 1 : 0) : (rnd(st) < 0.5 ? 1 : 0);
+    const drawn = [];
+    for(let i = 0; i < n; i++){
+      const ev = drawEvent(st, fid, drawn);
+      if(!ev) break;
+      drawn.push(ev.id);
+      if(fid === P) st.events.push(ev);
+      else resolveEvent(st, ev, pickOne(st, eventOptions(st, ev).filter(o => !o.disabled)).key);
+    }
+  });
 }
 
 // ---------- Batailles : côté carte ----------
@@ -1406,6 +1974,8 @@ function capture(st, s, fid){
   s.owner = fid; s.conquered = true; s.heldSince = st.turn;
   s.loyalty = FACTIONS[fid].conquest; s.def = Math.round(s.maxDef * 0.3);
   s.queue = []; s.drill = []; s.tax = "normal"; s.besieged = false; s.sabotage = false;
+  if(s.cartel){ s.cartel = false; s.synd = 40; logEv(st, FACTIONS[fid].name + " arrache " + SYS[s.id].name + " au Syndicat.", fid === st.player ? "good" : "info", [fid]); }
+  s.bought = false; s.smuggle = 0; s.taxLock = 0;
   politicsOnCapture(st, s, fid, old);
   const who = old ? [fid, old] : [fid];
   if(old && st.factions[old].capital === s.id){
@@ -1464,7 +2034,7 @@ function finishTurn(st){
   // 3b. Recrutement des troupes et milices indépendantes qui se reforment
   Object.values(st.systems).forEach(s => {
     if(!s.owner){
-      const m = militia(s);
+      const m = s.cartel ? troops(CARTEL_GARRISON) : militia(s);
       if(st.turn % 4 === 0 && !s.besieged) TROOP_TYPES.forEach(t => { if(s.garrison[t] < m[t]) s.garrison[t]++; });
       return;
     }
@@ -1497,6 +2067,9 @@ function finishTurn(st){
   });
   // 4b. Politique : décrets, groupes, exigences, régimes, personnages
   politicsTurn(st);
+  // 4c. Syndicat : emprise, dettes, trésor ; puis les événements du tour et les effets différés
+  syndicateTurn(st);
+  eventsTurn(st);
   // 5. Chocs politiques qui s'estompent
   FACTION_IDS.forEach(f => { st.factions[f].shock = Math.max(0, st.factions[f].shock - 1); });
   // 6. Éliminations et victoire
@@ -1507,6 +2080,8 @@ function finishTurn(st){
       st.fleets = st.fleets.filter(x => x.owner !== f);
       Object.values(st.chars).forEach(c => { if(c.fid === f) delete st.chars[c.id]; });
       st.dilemmas = st.dilemmas.filter(d => d.fid !== f);
+      st.events = st.events.filter(d => d.fid !== f);
+      st.delayed = st.delayed.filter(d => d.fid !== f);
       logEv(st, FACTIONS[f].name + " n'a plus aucun monde : la faction s'effondre, ses flottes se dispersent.", f === P ? "bad" : "info", []);
     }
   });
@@ -1612,6 +2187,7 @@ function aiShouldInvade(st, f){
 function aiManage(st, fid){
   const F = st.factions[fid];
   aiPolitics(st, fid);
+  aiSyndicate(st, fid);
   const mine = planetsOf(st, fid);
   // Un groupe « peuple » mécontent interdit les impôts élevés.
   const people = F.groups ? groupsByRole(F, "people")[0] : null;
@@ -2228,7 +2804,7 @@ function loadSave(){
     const s = store(); const raw = s && s.getItem(SAVE_KEY);
     if(!raw) return null;
     const st = JSON.parse(raw);
-    return st && st.version === 4 ? st : null;
+    return st && st.version === 5 ? st : null;
   }catch(e){ return null; }
 }
 function clearSave(){ try{ const s = store(); if(s) s.removeItem(SAVE_KEY); }catch(e){} }
@@ -2314,7 +2890,7 @@ function renderMap(){
     if(ui.sel === id) h += '<circle cx="' + S.x + '" cy="' + S.y + '" r="' + (r + 5) + '" fill="none" stroke="#fff" stroke-width="2"/>';
     if(s.besieged) h += '<circle cx="' + S.x + '" cy="' + S.y + '" r="' + (r + 3) + '" fill="none" stroke="var(--warn)" stroke-width="2.5" stroke-dasharray="3 3"/>';
     else if(s.owner && s.loyalty < 35) h += '<circle cx="' + S.x + '" cy="' + S.y + '" r="' + (r + 3) + '" fill="none" stroke="var(--bad)" stroke-width="2"/>';
-    h += '<circle cx="' + S.x + '" cy="' + S.y + '" r="' + r + '" fill="' + fcolor(s.owner) + '" stroke="#070b14" stroke-width="2"/>';
+    h += '<circle cx="' + S.x + '" cy="' + S.y + '" r="' + r + '" fill="' + (s.cartel ? CARTEL_COLOR : fcolor(s.owner)) + '" stroke="#070b14" stroke-width="2"/>';
     if(cap) h += '<circle cx="' + S.x + '" cy="' + S.y + '" r="5" fill="#070b14"/>';
     if(s.yard) h += '<rect x="' + (S.x - r - 6) + '" y="' + (S.y + r - 6) + '" width="8" height="8" fill="#dfe6f3" stroke="#070b14"/>';
     h += '<text x="' + S.x + '" y="' + (S.y + r + 15) + '">' + esc(S.name) + '</text>';
@@ -2377,7 +2953,7 @@ function renderPanel(){
     const id = ui.sel, S = SYS[id], s = G.systems[id];
     const mine = s.owner === P;
     h += '<div class="row" style="justify-content:space-between"><h2 style="margin:0">' + esc(S.name) + '</h2><button class="small" data-act="desel">Vue d\'ensemble</button></div>';
-    h += '<div class="muted">' + REGIONS[S.region].name + ' · <span style="color:' + fcolor(s.owner) + '">' + esc(fname(s.owner)) + '</span></div>';
+    h += '<div class="muted">' + REGIONS[S.region].name + ' · <span style="color:' + (s.cartel ? CARTEL_COLOR : fcolor(s.owner)) + '">' + (s.cartel ? 'Tenu par le Syndicat' : esc(fname(s.owner))) + '</span></div>';
     h += '<div style="margin:.5em 0">';
     if(FACTION_IDS.some(x => G.factions[x].capital === id)) h += '<span class="tag good">Capitale</span>';
     if(s.yard) h += '<span class="tag">Chantier orbital</span>';
@@ -2385,6 +2961,10 @@ function renderPanel(){
     if(blockaded(G, id)) h += '<span class="tag bad">Bloqué</span>';
     if(s.besieged) h += '<span class="tag warn">Assiégé</span>';
     if(s.owner && s.loyalty < 35) h += '<span class="tag bad">Sabotages</span>';
+    if(s.owner && s.synd >= 50) h += '<span class="tag bad">Revenus détournés</span>';
+    if(s.bought) h += '<span class="tag bad">Gouverneur acheté</span>';
+    if(s.smuggle >= G.turn) h += '<span class="tag warn">Contrebande jusqu\'au tour ' + s.smuggle + '</span>';
+    if(s.malus && s.malus.until >= G.turn) h += '<span class="tag bad">Production −' + Math.round((1 - s.malus.mul) * 100) + ' % (tour ' + s.malus.until + ')</span>';
     h += '</div>';
     const y = planetYield(G, s);
     h += '<dl class="kv">';
@@ -2392,12 +2972,17 @@ function renderPanel(){
       h += '<dt>Loyauté</dt><dd>' + s.loyalty + (mine ? ' <span class="muted">→ ' + loyaltyTarget(G, s) + '</span>' : '') + loyBar(s.loyalty) + '</dd>';
     }
     h += '<dt>Défense</dt><dd>' + s.def + ' / ' + s.maxDef + (fortification(s) >= 0.5 ? ' <span class="muted">· bouclier levé</span>' : ' <span class="warn">· bouclier tombé</span>') + '</dd>';
+    h += '<dt>Syndicat</dt><dd>emprise ' + s.synd + ' %' + (s.owner ? ' <span class="muted">· crédits −' + Math.round((1 - syndCut(s)) * 100) + ' %</span>' : '') + synBar(s.synd) + '</dd>';
     h += '<dt>Garnison</dt><dd>' + esc(describeTroops(s.garrison)) + ' <span class="muted">· force ' + Math.round(troopPower(s.garrison, s.owner)) + '</span></dd>';
     if(s.governor != null && charOf(G, s.governor)) h += '<dt>Gouverneur</dt><dd>' + charLine(charOf(G, s.governor), true) + '</dd>';
     h += '<dt>Production</dt><dd>' + (s.owner ? Math.round(y.cr) + ' cr · ' + Math.round(y.mat) + ' mat · ' + Math.round(y.inf) + ' inf' : s.prod.cr + ' cr · ' + s.prod.mat + ' mat · ' + s.prod.inf + ' inf (potentiel)') + '</dd>';
     h += '</dl>';
     if(mine){
-      h += '<h3>Impôts</h3><div class="row">' + Object.keys(TAX).map(k => '<button class="small ' + (s.tax === k ? "on" : "") + '" data-act="tax" data-id="' + id + '" data-v="' + k + '">' + TAX[k].label + '</button>').join("") + '</div>';
+      const locked = s.taxLock >= G.turn;
+      h += '<h3>Impôts</h3><div class="row">' + Object.keys(TAX).map(k => '<button class="small ' + (s.tax === k ? "on" : "") + '" data-act="tax" data-id="' + id + '" data-v="' + k + '"' + (locked ? " disabled" : "") + '>' + TAX[k].label + '</button>').join("") + '</div>';
+      if(locked) h += '<div class="muted" style="font-size:.85rem">Autonomie accordée : impôts bas jusqu\'au tour ' + s.taxLock + '.</div>';
+      h += '<div class="row" style="margin-top:.5em"><button class="small" data-act="purge" data-id="' + id + '"' + (canPurge(G, id) ? "" : " disabled") + '>Purger le Syndicat (−' + PURGE_COST + ' influence, emprise −35, loyauté −15)</button>' +
+        (blockaded(G, id) ? '<button class="small" data-act="smuggle" data-id="' + id + '"' + (canSmuggle(G, P, id) ? "" : " disabled") + '>Contrebande (' + SYND_COST.smuggle + ' cr) : lever le blocus 5 tours</button>' : '') + '</div>';
       h += '<div class="muted" style="font-size:.85rem;margin-top:.3em">Élevés : +45 % de crédits, la loyauté visée baisse de 15. Bas : −40 %, +12.</div>';
       h += '<div class="row" style="margin-top:.5em"><button class="small" data-act="appease" data-id="' + id + '"' + (canAppease(G, id) ? "" : " disabled") + '>Apaiser (−' + APPEASE_COST + ' influence, +12 loyauté)</button></div>';
       if(s.yard){
@@ -2461,6 +3046,8 @@ function onPanel(e){
   else if(act === "pickfleet"){ const f = fleetById(G, +id); ui.fleet = f.id; ui.sel = f.at; render(); return centerOn(f.at); }
   else if(act === "tax"){ setTax(G, id, v); }
   else if(act === "appease"){ appease(G, id); }
+  else if(act === "purge"){ purge(G, id); }
+  else if(act === "smuggle"){ smuggle(G, P, id); }
   else if(act === "build"){ queueBuild(G, id, v); }
   else if(act === "recruit"){ queueRecruit(G, id, v); }
   else if(act === "embark"){ embark(G, fleetById(G, +id), v); }
@@ -2530,9 +3117,23 @@ function showReport(auto, next){
     [{label:"Continuer", primary:true, fn:next || null}]);
 }
 // Dilemmes politiques à trancher en début de tour (duel, défiance, amiral rival).
+// Événements du tour : un ou deux choix, souvent sans bonne réponse.
+function processEvents(){
+  const ev = G.events.shift();
+  if(!ev){ save(); render(); return; }
+  if(!eventValid(G, ev)) return processEvents();
+  const def = EVENTS_BY_ID[ev.id], opts = eventOptions(G, ev);
+  showModal('<div class="tag">' + esc(EVENT_TYPES[def.type]) + '</div><h2>' + esc(def.title) + '</h2><p>' + esc(eventText(G, ev)) + '</p><ul>' +
+    opts.map(o => '<li' + (o.disabled ? ' class="muted"' : '') + '><b>' + esc(o.label) + '</b> — ' + esc(o.desc) + (o.disabled ? ' <i>(impossible pour l\'instant)</i>' : '') + '</li>').join("") + '</ul>',
+    opts.filter(o => !o.disabled).map((o, i) => ({label:o.label, primary:i === 0, fn:() => {
+      const msg = resolveEvent(G, ev, o.key);
+      render();
+      showModal('<h2>' + esc(def.title) + '</h2><p>' + esc(msg) + '</p>', [{label:"Continuer", primary:true, fn:processEvents}]);
+    }})));
+}
 function processDilemmas(){
   const d = G.dilemmas.shift();
-  if(!d){ save(); render(); return; }
+  if(!d) return processEvents();
   if(!dilemmaValid(G, d)) return processDilemmas();
   const opts = dilemmaOptions(G, d);
   showModal('<h2>' + esc(d.title) + '</h2><p>' + esc(d.text) + '</p><ul>' +
@@ -2563,6 +3164,8 @@ function showModal(html, buttons, wide){
   $("modal").classList.remove("hidden");
 }
 function onModal(e){
+  const sb = e.target.closest("[data-syn]");
+  if(sb && !sb.disabled) return synAction(sb.dataset.syn, sb.dataset.id);
   const gb = e.target.closest("[data-gov]");
   if(gb && !gb.disabled) return govAction(gb.dataset.gov, gb.dataset.id, gb.dataset.v);
   const btn = e.target.closest("[data-mi]");
@@ -2579,6 +3182,8 @@ function showMenu(){
     '<li><b>Loyauté</b> : sous 35, sabotages ; sous 20, révolte possible si aucune flotte ne garde le monde. Défaites et capitale perdue ébranlent le régime.</li>' +
     '<li><b>Batailles</b> : boucliers avant / flancs / arrière ; frapper de dos fait mal et brise le moral. Une unité à moins de 25 de moral fuit ; celles rattrapées sont massacrées.</li>' +
     '<li><b>Terrain spatial</b> : nébuleuse = portée réduite à 1 ; astéroïdes = couverture (−30 % de dégâts) mais 2 points de mouvement.</li>' +
+    '<li><b>Syndicat</b> (bouton « Syndicat ») : prêts, mercenaires, contrebande, assassinats, renseignements. Chaque contrat fait grimper son emprise : à 50 %, il détourne la moitié des crédits d\'un monde ; à 80 %, le gouverneur passe à sa solde et le monde peut basculer. Une dette impayée déclenche des représailles.</li>' +
+    '<li><b>Événements</b> : un ou deux par tour, souvent sans bonne réponse. Certains choix reviennent plusieurs tours plus tard.</li>' +
     '<li><b>Politique</b> (bouton « Gouvernement ») : trois groupes internes à satisfaire, des décrets qui coûtent de l\'influence et ont toujours une contrepartie, des amiraux et gouverneurs aux traits qui comptent. La lassitude de guerre monte à chaque tour de combat.</li>' +
     '<li><b>Invasions</b> : le siège n\'use que les défenses. Pour prendre un monde, il faut tenir l\'orbite puis débarquer des troupes. Destroyers : 6 places, frégates : 2.</li>' +
     '<li><b>Au sol</b> : tenir 2 points de contrôle sur 3 à la fin du 10e round fait tomber la planète. Forêt = couvert (surtout l\'infanterie), hauteurs = +1 portée. Frappes orbitales possibles une fois le bouclier planétaire sous 50 %.</li></ul>',
@@ -2609,6 +3214,15 @@ function showGov(){
     '<dt>Emprise du Syndicat</dt><dd>' + F.syndicate + ' % <span class="muted">· crédits −' + Math.round(F.syndicate / 3) + ' %</span></dd>' +
     '<dt>Réputation Jedi</dt><dd>' + F.jediRep + '/100' + (F.terror ? ' <span class="bad">· détruite</span>' : '') + '</dd>' +
     '<dt>Influence</dt><dd>' + Math.round(F.inf) + '</dd></dl>';
+  if(F.intel >= G.turn){
+    h += '<h3>Rapports d\'espions (jusqu\'au tour ' + F.intel + ')</h3><div class="gov-grid">' + FACTION_IDS.filter(x => x !== P && G.factions[x].alive).map(x => {
+      const X = G.factions[x], XL = charOf(G, X.leader);
+      return '<div class="card"><b style="color:' + FACTIONS[x].color + '">' + esc(FACTIONS[x].name) + '</b><div style="font-size:.84rem">' +
+        Math.round(X.cr) + ' crédits · ' + Math.round(X.inf) + ' influence<br>' + esc(REGIMES[x].leader) + ' ' + (XL ? esc(XL.name) + ' (' + esc(traitNames(XL)) + ')' : '') + '<br>' +
+        X.groups.map(g => esc(g.name) + ' ' + g.sat).join(' · ') + '<br>Décrets : ' + (X.decrees.length ? X.decrees.map(d => esc(DECREES[d.id].name)).join(', ') : 'aucun') +
+        (X.debt ? '<br><span class="warn">Endetté auprès du Syndicat</span>' : '') + '</div></div>';
+    }).join("") + '</div>';
+  }
   h += '<h3>Groupes</h3><div class="gov-grid">' + F.groups.map(g => {
     const chief = charOf(G, g.chief), d = F.demand && F.demand.group === g.key ? F.demand : null;
     return '<div class="card"><b>' + esc(g.name) + '</b> <span class="muted" style="font-size:.8rem">' + ROLE_NAME[g.role] + (R.seats ? ' · ' + R.seats[g.key] + ' sièges' : '') + '</span>' +
@@ -2659,6 +3273,56 @@ function govAction(act, id, v){
   else if(act === "reward") rewardChar(G, charOf(G, +id));
   else if(act === "dismiss") dismissChar(G, charOf(G, +id));
   save(); render(); showGov();
+  box.scrollTop = y;
+}
+
+// ---------- Syndicat (v0.5) ----------
+function synBar(v){
+  const c = v >= 80 ? "var(--bad)" : v >= 50 ? "var(--warn)" : CARTEL_COLOR;
+  return '<div class="bar"><i style="width:' + v + '%;background:' + c + '"></i></div>';
+}
+function showSynd(){
+  const P = G.player, F = G.factions[P];
+  const here = ui.sel && G.systems[ui.sel].owner === P ? G.systems[ui.sel] : capitalOf(G, P);
+  const willing = syndWilling(G, P);
+  let h = '<h2>Le Syndicat</h2><p class="muted" style="font-size:.88rem">Son seul but est le profit. Il sert tout le monde : ce que tu lui paies finance aussi tes ennemis. Chaque contrat fait grimper son emprise sur tes mondes.</p>';
+  if(!willing) h += '<p class="bad">Tant que la Guerre au crime est en vigueur, le Syndicat refuse de traiter avec toi.</p>';
+  h += '<dl class="kv"><dt>Emprise moyenne</dt><dd>' + syndAvg(G, P) + ' %</dd><dt>Tes crédits</dt><dd>' + Math.round(F.cr) + '</dd></dl>';
+  h += '<h3>Prêt</h3>';
+  if(F.debt) h += '<div class="card"><b class="' + (F.debt.late ? "bad" : "") + '">Dette : ' + F.debt.amount + ' crédits</b> <span class="muted">· échéance tour ' + F.debt.due + (F.debt.late ? ' · en retard de ' + F.debt.late + ' tour(s) : représailles chaque tour, +10 % par tour' : '') + '</span>' +
+    '<div class="row" style="margin-top:.3em"><button class="small" data-syn="repay"' + (canRepay(G, P) ? "" : " disabled") + '>Rembourser</button></div></div>';
+  else h += '<div class="card">Emprunter ' + LOAN.amount + ' crédits, à rendre ' + LOAN.repay + ' d\'ici ' + LOAN.turns + ' tours. Emprise +10 sur ta capitale, +3 ailleurs. À l\'échéance, remboursement d\'office si tes caisses le permettent ; sinon, pirates, sabotages et assassinats.' +
+    '<div class="row" style="margin-top:.3em"><button class="small" data-syn="loan"' + (canLoan(G, P) ? "" : " disabled") + '>Emprunter</button></div></div>';
+  h += '<h3>Mercenaires à ' + esc(SYS[here.id].name) + '</h3><p class="muted" style="font-size:.84rem">Sélectionne un de tes mondes sur la carte pour les y faire venir. Emprise +12 sur ce monde.</p>';
+  h += '<div class="row"><button class="small" data-syn="fleet" data-id="' + here.id + '"' + (canHire(G, P, "fleet", here.id) ? "" : " disabled") + '>Flotte : ' + esc(describeShips(MERC_FLEET)) + ' (' + SYND_COST.fleet + ' cr)</button>' +
+    '<button class="small" data-syn="troops" data-id="' + here.id + '"' + (canHire(G, P, "troops", here.id) ? "" : " disabled") + '>Compagnie : ' + esc(describeTroops(troops(MERC_TROOPS))) + ' (' + SYND_COST.troops + ' cr)</button></div>';
+  h += '<h3>Renseignements</h3><div class="row"><button class="small" data-syn="intel"' + (canIntel(G, P) ? "" : " disabled") + '>Acheter des rapports sur tes rivaux, 5 tours (' + SYND_COST.intel + ' cr)</button>' +
+    (F.intel >= G.turn ? '<span class="muted" style="font-size:.85rem">Actifs jusqu\'au tour ' + F.intel + ' : voir « Gouvernement ».</span>' : '') + '</div>';
+  const blocked = planetsOf(G, P).filter(p => blockaded(G, p.id));
+  if(blocked.length) h += '<h3>Contrebande</h3><div class="row">' + blocked.map(p => '<button class="small" data-syn="smuggle" data-id="' + p.id + '"' + (canSmuggle(G, P, p.id) ? "" : " disabled") + '>Lever le blocus de ' + esc(SYS[p.id].name) + ' (' + SYND_COST.smuggle + ' cr)</button>').join("") + '</div>';
+  h += '<h3>Assassinats</h3><p class="muted" style="font-size:.84rem">Réussi, la cible meurt et sa faction vacille. Raté, ton nom circule : régime ébranlé, Jedi indignés. Emprise +10 sur ta capitale dans les deux cas.</p>';
+  const targets = assassinTargets(G, P).filter(c => c.role !== "admiral" || c.xp >= 1)
+    .sort((a, b) => a.fid.localeCompare(b.fid) || ["leader", "chief", "admiral"].indexOf(a.role) - ["leader", "chief", "admiral"].indexOf(b.role));
+  h += targets.length ? targets.map(c => '<div class="row" style="justify-content:space-between;font-size:.88rem;margin:.2em 0"><span><span class="dot" style="background:' + FACTIONS[c.fid].color + '"></span>' + esc(charTitle(G, c)) + ' ' + esc(c.name) + ' <span class="muted">· ' + Math.round(ASSASSIN[c.role].chance * 100) + ' %</span></span>' +
+    '<button class="small" data-syn="kill" data-id="' + c.id + '"' + (canAssassinate(G, P, c) ? "" : " disabled") + '>' + ASSASSIN[c.role].cost + ' cr</button></div>').join("") : '<div class="muted">Aucune cible.</div>';
+  const infil = planetsOf(G, P).sort((a, b) => b.synd - a.synd).slice(0, 6);
+  h += '<h3>Tes mondes les plus infiltrés</h3>' + infil.map(p => '<div class="row" style="justify-content:space-between;font-size:.88rem;margin:.2em 0"><span>' + esc(SYS[p.id].name) + ' <span class="' + (p.synd >= 50 ? "bad" : "muted") + '">· ' + p.synd + ' %' + (p.bought ? ' · gouverneur acheté' : '') + '</span></span>' +
+    '<button class="small" data-syn="purge" data-id="' + p.id + '"' + (canPurge(G, p.id) ? "" : " disabled") + '>Purger (' + PURGE_COST + ' inf.)</button></div>').join("");
+  showModal(h, [{label:"Fermer", primary:true}], true);
+}
+function synAction(act, id){
+  const P = G.player, box = $("modalBox"), y = box.scrollTop;
+  let msg = null;
+  if(act === "loan") takeLoan(G, P);
+  else if(act === "repay") repayLoan(G, P);
+  else if(act === "fleet" || act === "troops") hireMercs(G, P, act, id);
+  else if(act === "intel") buyIntel(G, P);
+  else if(act === "smuggle") smuggle(G, P, id);
+  else if(act === "purge") purge(G, id);
+  else if(act === "kill") msg = assassinate(G, P, charOf(G, +id));
+  save(); render();
+  if(msg) return showModal('<h2>Le Syndicat</h2><p>' + esc(msg) + '</p>', [{label:"Retour", primary:true, fn:showSynd}]);
+  showSynd();
   box.scrollTop = y;
 }
 
@@ -2937,6 +3601,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("btnReport").addEventListener("click", () => showReport(false));
   $("btnMenu").addEventListener("click", showMenu);
   $("btnGov").addEventListener("click", () => { if(G && !G.over) showGov(); });
+  $("btnSynd").addEventListener("click", () => { if(G && !G.over) showSynd(); });
   $("modal").addEventListener("click", onModal);
   $("board").addEventListener("click", onBoard);
   $("bPanel").addEventListener("click", onBPanel);
