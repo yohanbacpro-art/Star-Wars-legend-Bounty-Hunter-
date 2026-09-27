@@ -1,16 +1,16 @@
-# L'Effondrement — 75 ap. BY (prototype v0.5)
+# L'Effondrement — 75 ap. BY (prototype v0.6)
 
 Jeu de grande stratégie galactique au tour par tour, dans l'esprit de Total War.
 Tout tient dans `star-wars.html` : l'ouvrir dans un navigateur, sans dépendance ni build.
 Jouable sur ordinateur et sur téléphone. Ranch Dynasty (`index.html`) reste inchangé.
 
 Le game design complet vit dans le doc « Game design — Jeu de stratégie Star Wars (75 ap. BY) ».
-Ce prototype couvre les cinq premières étapes de sa feuille de route.
+Ce prototype couvre les six premières étapes de sa feuille de route.
 
 ## v0.1 — la carte galactique
 
 - 34 systèmes répartis en 5 régions (Noyau, Colonies, Bordure Médiane, Bordure Extérieure, Régions Inconnues), reliés par des routes hyperspatiales.
-- 4 factions jouables avec leur force et leur faiblesse : Vestiges impériaux, République restaurée, Mandalore, Ligue de la Bordure. Les autres mondes sont indépendants.
+- 4 factions jouables sur la carte, avec leur force et leur faiblesse : Vestiges impériaux, République restaurée, Mandalore, Ligue de la Bordure. Les autres mondes sont indépendants. Le Sith est la cinquième faction jouable (v0.6).
 - 3 ressources : crédits (impôts et routes commerciales), matériaux (construction), influence (apaiser un monde).
 - Planètes : production, défense, loyauté, impôts (bas / normal / élevé). Sous 35 de loyauté, sabotages ; sous 20, révolte et sécession possibles.
 - Routes commerciales : une route dont on tient les deux bouts rapporte ; une flotte ennemie en orbite la bloque.
@@ -72,14 +72,34 @@ Bouton « Syndicat » en haut de l'écran.
 - **16 événements**, un ou deux par tour, en six familles : personnage (massacre, autonomie, jeune officier, espion), économie (grève, boom, pénurie), Syndicat (contrat d'assassinat, contrebandiers, pots-de-vin), Force (enfant sensible à la Force), catastrophe (épidémie, séisme, famine), opportunité (chantier abandonné, relique). Ils dépendent de l'état de l'empire : mondes peu loyaux, forte emprise, impôts élevés.
 - **Effets différés** : un massacre couvert qui éclate au grand jour, un officier négligé qui passe à l'ennemi, un espion retourné qui était un agent double, un contrat refusé que ton rival accepte, une épidémie abandonnée qui se propage.
 
+## v0.6 — la Force
+
+**L'Ordre Jedi**, joué par l'IA, ne peut pas être conquis :
+- **Jugement** : chaque faction a une réputation auprès de l'Ordre. Honorable (75 et plus), elle reçoit un Chevalier Jedi qui combat dans sa flotte. Cruelle (20 ou moins), les Jedi soutiennent la résistance sur ses mondes.
+- **Protection** : quand une faction cruelle (ou le Sith) envahit un monde, un Chevalier Jedi peut se joindre aux défenseurs.
+- **Médiation** : tous les 12 tours, l'Ordre propose une trêve aux deux factions les plus épuisées. Pendant une trêve, ni bataille ni invasion entre elles ; la rompre coûte 15 de réputation.
+- **Chasse aux Sith** : ses enquêtes font monter l'Exposition du Sith. Une faction bien vue des Jedi voit parfois un agent Sith démasqué chez elle ; toute faction peut aussi faire enquêter sur un personnage (10 d'influence).
+
+**Le Sith jouable, mode Ombre** (cinquième carte de l'écran titre, bouton « Ombre ») :
+- Sans planète ni flotte au départ. Ressources : Puissance obscure, acolytes (qui donnent des actions), et dossiers de chantage sur les personnages.
+- **Phase 1, l'Ombre** : recruter des acolytes, fouiller les systèmes pour trouver les 3 sites Sith et leurs holocrons (placés au hasard), monter des dossiers, corrompre des personnages, semer le chaos. Les batailles de toute la galaxie nourrissent la Puissance obscure.
+- **Phase 2, l'Emprise** (Puissance 80, deux personnages corrompus) : assassinats par les acolytes, votes truqués qui renversent un dirigeant, chasse aux Jedi. Un amiral corrompu peut trahir en pleine bataille.
+- **Phase 3, la Revendication** (Puissance 200) : coup d'État sur les Vestiges impériaux avec deux Moffs corrompus (la faction entière passe au Sith), ou Empire Sith fondé sur quatre mondes aux gouverneurs corrompus.
+- **L'Exposition** : chaque action visible la fait monter, les enquêtes Jedi aussi ; faire le mort la fait redescendre. À 50, des rumeurs courent et les Jedi tuent des acolytes ; à 80, toutes les factions démasquent ses agents ; à 100, le culte est anéanti.
+- **Victoire Sith** : dominer la galaxie et éradiquer l'Ordre Jedi.
+- **Au combat** : le Seigneur Sith, ses acolytes et les Chevaliers Jedi sont des unités héroïques. Au sol, ils combattent en première ligne et ne fuient jamais ; dans l'espace, ils boostent la flotte par la méditation de combat. Leur mort est définitive ; si le Seigneur Sith tombe, un acolyte prend sa place, et sans acolyte la lignée s'éteint.
+- Quand il n'est pas joué, l'IA le contrôle avec les mêmes règles.
+
+Les choix de v0.4 et v0.5 servent ici : la réputation Jedi accumulée, et l'enfant sensible à la Force des événements (confié aux Jedi, il renforce l'Ordre ; abandonné, il devient un acolyte).
+
 ## Architecture
 
 Deux blocs `<script>` dans `star-wars.html` :
 
 | Bloc | Contenu |
 |---|---|
-| Moteur | Données (`SYSTEMS`, `LINKS`, `FACTIONS`, `SHIPS`, `TROOPS`, `UNITS`), `newGame`, économie, loyauté, troupes et invasions (`embark`, `makeInvasion`, `autoGround`, `applyGround`), politique (`REGIMES`, `DECREES`, `TRAITS`, `genChar`, `enactDecree`, `voteSupport`, `politicsTurn`, `resolveDilemma`), Syndicat et événements (`syndCut`, `takeLoan`, `hireMercs`, `assassinate`, `purge`, `syndicateTurn`, `EVENTS`, `DELAYED`, `eventsTurn`, `resolveEvent`), `runAI`, `finishTurn`, batailles (`autoBattle`, `createBattle`, `createGroundBattle`, `bAttack`, `bOrbital`, `bRunAI`, `bResult`, `applyBattle`). Aucune dépendance au DOM. |
-| Interface | Écran titre, carte SVG, panneau, écrans Gouvernement et Syndicat, dilemmes et événements, bataille sur grille SVG, modales, sauvegarde `localStorage` (`sw75-save`). |
+| Moteur | Données (`SYSTEMS`, `LINKS`, `FACTIONS`, `SHIPS`, `TROOPS`, `UNITS`), `newGame`, économie, loyauté, troupes et invasions (`embark`, `makeInvasion`, `autoGround`, `applyGround`), politique (`REGIMES`, `DECREES`, `TRAITS`, `genChar`, `enactDecree`, `voteSupport`, `politicsTurn`, `resolveDilemma`), Syndicat et événements (`syndCut`, `takeLoan`, `hireMercs`, `assassinate`, `purge`, `syndicateTurn`, `EVENTS`, `DELAYED`, `eventsTurn`, `resolveEvent`), la Force (`hostile`, `jediTurn`, `sithTurn`, `sithCorrupt`, `sithCoup`, `sithClaim`, `probeChar`, `aiSith`, `HEROES`), `runAI`, `finishTurn`, batailles (`autoBattle`, `createBattle`, `createGroundBattle`, `bAttack`, `bOrbital`, `bRunAI`, `bResult`, `applyBattle`). Aucune dépendance au DOM. |
+| Interface | Écran titre, carte SVG, panneau, écrans Gouvernement, Syndicat et Ombre, dilemmes et événements, bataille sur grille SVG, modales, sauvegarde `localStorage` (`sw75-save`). |
 
 L'aléatoire est un mulberry32 dont l'état vit dans la partie (`st.rng`) : une graine rejoue la même partie.
 
@@ -89,4 +109,4 @@ L'aléatoire est un mulberry32 dont l'état vit dans la partie (`st.rng`) : une 
 node tests/sw-sim.js [parties] [tours max]
 ```
 
-Joue des parties complètes où l'IA contrôle toutes les factions et vérifie les invariants à chaque tour (soutes jamais surchargées, garnisons positives…). Vérifie aussi que chaque monde a son gouverneur et chaque flotte son amiral. Joue 60 batailles spatiales et 60 batailles terrestres IA contre IA, contrôle les boucliers orientés, les frappes orbitales, le vote du Sénat, chaque option de chaque dilemme et de chaque événement (suivie de 12 tours pour déclencher les effets différés), et les services du Syndicat (prêt, dette impayée, mercenaires, assassinat, purge).
+Joue des parties complètes où l'IA contrôle toutes les factions et vérifie les invariants à chaque tour (soutes jamais surchargées, garnisons positives…). Vérifie aussi que chaque monde a son gouverneur et chaque flotte son amiral. Joue 60 batailles spatiales et 60 batailles terrestres IA contre IA, contrôle les boucliers orientés, les frappes orbitales, le vote du Sénat, chaque option de chaque dilemme et de chaque événement (suivie de 12 tours pour déclencher les effets différés), les services du Syndicat (prêt, dette impayée, mercenaires, assassinat, purge), et la Force (coup d'État, Empire Sith, découverte fatale, succession du Seigneur Sith, trêve, invasion avec héros et Chevalier Jedi, enquête, condition de victoire Sith). Le Sith fait partie de la rotation des factions jouées.

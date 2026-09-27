@@ -144,7 +144,7 @@
   <div class="factions" id="factionCards"></div>
   <div class="row">
     <button id="btnContinue" class="primary hidden">Continuer la partie</button>
-    <span class="muted" style="font-size:.85rem">Prototype v0.5 — carte, batailles, invasions, politique, Syndicat et événements.</span>
+    <span class="muted" style="font-size:.85rem">Prototype v0.6 — carte, batailles, invasions, politique, Syndicat, événements et la Force.</span>
   </div>
 </div>
 
@@ -155,6 +155,7 @@
     <div class="row">
       <button id="btnGov" class="small">Gouvernement</button>
       <button id="btnSynd" class="small">Syndicat</button>
+      <button id="btnShadow" class="small hidden">Ombre</button>
       <button id="btnReport" class="small">Rapport</button>
       <button id="btnMenu" class="small">Menu</button>
       <button id="btnEnd" class="primary">Fin du tour</button>
@@ -254,7 +255,7 @@ SYSTEMS.forEach(([id]) => { ADJ[id] = []; });
 LINKS.forEach(([a, b]) => { ADJ[a].push(b); ADJ[b].push(a); });
 
 // ---------- Données : factions ----------
-const FACTION_IDS = ["emp", "rep", "man", "lig"];
+const FACTION_IDS = ["emp", "rep", "man", "lig", "sith"];
 const FACTIONS = {
   emp:{name:"Vestiges impériaux", color:"#b9c4d0", capital:"kaldor", fleetWord:"Groupe de combat",
        start:{cr:320, mat:160, inf:10}, planets:["kaldor","nirauan","vassek","tessaris"],
@@ -276,6 +277,12 @@ const FACTIONS = {
        vet:0, morale:0, ground:1, baseLoyalty:50, conquest:30, costMul:1, frigMul:1, turnsAdd:0, defMul:1.3,
        pitch:"Beaucoup de petits mondes indépendants qui ont choisi de s'armer ensemble.",
        strength:"Commerce et défenses planétaires (+30 %)", weakness:"Cohésion fragile : loyauté plus basse"},
+  // Le Sith commence sans planète ni flotte : c'est une faction « de l'Ombre » jusqu'à sa Revendication.
+  sith:{name:"Ordre Sith", color:"#c42b45", capital:null, fleetWord:"Flotte des Ombres",
+       start:{cr:100, mat:0, inf:0}, planets:[], shadow:true,
+       vet:1, morale:20, ground:1.2, baseLoyalty:50, conquest:25, costMul:1.1, frigMul:1, turnsAdd:0, defMul:1,
+       pitch:"Réputés disparus depuis Palpatine, les Sith ont survécu dans l'ombre. Ni planète ni flotte : des agents, des secrets et la patience.",
+       strength:"Corruption, assassinats, trahisons en pleine bataille", weakness:"Découvert trop tôt, c'est la fin de la partie"},
 };
 const INDEPENDENT_COLOR = "#5d6780";
 // Mondes indépendants qui se défendent bien mieux que leur région ne le laisse croire.
@@ -286,6 +293,7 @@ const START_FLEETS = {
   rep:[["coruscant",{dest:1, frig:3, esc:4},{inf:4, tank:1, art:1}], ["kuat",{frig:1, esc:2},{inf:2}]],
   man:[["mandalore",{dest:1, frig:3, esc:6},{inf:5, tank:1}], ["concord",{frig:2, esc:2},{inf:2}]],
   lig:[["lothal",{frig:2, esc:3},{inf:2, art:1}], ["eriadu",{frig:1, esc:2},{inf:2}]],
+  sith:[],
 };
 // Garnisons de départ des mondes de faction : capitale, puis les autres.
 const START_GARRISON = {capital:{inf:4, tank:2, walk:1, art:1}, other:{inf:2, tank:1}};
@@ -330,10 +338,11 @@ function costOf(fid, type, st){
 // ---------- Nouvelle partie ----------
 function newGame(player, seed){
   seed = (seed == null ? Math.floor(Math.random() * 2 ** 32) : seed) >>> 0;
-  const st = {version:5, turn:1, rng:seed, seed, player, systems:{}, fleets:[], nextFleet:1,
+  const st = {version:6, turn:1, rng:seed, seed, player, systems:{}, fleets:[], nextFleet:1,
               fleetCount:{}, factions:{}, log:[], report:[], pending:[], over:null,
               chars:{}, nextChar:1, dilemmas:[], events:[], delayed:[],
-              synd:{cash:100, paid:{emp:0, rep:0, man:0, lig:0}}};
+              synd:{cash:100, paid:{emp:0, rep:0, man:0, lig:0, sith:0}},
+              jedi:null, truces:[], sithSites:[], sithFound:[], sithSearched:[]};
   FACTION_IDS.forEach(f => {
     const F = FACTIONS[f];
     st.factions[f] = {cr:F.start.cr, mat:F.start.mat, inf:F.start.inf, alive:true, capital:F.capital, shock:0};
@@ -379,6 +388,7 @@ function newGame(player, seed){
     fl.troops = troops(tr);
   }));
   initPolitics(st);
+  initForce(st);
   FACTION_IDS.forEach(f => { st.factions[f].syndicate = syndAvg(st, f); });
   logEv(st, "La galaxie retient son souffle. Dix ans après l'Effondrement, chacun compte ses vaisseaux.", "info", []);
   st.report = st.log; st.log = [];
@@ -394,7 +404,7 @@ const ROMAN = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XI
 function addFleet(st, owner, at, ships, vet){
   const n = ++st.fleetCount[owner];
   const f = {id:st.nextFleet++, owner, at, from:at, mp:FLEET_MP, vet:vet || 0, landed:0,
-             ships:{dest:ships.dest || 0, frig:ships.frig || 0, esc:ships.esc || 0}, troops:troops(),
+             ships:{dest:ships.dest || 0, frig:ships.frig || 0, esc:ships.esc || 0}, troops:troops(), heroes:[],
              name:FACTIONS[owner].fleetWord + " " + (ROMAN[n - 1] || n), admiral:null};
   if(st.chars) f.admiral = genChar(st, owner, "admiral", {at:f.id}).id;
   st.fleets.push(f);
@@ -404,14 +414,19 @@ function fleetById(st, id){ return st.fleets.find(f => f.id === id) || null; }
 function shipCount(f){ return f.ships.dest + f.ships.frig + f.ships.esc; }
 function fleetPower(st, f){
   const base = SHIP_TYPES.reduce((s, t) => s + f.ships[t] * SHIPS[t].power, 0);
-  return base * (1 + 0.15 * f.vet) * (1 + FACTIONS[f.owner].morale / 100) * admiralMul(st, f);
+  return base * (1 + 0.15 * f.vet) * (1 + FACTIONS[f.owner].morale / 100) * admiralMul(st, f) * heroMul(f);
 }
 function siegePower(f){ return SHIP_TYPES.reduce((s, t) => s + f.ships[t] * SHIPS[t].siege, 0); }
-function hostileFleetsAt(st, sysId, fid){ return st.fleets.filter(f => f.at === sysId && f.owner !== fid); }
+// Hostilité : tout le monde est en guerre, sauf pendant une trêve arbitrée par les Jedi.
+function truceBetween(st, a, b){ return !!st.truces && st.truces.some(t => ((t.a === a && t.b === b) || (t.a === b && t.b === a)) && t.until >= st.turn); }
+function hostile(st, a, b){ return a !== b && (!a || !b || !truceBetween(st, a, b)); }
+function planetHostile(st, s, fid){ return s.owner !== fid && hostile(st, s.owner, fid); }
+function hostileFleetsAt(st, sysId, fid){ return st.fleets.filter(f => f.at === sysId && hostile(st, f.owner, fid)); }
 function hostilePowerAt(st, sysId, fid){ return hostileFleetsAt(st, sysId, fid).reduce((s, f) => s + fleetPower(st, f), 0); }
 function ownFleetsAt(st, sysId, fid){ return st.fleets.filter(f => f.at === sysId && f.owner === fid); }
 function removeFleet(st, f){
   st.fleets = st.fleets.filter(x => x !== f);
+  if(f.heroes && f.heroes.length) fleetHeroesDie(st, f, 1, SYS[f.at].name);
   if(st.chars && f.admiral != null) delete st.chars[f.admiral];
 }
 
@@ -483,6 +498,7 @@ function mergeFleets(st, keep, other){
   // Le plus expérimenté des deux amiraux garde le commandement.
   const ka = charOf(st, keep.admiral), oa = charOf(st, other.admiral);
   if(oa && (!ka || oa.xp > ka.xp)){ keep.admiral = oa.id; other.admiral = ka ? ka.id : null; oa.at = keep.id; if(ka) ka.at = other.id; }
+  keep.heroes = (keep.heroes || []).concat(other.heroes || []); other.heroes = [];
   removeFleet(st, other);
 }
 function mergeAllAt(st, sysId, fid){
@@ -521,7 +537,7 @@ function moveFleet(st, f, to){
 // ---------- Économie ----------
 function blockaded(st, sysId){
   const s = st.systems[sysId];
-  return !!s.owner && st.fleets.some(f => f.at === sysId && f.owner !== s.owner);
+  return !!s.owner && st.fleets.some(f => f.at === sysId && hostile(st, f.owner, s.owner));
 }
 function planetYield(st, s){
   if(!s.owner) return {cr:0, mat:0, inf:0};
@@ -621,6 +637,9 @@ const REGIMES = {
   lig:{name:"Assemblée", leader:"Président de l'Assemblée", chief:"Délégué",
        groups:[["front","Bloc frontalier","military"], ["guild","Guildes marchandes","economy"], ["free","Mondes libres","people"]],
        rule:"Chaque bloc représente des mondes précis. Ignoré trop longtemps (trois tours sous 20), il quitte la Ligue avec eux."},
+  sith:{name:"Ordre Sith", leader:"Seigneur Sith", chief:"Disciple",
+       groups:[["blade","Lames","military"], ["coll","Collaborateurs","economy"], ["cult","Culte","order"]],
+       rule:"Tant qu'il agit dans l'Ombre, le Seigneur Sith ne rend de comptes à personne. Une fois révélé, ses disciples exigent des conquêtes, ses collaborateurs des profits, son culte l'ordre."},
 };
 const ROLE_NAME = {military:"armée", economy:"économie", order:"ordre", people:"peuple"};
 
@@ -679,6 +698,8 @@ const NAMES = {
        last:["Vizsla","Kryze","Ordo","Wren","Skirata","Beviin","Mereel","Tarr","Vhett","Kast","Saxon","Rau","Awaud","Varad","Carid"]},
   lig:{first:["Hesta","Zeb","Kanor","Sabeen","Mira","Ryder","Numa","Cham","Jho","Oris","Kella","Brin","Lanna","Toro","Vex","Pira"],
        last:["Vizago","Thrawk","Dokan","Varko","Maddox","Kerr","Farran","Ghent","Vale","Oroso","Pell","Nadash","Brood","Selk","Arvani"]},
+  sith:{first:["Kaelis","Vornis","Seraph","Malach","Ivra","Thane","Zhaan","Nyx","Oren","Veyl","Cassar","Rhaelle","Morvane","Sarith"],
+       last:["Morrow","Quell","Ashen","Vosk","Drek","Solace","Vyre","Hollow","Kade","Nox","Umbra","Carrow"]},
 };
 
 // ---------- Personnages ----------
@@ -801,6 +822,7 @@ function charDies(st, c, why){
   const F = st.factions[c.fid], P = st.player;
   if(c.fid === P) logEv(st, charTitle(st, c) + " " + c.name + " " + why + ".", "bad", [P]);
   if(!F.alive) return;
+  if(c.role === "leader" && c.fid === "sith") return sithLordFalls(st, c);
   if(c.role === "leader"){
     F.leader = genChar(st, c.fid, "leader").id;
     const n = charOf(st, F.leader);
@@ -946,12 +968,16 @@ function addDilemma(st, d){
 function dilemmaValid(st, d){
   const F = st.factions[d.fid];
   if(!F.alive) return false;
+  if(d.kind === "truce") return st.factions[d.other].alive;
   if(d.kind === "rival") return !!charOf(st, d.char);
   return true;
 }
 const DEFIANCE_COST = 15, BRIBE_COST = 20;
 function dilemmaOptions(st, d){
   const F = st.factions[d.fid];
+  if(d.kind === "truce") return [
+    {key:"accept", label:"Accepter la trêve", desc:"Ni bataille ni invasion avec " + FACTIONS[d.other].name + " pendant " + TRUCE_TURNS + " tours. Réputation Jedi +5, le peuple approuve (+5), l'armée grogne (−5)."},
+    {key:"refuse", label:"Refuser", desc:"Réputation Jedi −5."}];
   if(d.kind === "duel") return [
     {key:"accept", label:"Relever le défi", desc:"Chances de victoire : " + Math.round(duelChance(st, d.fid) * 100) + " %. Victoire : autorité +25. Défaite : le challenger devient Mand'alor."},
     {key:"refuse", label:"Refuser le duel", desc:"Autorité −15, le clan t'en veut (−20) et peut partir avec un monde."}];
@@ -973,6 +999,7 @@ function aiDilemmaChoice(st, d){
   const F = st.factions[d.fid];
   if(d.kind === "duel") return duelChance(st, d.fid) >= 0.5 || rnd(st) < 0.5 ? "accept" : "refuse";
   if(d.kind === "defiance") return F.inf >= DEFIANCE_COST ? "buy" : "vote";
+  if(d.kind === "truce") return F.weariness >= 40 ? "accept" : "refuse";
   return "dismiss";
 }
 function resolveDilemma(st, d, key){
@@ -980,6 +1007,17 @@ function resolveDilemma(st, d, key){
   const opt = dilemmaOptions(st, d).find(o => o.key === key);
   if(!opt || opt.disabled) key = d.kind === "duel" ? "refuse" : d.kind === "defiance" ? "vote" : "ignore";
   let msg = "";
+  if(d.kind === "truce"){
+    if(key === "accept"){
+      makeTruce(st, d.fid, d.other);
+      if(!F.terror) F.jediRep = Math.min(100, F.jediRep + 5);
+      groupsByRole(F, "people").forEach(g => { g.sat = clamp(g.sat + 5, 0, 100); });
+      groupsByRole(F, "military").forEach(g => { g.sat = clamp(g.sat - 5, 0, 100); });
+      msg = "Trêve signée avec " + FACTIONS[d.other].name + " jusqu'au tour " + (st.turn + TRUCE_TURNS) + ".";
+    } else { if(!F.terror) F.jediRep = Math.max(0, F.jediRep - 5); msg = "Tu refuses la médiation des Jedi."; }
+    logEv(st, msg, "info", [d.fid]);
+    return msg;
+  }
   if(d.kind === "duel"){
     const g = groupOf(F, d.group), chief = charOf(st, g.chief), L = charOf(st, F.leader);
     if(key === "accept"){
@@ -1077,7 +1115,7 @@ function charactersTurn(st, fid){
   const F = st.factions[fid], P = st.player, mine = fid === P;
   Object.values(st.chars).filter(c => c.fid === fid).forEach(c => {
     if(!st.chars[c.id]) return;
-    if(rnd(st) < 0.006){ charDies(st, c, c.role === "leader" ? "meurt de vieillesse" : "prend sa retraite"); return; }
+    if(rnd(st) < 0.006 && !(c.fid === "sith" && c.role === "leader")){ charDies(st, c, c.role === "leader" ? "meurt de vieillesse" : "prend sa retraite"); return; }
     let d = 0;
     if(c.role === "admiral"){ const g = groupsByRole(F, "military")[0]; d += g && g.sat >= 45 ? 1 : -1; if(hasTrait(c, "ambitious") && c.xp >= 2) d -= 1; }
     else if(c.role === "governor"){ const s = st.systems[c.at]; d += s && s.loyalty >= 45 ? 1 : -1; if(hasTrait(c, "ambitious")) c.ambition = Math.min(100, c.ambition + 1); }
@@ -1133,7 +1171,7 @@ function admiralsAfterBattle(st, winIds, loseIds, loserGone){
 function politicsTurn(st){
   FACTION_IDS.forEach(fid => {
     const F = st.factions[fid];
-    if(!F.alive) return;
+    if(!F.alive || F.shadow) return;
     const P = st.player, mine = fid === P;
     // Décrets : entretien, effets par tour, expiration
     F.decrees.forEach(d => {
@@ -1201,6 +1239,11 @@ function aiPolitics(st, fid){
   for(const id of wants){
     if(canEnact(st, fid, id, false) && F.inf >= DECREES[id].cost + reserve){ enactDecree(st, fid, id, false); return; }
     if(needsVote(fid, id) && canEnact(st, fid, id, true) && F.inf >= decreeCost(st, fid, id, true) + reserve){ enactDecree(st, fid, id, true); return; }
+  }
+  // Des rumeurs de culte Sith : l'IA fait enquêter sur ses chefs les moins fiables.
+  if(fid !== "sith" && st.factions.sith.rumor && F.inf >= PROBE_COST + 20 && rnd(st) < 0.3){
+    const sus = Object.values(st.chars).filter(c => c.fid === fid && (c.role === "chief" || c.role === "admiral")).sort((a, b) => a.loyalty - b.loyalty)[0];
+    if(sus) probeChar(st, fid, sus);
   }
   // Récompenser un personnage clé qui vacille
   const shaky = Object.values(st.chars).filter(c => c.fid === fid && (c.role === "chief" || c.role === "admiral") && c.loyalty < 30);
@@ -1290,7 +1333,7 @@ function buyIntel(st, fid){
   return true;
 }
 function assassinTargets(st, fid){
-  return Object.values(st.chars).filter(c => c.fid !== fid && st.factions[c.fid].alive && ASSASSIN[c.role]);
+  return Object.values(st.chars).filter(c => c.fid !== fid && st.factions[c.fid].alive && !st.factions[c.fid].shadow && ASSASSIN[c.role]);
 }
 function canAssassinate(st, fid, c){
   return !!c && c.fid !== fid && !!ASSASSIN[c.role] && syndWilling(st, fid) && st.factions[fid].cr >= ASSASSIN[c.role].cost;
@@ -1395,7 +1438,7 @@ function syndicateTurn(st){
   });
   // Il sert tout le monde : plus on l'enrichit, plus il finance les autres.
   if(st.synd.cash >= 300){
-    const alive = FACTION_IDS.filter(f => st.factions[f].alive);
+    const alive = FACTION_IDS.filter(f => st.factions[f].alive && !st.factions[f].shadow);
     const payer = alive.slice().sort((a, b) => st.synd.paid[b] - st.synd.paid[a])[0];
     const target = alive.filter(f => f !== payer).sort((a, b) => planetsOf(st, a).length - planetsOf(st, b).length)[0];
     if(target){
@@ -1498,7 +1541,7 @@ const EVENTS = [
   {id:"spy", type:"character", title:"Un espion capturé",
     weight:(st, fid) => 0.8 + 0.4 * planetsOf(st, fid).filter(s => s.loyalty < 40).length,
     ctx:(st, fid) => {
-      const s = pickPlanet(st, fid), foe = pickOne(st, FACTION_IDS.filter(f => f !== fid && st.factions[f].alive));
+      const s = pickPlanet(st, fid), foe = pickOne(st, FACTION_IDS.filter(f => f !== fid && st.factions[f].alive && !st.factions[f].shadow));
       return s && foe ? {planet:s.id, foe} : null;
     },
     text:(st, fid, x) => "Un agent de " + FACTIONS[x.foe].name + " a été arrêté sur " + SYS[x.planet].name + ".",
@@ -1604,9 +1647,10 @@ const EVENTS = [
       {key:"sith", label:"Ne rien faire", desc:"D'autres le chercheront peut-être."}],
     apply:(st, fid, x, k) => {
       const F = st.factions[fid];
-      if(k === "jedi"){ if(!F.terror) F.jediRep = Math.min(100, F.jediRep + 15); groupsDelta(F, ["people"], 3); return "L'enfant part pour le Temple. Les Jedi s'en souviendront."; }
+      if(k === "jedi"){ if(!F.terror) F.jediRep = Math.min(100, F.jediRep + 15); groupsDelta(F, ["people"], 3); if(st.jedi.strength > 0) st.jedi.strength = Math.min(JEDI_START + 2, st.jedi.strength + 1); return "L'enfant part pour le Temple. Les Jedi s'en souviendront."; }
       if(k === "army"){ F.adepts = (F.adepts || 0) + 1; groupsDelta(F, ["military"], 5); if(!F.terror) F.jediRep = Math.max(0, F.jediRep - 5); return "L'enfant sera formé par tes officiers."; }
-      st.sithLeads = (st.sithLeads || 0) + 1;
+      const S = st.factions.sith;
+      if(S.alive && S.acolytes < MAX_ACOLYTES){ S.acolytes++; sithLog(st, "Un enfant sensible à la Force, abandonné sur " + SYS[x.planet].name + ", devient ton acolyte.", "good"); }
       return "Quelques jours plus tard, l'enfant a disparu. On parle d'une silhouette encapuchonnée.";
     }},
   {id:"plague", type:"disaster", title:"Épidémie",
@@ -1688,7 +1732,7 @@ EVENTS.forEach(e => { EVENTS_BY_ID[e.id] = e; });
 const DELAYED = {
   scandal:(st, fid, d) => { planetsOf(st, fid).forEach(s => { s.loyalty = Math.max(0, s.loyalty - 8); }); st.factions[fid].shock = Math.min(20, st.factions[fid].shock + 4); return "Le massacre couvert par l'amiral " + d.name + " éclate au grand jour : scandale (loyauté −8 partout)."; },
   defector:(st, fid, d) => {
-    const foes = FACTION_IDS.filter(f => f !== fid && st.factions[f].alive), foe = pickOne(st, foes);
+    const foes = FACTION_IDS.filter(f => f !== fid && st.factions[f].alive && !st.factions[f].shadow), foe = pickOne(st, foes);
     const f = foe ? pickOne(st, st.fleets.filter(v => v.owner === foe)) : null;
     if(!f) return null;
     const old = charOf(st, f.admiral); if(old) delete st.chars[old.id];
@@ -1753,7 +1797,7 @@ function eventsTurn(st){
     return false;
   });
   FACTION_IDS.forEach(fid => {
-    if(!st.factions[fid].alive) return;
+    if(!st.factions[fid].alive || st.factions[fid].shadow) return;
     const n = fid === P ? 1 + (rnd(st) < 0.3 ? 1 : 0) : (rnd(st) < 0.5 ? 1 : 0);
     const drawn = [];
     for(let i = 0; i < n; i++){
@@ -1764,6 +1808,409 @@ function eventsTurn(st){
       else resolveEvent(st, ev, pickOne(st, eventOptions(st, ev).filter(o => !o.disabled)).key);
     }
   });
+}
+
+// =====================================================================
+// v0.6 — La Force : l'Ordre Jedi et le Sith en mode Ombre
+// =====================================================================
+const HEROES = {
+  jedi:   {name:"Chevalier Jedi", power:8},
+  sith:   {name:"Seigneur Sith",  power:10},
+  acolyte:{name:"Acolyte",        power:4},
+};
+const SITH_PHASES = {1:"L'Ombre", 2:"L'Emprise", 3:"La Revendication"};
+const SITH_COST = {recruit:15, corrupt:20};
+const MAX_ACOLYTES = 6, JEDI_START = 12, TRUCE_TURNS = 8;
+const SITH_PHASE2 = {dark:80, corrupted:2}, SITH_PHASE3 = {dark:200};
+
+function isShadow(st, fid){ return !!fid && !!st.factions[fid] && !!st.factions[fid].shadow; }
+function sithName(st){ return "Dark " + NAMES.sith.first[rint(st, 0, NAMES.sith.first.length - 1)]; }
+
+function initForce(st){
+  st.jedi = {strength:JEDI_START, lent:{}, mediateAt:6, fallen:0};
+  st.truces = [];
+  // Sites Sith et holocrons : cachés, différents à chaque partie.
+  st.sithSites = shuffle(st, SYSTEMS.map(x => x[0])).slice(0, 3);
+  st.sithFound = []; st.sithSearched = [];
+  const F = st.factions.sith;
+  Object.assign(F, {shadow:true, phase:1, dark:20, acolytes:1, exposure:0, actTurn:0, acted:0, lastAct:0, rumor:false, capital:null});
+  const L = charOf(st, F.leader);
+  if(L) L.name = sithName(st);
+}
+
+// ---------- Héros : Chevaliers Jedi, Seigneur Sith, acolytes ----------
+function heroMul(f){ return 1 + Math.min(0.3, 0.1 * (f.heroes || []).length); }
+function heroNames(f){ return (f.heroes || []).map(h => h.name).join(", "); }
+// Un héros tombe : sa mort est définitive.
+function heroDies(st, fid, h, where){
+  const P = st.player;
+  if(h.kind === "jedi"){
+    st.jedi.lent[fid] = false; st.jedi.fallen++;
+    logEv(st, "Le Chevalier Jedi " + h.name + " est tombé" + (where ? " à " + where : "") + ".", fid === P ? "bad" : "info", [fid]);
+  } else if(h.kind === "acolyte"){
+    const F = st.factions.sith;
+    F.acolytes = Math.max(0, F.acolytes - 1);
+    logEv(st, "L'acolyte " + h.name + " est tombé" + (where ? " à " + where : "") + ".", "info", ["sith"]);
+  } else if(h.kind === "sith"){
+    const L = charOf(st, st.factions.sith.leader);
+    if(L) charDies(st, L, "tombe au combat" + (where ? " à " + where : ""));
+  }
+}
+function fleetHeroesDie(st, f, chance, where){
+  const keep = [];
+  (f.heroes || []).forEach(h => { if(rnd(st) < chance) heroDies(st, f.owner, h, where); else keep.push(h); });
+  f.heroes = keep;
+}
+// Mort du Seigneur Sith : un acolyte prend sa place, sinon le culte s'éteint.
+function sithLordFalls(st, dead){
+  const F = st.factions.sith, P = st.player;
+  if(F.acolytes > 0){
+    F.acolytes--; F.dark = Math.floor(F.dark / 2);
+    const n = genChar(st, "sith", "leader"); n.name = sithName(st); F.leader = n.id;
+    st.fleets.forEach(f => (f.heroes || []).forEach(h => { if(h.kind === "sith") h.name = n.name; }));
+    logEv(st, "Un acolyte tue ce qui restait de son maître et prend le nom de " + n.name + ". La Puissance obscure vacille.", P === "sith" ? "bad" : "info", ["sith"]);
+  } else sithEliminated(st, "Le Seigneur Sith est mort sans disciple : la lignée s'éteint.");
+}
+function sithEliminated(st, why){
+  const F = st.factions.sith;
+  if(!F.alive) return;
+  F.alive = false;
+  st.fleets = st.fleets.filter(f => f.owner !== "sith");
+  planetsOf(st, "sith").forEach(s => planetSecedes(st, s));
+  Object.values(st.chars).forEach(c => { if(c.fid === "sith") delete st.chars[c.id]; c.sith = false; });
+  logEv(st, why, st.player === "sith" ? "bad" : "info", F.shadow ? ["sith"] : []);
+}
+
+// ---------- Actions du Sith ----------
+function sithActionsMax(st){ return 1 + Math.floor(st.factions.sith.acolytes / 2); }
+function sithActionsLeft(st){
+  const F = st.factions.sith;
+  return F.actTurn === st.turn ? sithActionsMax(st) - F.acted : sithActionsMax(st);
+}
+function sithSpend(st, exposure){
+  const F = st.factions.sith;
+  if(F.actTurn !== st.turn){ F.actTurn = st.turn; F.acted = 0; }
+  F.acted++; F.lastAct = st.turn;
+  if(F.shadow) F.exposure = clamp(F.exposure + exposure, 0, 100);
+}
+function sithCan(st, phase){ const F = st.factions.sith; return F.alive && F.phase >= (phase || 1) && sithActionsLeft(st) > 0; }
+function sithLog(st, msg, tone){ logEv(st, msg, tone || "info", ["sith"]); return msg; }
+function corruptible(st, c){ return !!c && c.fid !== "sith" && !c.sith && st.factions[c.fid].alive && !st.factions[c.fid].shadow; }
+function corruptedChars(st){ return Object.values(st.chars).filter(c => c.sith); }
+function corruptChance(st, c){
+  return clamp(0.3 + (c.dossier ? 0.3 : 0) + (hasTrait(c, "corrupt") ? 0.2 : 0) + (hasTrait(c, "ambitious") ? 0.15 : 0)
+    - (hasTrait(c, "loyal") ? 0.6 : 0) - c.loyalty / 250, 0.05, 0.9);
+}
+function sithHeldPlanets(st){
+  return Object.values(st.systems).filter(s => s.owner && s.owner !== "sith" && charOf(st, s.governor) && charOf(st, s.governor).sith);
+}
+
+function canSithRecruit(st){ const F = st.factions.sith; return sithCan(st) && F.dark >= SITH_COST.recruit && F.acolytes < MAX_ACOLYTES; }
+function sithRecruit(st){
+  if(!canSithRecruit(st)) return null;
+  const F = st.factions.sith;
+  F.dark -= SITH_COST.recruit; F.acolytes++; sithSpend(st, 1);
+  return sithLog(st, "Un nouvel acolyte rejoint le culte (" + F.acolytes + ").", "good");
+}
+function canSithSearch(st, sysId){ return sithCan(st) && !!SYS[sysId] && !st.sithSearched.includes(sysId); }
+function sithSearch(st, sysId){
+  if(!canSithSearch(st, sysId)) return null;
+  const F = st.factions.sith;
+  st.sithSearched.push(sysId); sithSpend(st, 2);
+  if(st.sithSites.includes(sysId) && !st.sithFound.includes(sysId)){
+    st.sithFound.push(sysId); F.dark += 30;
+    return sithLog(st, "Sous " + SYS[sysId].name + ", un site Sith oublié et son holocron : +30 Puissance obscure, +3 par tour.", "good");
+  }
+  F.dark += 3;
+  return sithLog(st, "Les fouilles sur " + SYS[sysId].name + " ne livrent que des murmures (+3 Puissance obscure).");
+}
+function canSithInvestigate(st, c){ return sithCan(st) && corruptible(st, c) && !c.dossier; }
+function sithInvestigate(st, c){
+  if(!canSithInvestigate(st, c)) return null;
+  c.dossier = true; sithSpend(st, 1);
+  return sithLog(st, "Tes agents constituent un dossier sur " + charTitle(st, c) + " " + c.name + " : de quoi le faire chanter.");
+}
+function canSithCorrupt(st, c){ return sithCan(st) && corruptible(st, c) && st.factions.sith.dark >= SITH_COST.corrupt; }
+function sithCorrupt(st, c){
+  if(!canSithCorrupt(st, c)) return null;
+  const F = st.factions.sith;
+  F.dark -= SITH_COST.corrupt;
+  if(rnd(st) < corruptChance(st, c)){
+    c.sith = true; sithSpend(st, 2);
+    return sithLog(st, charTitle(st, c) + " " + c.name + " (" + FACTIONS[c.fid].name + ") sert désormais l'Ombre.", "good");
+  }
+  c.loyalty = Math.min(100, c.loyalty + 5); sithSpend(st, 6);
+  return sithLog(st, c.name + " repousse tes avances et parle. L'Exposition grimpe.", "bad");
+}
+function canSithChaos(st, sysId){ const s = st.systems[sysId]; return sithCan(st) && !!s && !!s.owner && s.owner !== "sith"; }
+function sithChaos(st, sysId){
+  if(!canSithChaos(st, sysId)) return null;
+  const s = st.systems[sysId], V = st.factions[s.owner], F = st.factions.sith;
+  s.loyalty = Math.max(0, s.loyalty - 10); V.weariness = Math.min(100, V.weariness + 5); F.dark += 8; sithSpend(st, 3);
+  return sithLog(st, "Émeutes et rumeurs sur " + SYS[sysId].name + " : le chaos nourrit ta puissance (+8).", "good");
+}
+// Phase 2 : l'Emprise
+function canSithKill(st, c){ return sithCan(st, 2) && st.factions.sith.acolytes > 0 && !!c && c.fid !== "sith" && st.factions[c.fid].alive; }
+function sithKill(st, c){
+  if(!canSithKill(st, c)) return null;
+  const F = st.factions.sith, who = charTitle(st, c) + " " + c.name + " (" + FACTIONS[c.fid].name + ")";
+  sithSpend(st, 6);
+  if(rnd(st) < (c.role === "leader" ? 0.4 : 0.6)){
+    F.dark += 10; st.factions[c.fid].shock = Math.min(20, st.factions[c.fid].shock + 5);
+    charDies(st, c, "est retrouvé mort, sans la moindre marque");
+    return sithLog(st, who + " est mort. Personne ne comprend comment.", "good");
+  }
+  if(rnd(st) < 0.5){ F.acolytes = Math.max(0, F.acolytes - 1); return sithLog(st, "L'assassinat de " + who + " échoue : ton acolyte y laisse la vie.", "bad"); }
+  return sithLog(st, "L'assassinat de " + who + " échoue.", "bad");
+}
+function canSithRig(st, fid){
+  return sithCan(st, 2) && fid !== "sith" && st.factions[fid].alive && !st.factions[fid].shadow &&
+    Object.values(st.chars).some(c => c.fid === fid && c.role === "chief" && c.sith);
+}
+function sithRig(st, fid){
+  if(!canSithRig(st, fid)) return null;
+  const F = st.factions.sith, V = st.factions[fid], old = charOf(st, V.leader);
+  sithSpend(st, 6);
+  const n = old ? replaceChar(st, old) : null;
+  V.shock = Math.min(20, V.shock + 8); F.dark += 15;
+  logEv(st, "Coup de théâtre : " + (old ? REGIMES[fid].leader + " " + old.name : "le dirigeant") + " est renversé par ses propres pairs" + (n ? ", " + n.name + " le remplace" : "") + ".", fid === st.player ? "bad" : "info", [fid]);
+  return sithLog(st, "Tes disciples ont truqué le vote : " + FACTIONS[fid].name + " change de dirigeant (+15 Puissance obscure).", "good");
+}
+function canSithHunt(st){ return sithCan(st, 2) && st.factions.sith.acolytes >= 2 && st.jedi.strength > 0; }
+function sithHunt(st){
+  if(!canSithHunt(st)) return null;
+  const F = st.factions.sith, k = Math.min(st.jedi.strength, rint(st, 1, 2));
+  sithSpend(st, 10);
+  st.jedi.strength -= k; F.dark += 10;
+  let msg = "Tes acolytes traquent un enclave Jedi : " + k + " chevalier(s) tombent. Il en reste " + st.jedi.strength + ".";
+  if(rnd(st) < 0.4){ F.acolytes = Math.max(0, F.acolytes - 1); msg += " Un acolyte ne revient pas."; }
+  if(!st.jedi.strength) logEv(st, "L'Ordre Jedi est anéanti. La galaxie ne le sait pas encore.", "info", []);
+  return sithLog(st, msg, "good");
+}
+// Phase 3 : la Revendication
+function sithCoupReady(st){
+  const F = st.factions.sith, E = st.factions.emp;
+  if(F.phase < 3 || !F.shadow || !E.alive) return false;
+  const moffs = Object.values(st.chars).filter(c => c.fid === "emp" && c.role === "chief" && c.sith).length;
+  const L = charOf(st, E.leader);
+  return moffs >= 2 || (!!L && L.sith);
+}
+const SITH_EMPIRE_WORLDS = 4;
+function sithEmpireReady(st){ const F = st.factions.sith; return F.phase >= 3 && F.shadow && sithHeldPlanets(st).length >= SITH_EMPIRE_WORLDS; }
+function sithReveal(st, capital){
+  const F = st.factions.sith;
+  F.shadow = false; F.capital = capital; F.exposure = 100;
+  F.decrees = []; F.demand = null; F.nextDemand = st.turn + 5; F.stats = freshStats(); F.lastOffensive = st.turn;
+  logEv(st, "Les Sith sont de retour. " + REGIMES.sith.leader + " " + charOf(st, F.leader).name + " se révèle à la galaxie.", st.player === "sith" ? "good" : "bad", []);
+}
+function sithHeroesFor(st, f){
+  const F = st.factions.sith, L = charOf(st, F.leader);
+  f.heroes = [{kind:"sith", name:L ? L.name : "Seigneur Sith"}];
+  for(let i = 0; i < Math.min(3, F.acolytes); i++) f.heroes.push({kind:"acolyte", name:"Acolyte " + NAMES.sith.first[rint(st, 0, NAMES.sith.first.length - 1)]});
+}
+// Coup d'État : avec assez de Moffs, le Sith prend les Vestiges impériaux d'un coup.
+function sithCoup(st){
+  if(!sithCoupReady(st)) return null;
+  const F = st.factions.sith, E = st.factions.emp, P = st.player;
+  planetsOf(st, "emp").forEach(s => { s.owner = "sith"; });
+  st.fleets.filter(f => f.owner === "emp").forEach(f => { f.owner = "sith"; });
+  Object.values(st.chars).forEach(c => {
+    if(c.fid !== "emp") return;
+    if(c.role === "leader" || c.role === "chief") delete st.chars[c.id];
+    else { c.fid = "sith"; c.sith = false; }
+  });
+  F.cr += Math.max(0, E.cr); F.mat += E.mat; F.inf += E.inf;
+  E.alive = false; E.decrees = [];
+  st.dilemmas = st.dilemmas.filter(d => d.fid !== "emp"); st.events = st.events.filter(d => d.fid !== "emp"); st.delayed = st.delayed.filter(d => d.fid !== "emp");
+  const cap = st.systems[E.capital].owner === "sith" ? E.capital : (planetsOf(st, "sith")[0] || {}).id;
+  sithReveal(st, cap);
+  const main = st.fleets.filter(f => f.owner === "sith").sort((a, b) => fleetPower(st, b) - fleetPower(st, a))[0];
+  if(main) sithHeroesFor(st, main);
+  logEv(st, "Coup d'État au Conseil des Moffs : les Vestiges impériaux passent tout entiers sous la bannière Sith.", P === "emp" ? "bad" : P === "sith" ? "good" : "info", []);
+  return "Les Moffs corrompus livrent l'Empire : tu en prends la tête.";
+}
+// Empire Sith : les mondes corrompus font sécession et deviennent le territoire du Sith.
+function sithClaim(st){
+  if(!sithEmpireReady(st)) return null;
+  const held = sithHeldPlanets(st), P = st.player;
+  held.forEach(s => { capture(st, s, "sith"); s.loyalty = 45; s.garrison.inf += 2; });
+  sithReveal(st, held[0].id);
+  const f = addFleet(st, "sith", held[0].id, {dest:1, frig:3, esc:4}, 1);
+  f.troops = troops({inf:2, tank:1});
+  sithHeroesFor(st, f);
+  logEv(st, held.length + " mondes font sécession au nom de l'Empire Sith : " + held.map(s => SYS[s.id].name).join(", ") + ".", P === "sith" ? "good" : "bad", []);
+  return "L'Empire Sith est proclamé.";
+}
+
+// ---------- Chasse aux agents Sith ----------
+// Toute faction peut faire enquêter sur un de ses personnages ; la bienveillance des Jedi aide.
+const PROBE_COST = 10;
+function probeChance(st, fid){ return clamp(0.4 + st.factions[fid].jediRep / 200, 0.4, 0.9); }
+function canProbe(st, fid, c){ return !!c && c.fid === fid && fid !== "sith" && st.factions[fid].inf >= PROBE_COST && c.probed !== st.turn; }
+function unmask(st, c, how){
+  const S = st.factions.sith, fid = c.fid;
+  c.sith = false;
+  if(S.alive && S.shadow) S.exposure = Math.min(100, S.exposure + 10);
+  sithLog(st, charTitle(st, c) + " " + c.name + " (" + FACTIONS[fid].name + ") est démasqué : ton agent est perdu.", "bad");
+  const n = replaceChar(st, c);
+  logEv(st, how + " : " + charTitle(st, c) + " " + c.name + " servait un culte Sith. " + (n ? n.name + " le remplace." : ""), "info", [fid]);
+}
+function probeChar(st, fid, c){
+  if(!canProbe(st, fid, c)) return null;
+  st.factions[fid].inf -= PROBE_COST;
+  c.probed = st.turn;
+  if(c.sith && rnd(st) < probeChance(st, fid)){ unmask(st, c, "L'enquête aboutit"); return "Démasqué ! " + c.name + " servait les Sith. Il est remplacé."; }
+  c.loyalty = Math.max(0, c.loyalty - 5);
+  return "L'enquête ne trouve rien. " + c.name + " n'a pas apprécié d'être soupçonné (loyauté −5).";
+}
+
+// ---------- Trêves ----------
+function proposeTruce(st, a, b){ return {kind:"truce", fid:a, other:b, title:"L'Ordre Jedi propose une trêve",
+  text:"Les Jedi offrent leur médiation entre " + FACTIONS[a].name + " et " + FACTIONS[b].name + ", épuisés par la guerre. Une trêve de " + TRUCE_TURNS + " tours interdirait toute bataille et toute invasion entre vous."}; }
+function makeTruce(st, a, b){
+  st.truces = st.truces.filter(t => !((t.a === a && t.b === b) || (t.a === b && t.b === a)));
+  st.truces.push({a, b, until:st.turn + TRUCE_TURNS});
+}
+function breakTruce(st, a, b){
+  if(!truceBetween(st, a, b)) return false;
+  st.truces = st.truces.filter(t => !((t.a === a && t.b === b) || (t.a === b && t.b === a)));
+  const F = st.factions[a];
+  if(!F.terror) F.jediRep = Math.max(0, F.jediRep - 15);
+  groupsByRole(F, "military").forEach(g => { g.sat = clamp(g.sat + 5, 0, 100); });
+  logEv(st, FACTIONS[a].name + " rompt la trêve avec " + FACTIONS[b].name + ".", "info", []);
+  return true;
+}
+function trucePartners(st, fid){
+  return st.truces.filter(t => t.until >= st.turn && (t.a === fid || t.b === fid)).map(t => ({other:t.a === fid ? t.b : t.a, until:t.until}));
+}
+
+// ---------- Tour de l'Ordre Jedi ----------
+function jediJudgment(F){ return F.jediRep >= 75 ? "honorable" : F.jediRep <= 20 ? "cruelle" : "neutre"; }
+function jediTurn(st){
+  const J = st.jedi, P = st.player;
+  st.truces = st.truces.filter(t => t.until >= st.turn && st.factions[t.a].alive && st.factions[t.b].alive);
+  if(J.strength <= 0) return;
+  if(st.turn % 10 === 0 && J.strength < JEDI_START) J.strength++;
+  FACTION_IDS.forEach(fid => {
+    const F = st.factions[fid];
+    if(!F.alive || F.shadow) return;
+    // Jugement : un héros pour les honorables, la résistance pour les cruels.
+    if(fid !== "sith" && F.jediRep >= 75 && !J.lent[fid] && J.strength >= 4){
+      const f = st.fleets.filter(v => v.owner === fid).sort((a, b) => fleetPower(st, b) - fleetPower(st, a))[0];
+      if(f){
+        const name = NAMES.rep.first[rint(st, 0, NAMES.rep.first.length - 1)] + " " + NAMES.lig.last[rint(st, 0, NAMES.lig.last.length - 1)];
+        (f.heroes = f.heroes || []).push({kind:"jedi", name});
+        J.lent[fid] = true; J.strength--;
+        logEv(st, "L'Ordre Jedi juge ta cause honorable : le Chevalier " + name + " rejoint " + f.name + ".", fid === P ? "good" : "info", [fid]);
+      }
+    }
+    // Des Jedi bienveillants démasquent parfois un agent Sith.
+    if(fid !== "sith" && F.jediRep >= 60 && rnd(st) < 0.1){
+      const c = pickOne(st, Object.values(st.chars).filter(x => x.fid === fid && x.sith));
+      if(c) unmask(st, c, "Un Jedi met en garde " + FACTIONS[fid].name);
+    }
+    if((F.jediRep <= 20 || fid === "sith") && rnd(st) < 0.2){
+      const s = planetsOf(st, fid).sort((a, b) => a.loyalty - b.loyalty)[0];
+      if(s){ s.loyalty = Math.max(0, s.loyalty - 8); logEv(st, "Les Jedi soutiennent la résistance sur " + SYS[s.id].name + " (loyauté −8).", fid === P ? "bad" : "info", [fid]); }
+    }
+  });
+  // Médiation : une trêve entre les deux factions les plus épuisées.
+  if(st.turn >= J.mediateAt){
+    J.mediateAt = st.turn + 12;
+    const real = FACTION_IDS.filter(f => f !== "sith" && st.factions[f].alive && !st.factions[f].shadow);
+    let best = null;
+    real.forEach((a, i) => real.slice(i + 1).forEach(b => {
+      const w = st.factions[a].weariness + st.factions[b].weariness;
+      if(st.factions[a].weariness >= 30 && st.factions[b].weariness >= 30 && !truceBetween(st, a, b) && (!best || w > best.w)) best = {a, b, w};
+    }));
+    if(best){
+      const mine = best.a === P ? best.a : best.b === P ? best.b : null;
+      if(mine) addDilemma(st, proposeTruce(st, mine, mine === best.a ? best.b : best.a));
+      else {
+        const ok = Math.max(st.factions[best.a].weariness, st.factions[best.b].weariness) >= 40;
+        if(ok){ makeTruce(st, best.a, best.b); logEv(st, "Sous l'égide des Jedi, " + FACTIONS[best.a].name + " et " + FACTIONS[best.b].name + " signent une trêve.", "info", []); }
+      }
+    }
+  }
+}
+
+// ---------- Tour du Sith ----------
+function sithTurn(st){
+  const F = st.factions.sith, P = st.player;
+  if(!F.alive) return;
+  const corrupted = corruptedChars(st);
+  const battles = st.log.filter(e => e.t === st.turn && /^(Bataille|Invasion)/.test(e.msg)).length;
+  // Le chaos nourrit sa puissance.
+  F.dark += 2 + Math.min(10, battles) + corrupted.length + 3 * st.sithFound.length;
+  if(F.shadow){
+    // Les personnages corrompus détournent pour lui un peu de l'argent de leur faction.
+    corrupted.forEach(c => { const V = st.factions[c.fid]; if(V && V.alive){ V.cr -= 4; F.cr += 4; } });
+    // Faire le mort fait retomber l'Exposition ; les enquêtes Jedi suivent la trace des actions récentes.
+    if(F.lastAct < st.turn - 1) F.exposure = Math.max(0, F.exposure - 2);
+    else if(F.exposure >= 10 && st.jedi.strength > 0 && rnd(st) < st.jedi.strength / 16) F.exposure = Math.min(100, F.exposure + 2);
+    if(F.exposure >= 50 && !F.rumor){ F.rumor = true; logEv(st, "Des rumeurs courent : un culte Sith agirait dans l'ombre. Les Jedi redoublent d'attention.", "info", []); }
+    if(F.exposure >= 50 && F.acolytes > 0 && rnd(st) < 0.15){ F.acolytes--; sithLog(st, "Les Jedi ont retrouvé et tué un de tes acolytes.", "bad"); }
+    // Trop haute, et toutes les factions le traquent.
+    if(F.exposure >= 80 && corrupted.length && rnd(st) < 0.3){
+      const c = corrupted[rint(st, 0, corrupted.length - 1)];
+      c.sith = false; F.dark = Math.max(0, F.dark - 10);
+      sithLog(st, c.name + " est démasqué comme agent Sith et exécuté par les siens.", "bad");
+      charDies(st, c, "est démasqué comme agent Sith et exécuté");
+    }
+    if(F.exposure >= 100) return sithEliminated(st, "Découvert trop tôt, le culte Sith est traqué par toute la galaxie et anéanti.");
+    if(F.phase === 1 && F.dark >= SITH_PHASE2.dark && corrupted.length >= SITH_PHASE2.corrupted){ F.phase = 2; sithLog(st, "Phase 2 — l'Emprise : assassinats, votes truqués et chasse aux Jedi deviennent possibles.", "good"); }
+    if(F.phase === 2 && F.dark >= SITH_PHASE3.dark){ F.phase = 3; sithLog(st, "Phase 3 — la Revendication : un coup d'État ou un Empire Sith est à portée.", "good"); }
+  }
+}
+function forceTurn(st){ jediTurn(st); sithTurn(st); }
+
+// Un amiral corrompu peut trahir en pleine bataille : sa flotte se débande.
+function betrayalRoll(st, f){
+  const a = f && charOf(st, f.admiral);
+  if(!a || !a.sith || rnd(st) >= 0.3) return false;
+  const S = st.factions.sith;
+  S.dark += 5; if(S.shadow) S.exposure = Math.min(100, S.exposure + 4);
+  a.sith = false;
+  logEv(st, "L'amiral " + a.name + " trahit en pleine bataille : " + f.name + " se débande.", f.owner === st.player ? "bad" : "info", [f.owner]);
+  sithLog(st, "Sur ton ordre, l'amiral " + a.name + " trahit sa flotte en pleine bataille. Il est grillé.", "good");
+  return true;
+}
+// Les Jedi protègent les mondes menacés par une faction cruelle (ou par le Sith).
+function jediProtects(st, attFid){
+  if(!st.jedi || st.jedi.strength < 3) return false;
+  const F = st.factions[attFid];
+  return (attFid === "sith" || F.jediRep < 30) && rnd(st) < 0.35;
+}
+
+// ---------- IA du Sith ----------
+function aiSith(st){
+  const F = st.factions.sith;
+  if(!F.alive) return;
+  let guard = 8;
+  while(sithActionsLeft(st) > 0 && guard-- > 0){
+    if(F.shadow && F.exposure >= 50) break; // faire le mort
+    if(sithCoupReady(st)){ sithCoup(st); return; }
+    if(sithEmpireReady(st)){ sithClaim(st); return; }
+    if(F.acolytes < 2 && canSithRecruit(st)){ sithRecruit(st); continue; }
+    if(F.phase >= 2 && canSithHunt(st) && F.acolytes >= 3 && rnd(st) < 0.3){ sithHunt(st); continue; }
+    if(F.phase >= 2 && rnd(st) < 0.15){
+      const fid = FACTION_IDS.find(x => canSithRig(st, x));
+      if(fid){ sithRig(st, fid); continue; }
+    }
+    // Corruption : les Moffs pour le coup d'État, les gouverneurs pour l'Empire Sith.
+    const targets = Object.values(st.chars).filter(c => corruptible(st, c) && c.role !== "leader")
+      .map(c => ({c, v:(c.fid === "emp" && c.role === "chief" ? 1.6 : 0) + (c.role === "governor" ? 0.8 : 0) + (c.dossier ? 1 : 0) + corruptChance(st, c) * 3}))
+      .sort((a, b) => b.v - a.v);
+    const top = targets[0] && targets[0].c;
+    if(top && !top.dossier && canSithInvestigate(st, top)){ sithInvestigate(st, top); continue; }
+    if(top && canSithCorrupt(st, top) && corruptChance(st, top) >= 0.25){ sithCorrupt(st, top); continue; }
+    const unsearched = SYSTEMS.map(x => x[0]).filter(id => !st.sithSearched.includes(id));
+    if(st.sithFound.length < st.sithSites.length && unsearched.length && rnd(st) < 0.6){ sithSearch(st, unsearched[rint(st, 0, unsearched.length - 1)]); continue; }
+    if(F.acolytes < 4 && canSithRecruit(st)){ sithRecruit(st); continue; }
+    const s = pickOne(st, Object.values(st.systems).filter(p => p.owner && p.owner !== "sith"));
+    if(s && F.exposure < 40 && canSithChaos(st, s.id)){ sithChaos(st, s.id); continue; }
+    break;
+  }
 }
 
 // ---------- Batailles : côté carte ----------
@@ -1799,6 +2246,8 @@ function sidePower(st, ids){
 // moins bon que s'il avait commandé lui-même.
 function autoBattle(st, bs, penalFid){
   let pa = sidePower(st, bs.att), pd = sidePower(st, bs.def);
+  if(betrayalRoll(st, fleetById(st, bs.att[0]))) pa *= 0.6;
+  if(betrayalRoll(st, fleetById(st, bs.def[0]))) pd *= 0.6;
   if(penalFid === bs.attFid) pa *= 0.85;
   if(penalFid === bs.defFid) pd *= 0.85;
   pa *= 0.8 + 0.4 * rnd(st); pd *= 0.8 + 0.4 * rnd(st);
@@ -1859,6 +2308,9 @@ function applyBattle(st, bs, res){
   const cruelWin = bs[winSide].some(id => { const f = fleetById(st, id); return f && hasTrait(charOf(st, f.admiral), "cruel"); });
   if(cruelWin && !st.factions[winFid].terror) st.factions[winFid].jediRep = Math.max(0, st.factions[winFid].jediRep - 2);
   admiralsAfterBattle(st, bs[winSide].filter(id => { const f = fleetById(st, id); return f && shipCount(f); }), bs[loseSide]);
+  // Les héros d'une flotte vaincue risquent leur vie ; ceux d'une flotte anéantie la perdent.
+  bs[loseSide].forEach(id => { const f = fleetById(st, id); if(f && shipCount(f)) fleetHeroesDie(st, f, 0.2, sysName); });
+  bs[winSide].forEach(id => { const f = fleetById(st, id); if(f && shipCount(f)) fleetHeroesDie(st, f, 0.03, sysName); });
   // Nettoyage des flottes vides
   [...bs.att, ...bs.def].forEach(id => { const f = fleetById(st, id); if(f && !shipCount(f)) removeFleet(st, f); });
   // Le perdant principal se replie, ou il est anéanti faute de repli.
@@ -1893,9 +2345,11 @@ function orbitalSupport(st, f, s){
 function canInvade(st, f){
   if(!f) return false;
   const s = st.systems[f.at];
-  return s.owner !== f.owner && f.landed !== st.turn && troopCount(f.troops) > 0 && !hostileFleetsAt(st, f.at, f.owner).length;
+  return planetHostile(st, s, f.owner) && f.landed !== st.turn && troopCount(f.troops) > 0 && !hostileFleetsAt(st, f.at, f.owner).length;
 }
-function makeInvasion(st, f){ return {kind:"ground", sys:f.at, fleet:f.id, attFid:f.owner, defFid:st.systems[f.at].owner}; }
+function makeInvasion(st, f){
+  return {kind:"ground", sys:f.at, fleet:f.id, attFid:f.owner, defFid:st.systems[f.at].owner, jedi:jediProtects(st, f.owner)};
+}
 function invasionValid(st, gs){
   const f = fleetById(st, gs.fleet), s = st.systems[gs.sys];
   return !!f && f.at === gs.sys && f.owner === gs.attFid && s.owner === gs.defFid && troopCount(f.troops) > 0 &&
@@ -1903,8 +2357,9 @@ function invasionValid(st, gs){
 }
 function groundPower(st, gs){
   const f = fleetById(st, gs.fleet), s = st.systems[gs.sys];
-  return {att:troopPower(f.troops, f.owner) + orbitalSupport(st, f, s) * 2,
-          def:troopPower(s.garrison, s.owner) * (1 + 0.6 * fortification(s))};
+  const heroes = (f.heroes || []).reduce((a, h) => a + HEROES[h.kind].power, 0) * FACTIONS[f.owner].ground;
+  return {att:troopPower(f.troops, f.owner) + orbitalSupport(st, f, s) * 2 + heroes,
+          def:troopPower(s.garrison, s.owner) * (1 + 0.6 * fortification(s)) + (gs.jedi ? HEROES.jedi.power : 0)};
 }
 function autoGround(st, gs, penalFid){
   const f = fleetById(st, gs.fleet), s = st.systems[gs.sys];
@@ -1916,14 +2371,29 @@ function autoGround(st, gs, penalFid){
   const share = Math.max(pa, pd) / Math.max(0.01, pa + pd);
   const winLoss = 0.8 * (1 - share), loseLoss = clamp(0.5 + (share - 0.5), 0.35, 0.95);
   const roll = (t, frac) => { const l = troops(); TROOP_TYPES.forEach(k => { for(let i = 0; i < t[k]; i++) if(rnd(st) < frac) l[k]++; }); return l; };
-  return {winner, how:"auto", losses:{
+  const losses = {
     att:roll(f.troops, winner === "att" ? winLoss : loseLoss),
     def:roll(s.garrison, winner === "def" ? winLoss : 1), // une garnison vaincue est anéantie ou capturée
-  }};
+  };
+  // Les héros meurent plus rarement que les troupes, mais leur mort est définitive.
+  (f.heroes || []).forEach((h, i) => { if(rnd(st) < (winner === "att" ? 0.05 : 0.35)) losses["hero:" + i] = {[h.kind]:1}; });
+  if(gs.jedi && winner === "att" && rnd(st) < 0.3) losses.jedi = {jedi:1};
+  return {winner, how:"auto", losses};
 }
 const UNOPPOSED = {winner:"att", how:"sans combat", losses:{att:troops(), def:troops()}};
 function applyGround(st, gs, res){
   const f = fleetById(st, gs.fleet), s = st.systems[gs.sys];
+  // Héros tombés au sol, et Chevalier Jedi venu défendre le monde
+  const deadIdx = Object.keys(res.losses).filter(k => k.startsWith("hero:") && Object.values(res.losses[k]).some(v => v > 0)).map(k => +k.slice(5));
+  if(deadIdx.length){
+    const dead = f.heroes.filter((h, i) => deadIdx.includes(i));
+    f.heroes = f.heroes.filter((h, i) => !deadIdx.includes(i));
+    dead.forEach(h => heroDies(st, f.owner, h, SYS[gs.sys].name));
+  }
+  if(gs.jedi){
+    if(res.losses.jedi && res.losses.jedi.jedi){ st.jedi.strength = Math.max(0, st.jedi.strength - 1); st.jedi.fallen++; logEv(st, "Un Chevalier Jedi est tombé en défendant " + SYS[gs.sys].name + ".", "info", [gs.attFid].concat(gs.defFid || [])); }
+    else logEv(st, "Un Chevalier Jedi a combattu aux côtés des défenseurs de " + SYS[gs.sys].name + ".", "info", [gs.attFid].concat(gs.defFid || []));
+  }
   TROOP_TYPES.forEach(t => {
     f.troops[t] = Math.max(0, f.troops[t] - res.losses.att[t]);
     s.garrison[t] = Math.max(0, s.garrison[t] - res.losses.def[t]);
@@ -2069,13 +2539,14 @@ function finishTurn(st){
   politicsTurn(st);
   // 4c. Syndicat : emprise, dettes, trésor ; puis les événements du tour et les effets différés
   syndicateTurn(st);
+  forceTurn(st);
   eventsTurn(st);
   // 5. Chocs politiques qui s'estompent
   FACTION_IDS.forEach(f => { st.factions[f].shock = Math.max(0, st.factions[f].shock - 1); });
   // 6. Éliminations et victoire
   FACTION_IDS.forEach(f => {
     const F = st.factions[f];
-    if(F.alive && !planetsOf(st, f).length){
+    if(F.alive && !F.shadow && !planetsOf(st, f).length){
       F.alive = false;
       st.fleets = st.fleets.filter(x => x.owner !== f);
       Object.values(st.chars).forEach(c => { if(c.fid === f) delete st.chars[c.id]; });
@@ -2102,11 +2573,18 @@ function finishTurn(st){
 function checkVictory(st){
   const total = SYSTEMS.length;
   for(const f of FACTION_IDS){
-    if(!st.factions[f].alive) continue;
-    const rivals = FACTION_IDS.filter(g => g !== f && st.factions[g].alive);
+    const F = st.factions[f];
+    if(!F.alive || F.shadow) continue;
+    // Le Sith doit aussi éradiquer l'Ordre Jedi.
+    if(f === "sith" && st.jedi && st.jedi.strength > 0) continue;
+    // Un culte encore caché ne compte pas comme rival : personne ne le sait vivant.
+    const rivals = FACTION_IDS.filter(g => g !== f && st.factions[g].alive && !st.factions[g].shadow);
     if(!rivals.length) return f;
     const held = planetsOf(st, f).length;
-    const caps = FACTION_IDS.filter(g => g !== f).every(g => st.systems[FACTIONS[g].capital].owner === f);
+    const caps = FACTION_IDS.filter(g => g !== f).every(g => {
+      const cap = FACTIONS[g].capital || (st.factions[g].alive && !st.factions[g].shadow ? st.factions[g].capital : null);
+      return !cap || st.systems[cap].owner === f;
+    });
     if(held >= Math.ceil(total / 2) && caps) return f;
   }
   return null;
@@ -2137,7 +2615,7 @@ function aiChoose(st, f){
   const my = fleetPower(st, f);
   const here = st.systems[f.at];
   // Siège en cours : on reste tant que nos troupes peuvent espérer prendre le monde.
-  if(here.owner !== f.owner && !hostileFleetsAt(st, f.at, f.owner).length &&
+  if(planetHostile(st, here, f.owner) && !hostileFleetsAt(st, f.at, f.owner).length &&
      (!troopCount(here.garrison) || troopPower(f.troops, f.owner) >= troopPower(here.garrison, here.owner) * 1.1)) return null;
   const hereThreat = maxHostileAdj(st, f.at, f.owner);
   let best = null;
@@ -2149,6 +2627,8 @@ function aiChoose(st, f){
     if(E > 0){
       if(my < 1.3 * E) return;
       sc = 25 + sysValue(st, s) * 0.3 + (s.owner === f.owner ? 15 : 0);
+    } else if(s.owner !== f.owner && !planetHostile(st, s, f.owner)){
+      return; // monde d'un partenaire de trêve : on ne s'y attarde pas
     } else if(s.owner !== f.owner){
       if(my < 6) return;
       const turns = s.def / Math.max(1, siegePower(f));
@@ -2253,6 +2733,8 @@ function runAI(st, opts){
   st.pending = [];
   const order = FACTION_IDS.filter(f => f !== st.player || opts.includePlayer);
   order.forEach(fid => {
+    if(fid === "sith") aiSith(st);
+    if(st.factions[fid].shadow) return;
     aiFaction(st, fid, bs => {
       const involvesPlayer = (bs.attFid === st.player || bs.defFid === st.player) && !opts.includePlayer;
       if(involvesPlayer) st.pending.push(bs);
@@ -2277,6 +2759,10 @@ const UNITS = {
   tank:{hull:75,  sh:{f:30, s:18, r:8},  mp:3, range:2, dmg:18, ground:true, heavy:true, regen:0},
   walk:{hull:120, sh:{f:40, s:25, r:10}, mp:2, range:3, dmg:24, ground:true, heavy:true, regen:0},
   art: {hull:35,  sh:null,               mp:1, range:5, dmg:22, ground:true, minRange:2, static:true},
+  // Héros : en première ligne, ils ne fuient jamais.
+  jedi:   {hull:85,  sh:null, mp:3, range:1, dmg:26, bypass:0.6, ground:true, hero:true},
+  sith:   {hull:100, sh:null, mp:3, range:1, dmg:32, bypass:0.6, ground:true, hero:true},
+  acolyte:{hull:50,  sh:null, mp:3, range:1, dmg:18, bypass:0.5, ground:true, hero:true},
 };
 // Multiplicateur de dégâts attaquant → cible. Espace : les frégates chassent les chasseurs,
 // les chasseurs harcèlent les destroyers, les destroyers écrasent les frégates.
@@ -2285,10 +2771,13 @@ const VS = {
   dest:{dest:1, frig:1.3, esc:0.5},
   frig:{dest:0.8, frig:1, esc:2},
   esc: {dest:1.6, frig:0.9, esc:1},
-  inf: {inf:1, tank:0.7, walk:0.6, art:1.3},
-  tank:{inf:1.2, tank:1, walk:0.9, art:1.4},
-  walk:{inf:1.3, tank:1.2, walk:1, art:1.2},
-  art: {inf:1.3, tank:1, walk:1.1, art:1},
+  inf: {inf:1, tank:0.7, walk:0.6, art:1.3, jedi:0.7, sith:0.7, acolyte:0.8},
+  tank:{inf:1.2, tank:1, walk:0.9, art:1.4, jedi:0.9, sith:0.9, acolyte:1},
+  walk:{inf:1.3, tank:1.2, walk:1, art:1.2, jedi:0.9, sith:0.9, acolyte:1},
+  art: {inf:1.3, tank:1, walk:1.1, art:1, jedi:0.6, sith:0.6, acolyte:0.8},
+  jedi:   {inf:1.4, tank:0.9, walk:0.8, art:1.5, jedi:1, sith:1, acolyte:1.2},
+  sith:   {inf:1.5, tank:1, walk:0.9, art:1.5, jedi:1, sith:1, acolyte:1.2},
+  acolyte:{inf:1.3, tank:0.8, walk:0.7, art:1.4, jedi:0.8, sith:0.8, acolyte:1},
 };
 const WEATHER = {
   clear:{name:"Temps clair", desc:"aucun effet"},
@@ -2311,7 +2800,7 @@ const hk = (c, r) => c + "," + r;
 function bUnitAt(b, c, r){ return b.units.find(u => u.on && !u.gone && u.c === c && u.r === r) || null; }
 function bTerrain(b, c, r){ return b.terrain[hk(c, r)] || null; }
 function bLog(b, msg, tone){ b.log.push({msg, tone:tone || "info", round:b.round}); }
-function unitName(type){ return (SHIPS[type] || TROOPS[type]).name; }
+function unitName(type){ return (SHIPS[type] || TROOPS[type] || HEROES[type]).name; }
 function isAgile(u){ return !UNITS[u.type].sh; } // pas d'orientation : chasseurs, infanterie, artillerie
 function bSideName(b, side){ return b.sides[side].fid ? FACTIONS[b.sides[side].fid].name : "Milice"; }
 
@@ -2345,7 +2834,7 @@ function bBlobs(b, kind, count, minC, maxC){
 }
 // Déploiement : les unités lourdes ou à longue portée derrière, le reste devant.
 const BACK_TYPES = ["dest", "walk", "art"];
-const FLAG_ORDER = ["dest", "frig", "esc", "walk", "tank", "inf", "art"];
+const FLAG_ORDER = ["dest", "frig", "esc", "sith", "jedi", "walk", "tank", "inf", "acolyte", "art"];
 function bDeploy(b, side, list){
   const order = [3, 4, 2, 5, 1, 6, 0, 7];
   const back = side === 0 ? 0 : b.cols - 1, front = side === 0 ? 1 : b.cols - 2;
@@ -2373,12 +2862,21 @@ function createBattle(st, bs){
   [0, 1].forEach(side => {
     const list = [];
     sideFleets(st, b.sides[side].ids).forEach((f, i) => SHIP_TYPES.forEach(t => {
-      const src = {id:f.id, vet:f.vet, fid:f.owner, mul:admiralMul(st, f), morale:hasTrait(charOf(st, f.admiral), "cruel") ? 10 : 0};
+      const src = {id:f.id, vet:f.vet, fid:f.owner, mul:admiralMul(st, f) * heroMul(f),
+                   morale:(hasTrait(charOf(st, f.admiral), "cruel") ? 10 : 0) + ((f.heroes || []).length ? 10 : 0)};
       for(let k = 0; k < f.ships[t]; k++) list.push({type:t, src, round:i > 0 ? 3 : 0});
     }));
     bDeploy(b, side, list);
   });
   bLog(b, "La bataille de " + SYS[bs.sys].name + " commence.", "info");
+  [0, 1].forEach(side => {
+    const f = fleetById(st, b.sides[side].ids[0]);
+    if((f.heroes || []).length) bLog(b, heroNames(f) + " : méditation de combat, la flotte se bat mieux.", "info");
+    if(betrayalRoll(st, f)){
+      b.units.filter(u => u.side === side).forEach(u => { u.morale -= 25; });
+      bLog(b, "Trahison ! L'amiral de " + f.name + " abandonne ses hommes en plein combat.", side === 0 ? "bad" : "good");
+    }
+  });
   bBeginSide(b);
   return b;
 }
@@ -2401,8 +2899,10 @@ function createGroundBattle(st, gs){
     b.points.push({c, r, owner:1});
   });
   const list = (t, src) => { const out = []; TROOP_TYPES.forEach(k => { for(let i = 0; i < t[k]; i++) out.push({type:k, src}); }); return out; };
-  bDeploy(b, 0, list(f.troops, {id:"att", vet:0, fid:gs.attFid, mul:admiralMul(st, f), morale:hasTrait(charOf(st, f.admiral), "cruel") ? 10 : 0}));
-  bDeploy(b, 1, list(s.garrison, {id:"def", vet:0, fid:gs.defFid}));
+  const attSrc = {id:"att", vet:0, fid:gs.attFid, mul:admiralMul(st, f), morale:hasTrait(charOf(st, f.admiral), "cruel") ? 10 : 0};
+  bDeploy(b, 0, (f.heroes || []).map((h, i) => ({type:h.kind, src:Object.assign({}, attSrc, {id:"hero:" + i})})).concat(list(f.troops, attSrc)));
+  bDeploy(b, 1, (gs.jedi ? [{type:"jedi", src:{id:"jedi", vet:1, fid:null}}] : []).concat(list(s.garrison, {id:"def", vet:0, fid:gs.defFid})));
+  if(gs.jedi) bLog(b, "Un Chevalier Jedi se tient parmi les défenseurs.", "info");
   bLog(b, "Débarquement sur " + SYS[gs.sys].name + ". " + WEATHER[b.weather].name + " (" + WEATHER[b.weather].desc + ").", "info");
   if(b.fort) bLog(b, "Les défenseurs sont retranchés : −" + Math.round(b.fort * 100) + " % de dégâts subis.", "info");
   if(b.orbital) bLog(b, "La flotte en orbite peut appuyer l'assaut : " + per + " frappe(s) orbitale(s) par round.", "info");
@@ -2533,7 +3033,7 @@ const ARC_NAME = {f:"avant", s:"flanc", r:"arrière"};
 const AIM_NAME = {hull:"coque", eng:"moteurs", wpn:"armes"};
 
 function bRoutCheck(b, u){
-  if(!u.gone && !u.routing && u.morale < 25){
+  if(!u.gone && !u.routing && u.morale < 25 && !UNITS[u.type].hero){
     u.routing = true;
     bLog(b, unitLabel(b, u) + " perd courage et prend la fuite.", u.side === bPlayerSide(b) ? "bad" : "good");
   }
@@ -2766,7 +3266,7 @@ function bRunAI(b){
 function bResult(b){
   const losses = {};
   b.units.forEach(u => {
-    if(!losses[u.src]) losses[u.src] = {dest:0, frig:0, esc:0, inf:0, tank:0, walk:0, art:0};
+    if(!losses[u.src]) losses[u.src] = {dest:0, frig:0, esc:0, inf:0, tank:0, walk:0, art:0, jedi:0, sith:0, acolyte:0};
     if(u.gone === "destroyed") losses[u.src][u.type]++;
   });
   if(b.ground){
@@ -2804,7 +3304,7 @@ function loadSave(){
     const s = store(); const raw = s && s.getItem(SAVE_KEY);
     if(!raw) return null;
     const st = JSON.parse(raw);
-    return st && st.version === 5 ? st : null;
+    return st && st.version === 6 ? st : null;
   }catch(e){ return null; }
 }
 function clearSave(){ try{ const s = store(); if(s) s.removeItem(SAVE_KEY); }catch(e){} }
@@ -2818,7 +3318,7 @@ function showTitle(){
       '<small>' + esc(F.pitch) + '</small>' +
       '<span class="good" style="font-size:.88rem">+ ' + esc(F.strength) + '</span>' +
       '<span class="bad" style="font-size:.88rem">− ' + esc(F.weakness) + '</span>' +
-      '<small>' + F.planets.length + ' mondes au départ · capitale ' + esc(SYS[F.capital].name) + '</small></button>';
+      '<small>' + (F.shadow ? 'Aucun monde au départ · mode Ombre' : F.planets.length + ' mondes au départ · capitale ' + esc(SYS[F.capital].name)) + '</small></button>';
   }).join("");
   $("btnContinue").classList.toggle("hidden", !loadSave());
 }
@@ -2826,6 +3326,13 @@ function startGame(fid){
   G = newGame(fid);
   ui.sel = FACTIONS[fid].capital; ui.fleet = null;
   enterGame();
+  if(fid === "sith") return showModal('<h2>' + esc(FACTIONS.sith.name) + ' — mode Ombre</h2><p>' + esc(FACTIONS.sith.pitch) + '</p>' +
+    '<ul><li><b>L\'Ombre</b> : recrute des acolytes, fouille la galaxie pour trouver des sites Sith, monte des dossiers et corromps des personnages clés. Le chaos des guerres nourrit ta Puissance obscure.</li>' +
+    '<li><b>L\'Emprise</b> (Puissance 80 et deux personnages corrompus) : assassinats, votes truqués, chasse aux Jedi. Tes amiraux corrompus trahissent en pleine bataille.</li>' +
+    '<li><b>La Revendication</b> (Puissance 200) : un coup d\'État sur les Vestiges impériaux si tu tiens deux Moffs, ou un Empire Sith fondé sur quatre mondes aux gouverneurs corrompus.</li>' +
+    '<li><b>L\'Exposition</b> : chaque action visible la fait monter, les Jedi enquêtent. À 50, les rumeurs courent ; à 80, tout le monde te traque ; à 100, c\'est la fin.</li></ul>' +
+    '<p class="muted">Victoire : dominer la galaxie et éradiquer l\'Ordre Jedi. Tout se joue depuis le bouton « Ombre » ; la carte sert à choisir où fouiller et où semer le chaos.</p>',
+    [{label:"Dans l'ombre", primary:true, fn:showShadow}]);
   showModal('<h2>' + esc(FACTIONS[fid].name) + '</h2><p>' + esc(FACTIONS[fid].pitch) + '</p>' +
     '<ul><li>Touche un système pour voir sa planète et ses flottes.</li>' +
     '<li>Sélectionne une de tes flottes, puis un système voisin (cercle bleu) pour la déplacer : 2 sauts par tour, un système hostile arrête la flotte.</li>' +
@@ -2838,7 +3345,8 @@ function startGame(fid){
 function enterGame(){
   $("title").classList.add("hidden"); $("battle").classList.add("hidden"); $("game").classList.remove("hidden");
   render();
-  centerOn(ui.sel || G.factions[G.player].capital);
+  const c = ui.sel || G.factions[G.player].capital;
+  if(c) centerOn(c);
 }
 // Sur téléphone la carte déborde de l'écran : on la fait défiler jusqu'au système voulu.
 function centerOn(id){
@@ -2858,6 +3366,13 @@ function renderTop(){
   $("gFaction").textContent = FACTIONS[P].name;
   $("gTurn").textContent = G.turn;
   const sign = n => (n >= 0 ? "+" : "") + n;
+  $("btnShadow").classList.toggle("hidden", P !== "sith");
+  if(P === "sith"){
+    $("gRes").innerHTML = '<span>Puissance obscure <b>' + Math.round(F.dark) + '</b></span><span>Acolytes <b>' + F.acolytes + '</b></span>' +
+      (F.shadow ? '<span>Exposition <b class="' + (F.exposure >= 50 ? "bad" : "") + '">' + F.exposure + '</b></span><span>Actions <b>' + sithActionsLeft(G) + '</b>/' + sithActionsMax(G) + '</span>' : '') +
+      '<span>Crédits <b>' + Math.round(F.cr) + '</b></span>' + (F.shadow ? '' : '<span>Matériaux <b>' + Math.round(F.mat) + '</b></span><span>Influence <b>' + Math.round(F.inf) + '</b></span>');
+    return;
+  }
   $("gRes").innerHTML =
     '<span title="Crédits">Crédits <b class="' + (F.cr < 0 ? "bad" : "") + '">' + Math.round(F.cr) + '</b> <small class="' + (inc.net < 0 ? "bad" : "muted") + '">' + sign(inc.net) + '</small></span>' +
     '<span title="Matériaux">Matériaux <b>' + Math.round(F.mat) + '</b> <small class="muted">' + sign(inc.mat) + '</small></span>' +
@@ -2921,6 +3436,7 @@ function fleetCard(f){
     '<span class="muted" title="Vétérance">' + (f.vet ? "★".repeat(f.vet) : "recrues") + '</span></div>' +
     '<div style="font-size:.9rem">' + esc(describeShips(f.ships)) + '</div>' +
     charLine(charOf(G, f.admiral)) +
+    ((f.heroes || []).length ? '<div style="font-size:.86rem">Héros : ' + f.heroes.map(h => '<b>' + esc(HEROES[h.kind].name) + '</b> ' + esc(h.name)).join(", ") + '</div>' : '') +
     (fleetCap(f) ? '<div style="font-size:.88rem">Troupes : ' + esc(describeTroops(f.troops)) + ' <span class="muted">(' + fleetLoad(f) + '/' + fleetCap(f) + ' places)</span></div>' : '') +
     '<div class="muted" style="font-size:.85rem">Puissance ' + Math.round(fleetPower(G, f)) + (mine ? ' · ' + f.mp + '/' + FLEET_MP + ' sauts' : ' · ' + esc(fname(f.owner))) + '</div>';
   if(mine){
@@ -3007,11 +3523,25 @@ function renderPanel(){
     h += here.length ? here.map(fleetCard).join("") : '<div class="muted">Aucune.</div>';
     if(ownFleetsAt(G, id, P).length > 1) h += '<button class="small" data-act="merge" data-id="' + id + '">Fusionner mes flottes</button>';
     const sf = ui.fleet ? fleetById(G, ui.fleet) : null;
+    if(P === "sith" && G.factions.sith.alive){
+      h += '<h3>Actions de l\'Ombre (' + sithActionsLeft(G) + ' restante(s))</h3><div class="row">' +
+        '<button class="small" data-act="search" data-id="' + id + '"' + (canSithSearch(G, id) ? "" : " disabled") + '>' + (G.sithSearched.includes(id) ? (G.sithFound.includes(id) ? 'Site Sith trouvé ici' : 'Déjà fouillé') : 'Fouiller ce système (Exposition +2)') + '</button>' +
+        (s.owner && s.owner !== "sith" ? '<button class="small" data-act="chaos" data-id="' + id + '"' + (canSithChaos(G, id) ? "" : " disabled") + '>Semer le chaos (loyauté −10, Exposition +3)</button>' : '') + '</div>';
+    }
     h += '<h3>Routes</h3><div class="list">' + ADJ[id].map(n => {
       const can = sf && sf.at === id && canMove(G, sf, n);
       const hostile = hostileFleetsAt(G, n, P).length;
       return '<button data-act="' + (can ? "move" : "sel") + '" data-id="' + n + '"><span><span class="dot" style="background:' + fcolor(G.systems[n].owner) + '"></span>' + esc(SYS[n].name) + (hostile ? ' <span class="bad">⚔</span>' : '') + '</span><span class="muted">' + (can ? "Envoyer →" : "Voir") + '</span></button>';
     }).join("") + '</div>';
+  } else if(P === "sith" && G.factions.sith.shadow){
+    const S = G.factions.sith;
+    h += '<h2><span class="dot" style="background:' + FACTIONS.sith.color + '"></span>' + esc(FACTIONS.sith.name) + '</h2>';
+    h += '<p class="muted">Phase ' + S.phase + ' — ' + SITH_PHASES[S.phase] + '. Tu n\'as ni monde ni flotte : tout passe par tes agents.</p>';
+    h += '<dl class="kv"><dt>Puissance obscure</dt><dd>' + Math.round(S.dark) + '</dd><dt>Acolytes</dt><dd>' + S.acolytes + '/' + MAX_ACOLYTES + '</dd>' +
+      '<dt>Exposition</dt><dd class="' + (S.exposure >= 50 ? "bad" : "") + '">' + S.exposure + '/100' + synBar(S.exposure) + '</dd>' +
+      '<dt>Personnages corrompus</dt><dd>' + corruptedChars(G).length + '</dd><dt>Sites Sith</dt><dd>' + G.sithFound.length + '/' + G.sithSites.length + ' trouvés</dd></dl>';
+    h += '<div class="row" style="margin-top:.6em"><button class="primary" data-act="shadow">Ouvrir l\'Ombre</button></div>';
+    h += '<p class="muted" style="font-size:.86rem">Touche un système sur la carte pour le fouiller ou y semer le chaos.</p>';
   } else {
     const F = FACTIONS[P], inc = income(G, P);
     h += '<h2><span class="dot" style="background:' + F.color + '"></span>' + esc(F.name) + '</h2>';
@@ -3025,7 +3555,9 @@ function renderPanel(){
     h += '<h3>Tes flottes</h3><div class="list">' + (fl.length ? fl.map(f =>
       '<button data-act="pickfleet" data-id="' + f.id + '"><span>' + esc(f.name) + ' <span class="muted">· ' + esc(SYS[f.at].name) + '</span></span><span class="muted">' + shipCount(f) + ' vx · ' + f.mp + ' sauts</span></button>').join("") : '<div class="muted">Aucune flotte.</div>') + '</div>';
     h += '<h3>Rivaux</h3>';
-    FACTION_IDS.filter(x => x !== P).forEach(x => {
+    if(P !== "sith" && G.factions.sith.alive && G.factions.sith.shadow && G.factions.sith.rumor)
+      h += '<div class="warn" style="font-size:.88rem">Des rumeurs parlent d\'un culte Sith agissant dans l\'ombre.</div>';
+    FACTION_IDS.filter(x => x !== P && !(x === "sith" && G.factions.sith.shadow && P !== "sith") && !(x === "sith" && !G.factions.sith.alive && P !== "sith" && !G.factions.sith.capital)).forEach(x => {
       const alive = G.factions[x].alive;
       const pw = G.fleets.filter(f => f.owner === x).reduce((a, f) => a + fleetPower(G, f), 0);
       h += '<div class="row" style="justify-content:space-between;font-size:.92rem"><span><span class="dot" style="background:' + FACTIONS[x].color + '"></span>' + esc(FACTIONS[x].name) + '</span><span class="muted">' + (alive ? planetsOf(G, x).length + ' mondes · flotte ' + Math.round(pw) : 'effondrée') + '</span></div>';
@@ -3047,6 +3579,9 @@ function onPanel(e){
   else if(act === "tax"){ setTax(G, id, v); }
   else if(act === "appease"){ appease(G, id); }
   else if(act === "purge"){ purge(G, id); }
+  else if(act === "search"){ const m = sithSearch(G, id); render(); if(m) showModal('<h2>Fouilles</h2><p>' + esc(m) + '</p>', [{label:"Continuer", primary:true}]); return; }
+  else if(act === "chaos"){ sithChaos(G, id); }
+  else if(act === "shadow"){ return showShadow(); }
   else if(act === "smuggle"){ smuggle(G, P, id); }
   else if(act === "build"){ queueBuild(G, id, v); }
   else if(act === "recruit"){ queueRecruit(G, id, v); }
@@ -3149,6 +3684,7 @@ function showGameOver(){
   const txt = o.win
     ? "La galaxie a un nouveau maître : " + FACTIONS[G.player].name + ", au tour " + o.turn + "."
     : o.winner ? FACTIONS[o.winner].name + " domine désormais la galaxie. Ton règne s'achève au tour " + o.turn + "."
+    : G.player === "sith" ? "Le culte Sith est anéanti au tour " + o.turn + ". La galaxie ne saura jamais à quel point elle a eu de la chance."
     : "Ta faction n'a plus aucun monde. Elle s'efface de l'histoire au tour " + o.turn + ".";
   clearSave();
   showModal('<h2>' + (o.win ? "Victoire" : "Défaite") + '</h2><p>' + esc(txt) + '</p>', [{label:"Nouvelle partie", primary:true, fn:showTitle}]);
@@ -3164,6 +3700,8 @@ function showModal(html, buttons, wide){
   $("modal").classList.remove("hidden");
 }
 function onModal(e){
+  const shb = e.target.closest("[data-sh]");
+  if(shb && !shb.disabled) return shadowAction(shb.dataset.sh, shb.dataset.id);
   const sb = e.target.closest("[data-syn]");
   if(sb && !sb.disabled) return synAction(sb.dataset.syn, sb.dataset.id);
   const gb = e.target.closest("[data-gov]");
@@ -3182,6 +3720,7 @@ function showMenu(){
     '<li><b>Loyauté</b> : sous 35, sabotages ; sous 20, révolte possible si aucune flotte ne garde le monde. Défaites et capitale perdue ébranlent le régime.</li>' +
     '<li><b>Batailles</b> : boucliers avant / flancs / arrière ; frapper de dos fait mal et brise le moral. Une unité à moins de 25 de moral fuit ; celles rattrapées sont massacrées.</li>' +
     '<li><b>Terrain spatial</b> : nébuleuse = portée réduite à 1 ; astéroïdes = couverture (−30 % de dégâts) mais 2 points de mouvement.</li>' +
+    '<li><b>La Force</b> : l\'Ordre Jedi juge chaque faction. Honorable (réputation 75+), il t\'envoie un Chevalier ; cruelle (20 ou moins), il soutient la résistance et protège les mondes que tu envahis. Il propose des trêves aux factions épuisées. Un culte Sith agit peut-être dans l\'ombre : « Enquêter » sur un personnage (Gouvernement) peut démasquer un agent.</li>' +
     '<li><b>Syndicat</b> (bouton « Syndicat ») : prêts, mercenaires, contrebande, assassinats, renseignements. Chaque contrat fait grimper son emprise : à 50 %, il détourne la moitié des crédits d\'un monde ; à 80 %, le gouverneur passe à sa solde et le monde peut basculer. Une dette impayée déclenche des représailles.</li>' +
     '<li><b>Événements</b> : un ou deux par tour, souvent sans bonne réponse. Certains choix reviennent plusieurs tours plus tard.</li>' +
     '<li><b>Politique</b> (bouton « Gouvernement ») : trois groupes internes à satisfaire, des décrets qui coûtent de l\'influence et ont toujours une contrepartie, des amiraux et gouverneurs aux traits qui comptent. La lassitude de guerre monte à chaque tour de combat.</li>' +
@@ -3214,8 +3753,15 @@ function showGov(){
     '<dt>Emprise du Syndicat</dt><dd>' + F.syndicate + ' % <span class="muted">· crédits −' + Math.round(F.syndicate / 3) + ' %</span></dd>' +
     '<dt>Réputation Jedi</dt><dd>' + F.jediRep + '/100' + (F.terror ? ' <span class="bad">· détruite</span>' : '') + '</dd>' +
     '<dt>Influence</dt><dd>' + Math.round(F.inf) + '</dd></dl>';
+  if(P !== "sith" || !F.shadow){
+    const J = G.jedi, T = trucePartners(G, P), hero = G.fleets.find(f => f.owner === P && (f.heroes || []).some(x => x.kind === "jedi"));
+    h += '<h3>La Force</h3><dl class="kv"><dt>Ordre Jedi</dt><dd>' + (J.strength > 0 ? J.strength + ' chevaliers' : '<span class="bad">anéanti</span>') + '</dd>' +
+      '<dt>Jugement</dt><dd>' + (P === "sith" ? '<span class="bad">ennemi juré</span>' : jediJudgment(F) + (hero ? ' · un Chevalier sert dans ' + esc(hero.name) : '')) + '</dd>' +
+      '<dt>Trêves</dt><dd>' + (T.length ? T.map(t => esc(FACTIONS[t.other].name) + ' (tour ' + t.until + ') <button class="small" data-gov="breaktruce" data-id="' + t.other + '">Rompre</button>').join(" ") : 'aucune') + '</dd></dl>';
+    if(T.length) h += '<p class="muted" style="font-size:.84rem">Rompre une trêve : réputation Jedi −15, l\'armée applaudit (+5).</p>';
+  }
   if(F.intel >= G.turn){
-    h += '<h3>Rapports d\'espions (jusqu\'au tour ' + F.intel + ')</h3><div class="gov-grid">' + FACTION_IDS.filter(x => x !== P && G.factions[x].alive).map(x => {
+    h += '<h3>Rapports d\'espions (jusqu\'au tour ' + F.intel + ')</h3><div class="gov-grid">' + FACTION_IDS.filter(x => x !== P && G.factions[x].alive && !G.factions[x].shadow).map(x => {
       const X = G.factions[x], XL = charOf(G, X.leader);
       return '<div class="card"><b style="color:' + FACTIONS[x].color + '">' + esc(FACTIONS[x].name) + '</b><div style="font-size:.84rem">' +
         Math.round(X.cr) + ' crédits · ' + Math.round(X.inf) + ' influence<br>' + esc(REGIMES[x].leader) + ' ' + (XL ? esc(XL.name) + ' (' + esc(traitNames(XL)) + ')' : '') + '<br>' +
@@ -3228,6 +3774,7 @@ function showGov(){
     return '<div class="card"><b>' + esc(g.name) + '</b> <span class="muted" style="font-size:.8rem">' + ROLE_NAME[g.role] + (R.seats ? ' · ' + R.seats[g.key] + ' sièges' : '') + '</span>' +
       '<div style="font-size:.86rem">Satisfaction ' + g.sat + (g.low ? ' <span class="bad">(' + g.low + ' tour(s) sous 20)</span>' : '') + '</div>' + satBar(g.sat) +
       (chief ? '<div style="font-size:.84rem;margin-top:.3em">' + esc(R.chief) + ' ' + charLine(chief, true) + '</div>' : '') +
+      (chief && P !== "sith" ? '<button class="small" data-gov="probe" data-id="' + chief.id + '"' + (canProbe(G, P, chief) ? "" : " disabled") + '>Enquêter (' + PROBE_COST + ' inf.)</button>' : '') +
       (P === "lig" ? '<div class="muted" style="font-size:.8rem">Mondes : ' + (g.planets.length ? g.planets.map(p => esc(SYS[p].name)).join(", ") : 'aucun') + '</div>' : '') +
       (d ? '<div class="warn" style="font-size:.84rem;margin-top:.3em">Exigence : ' + esc(d.text) + ' Échéance : tour ' + d.deadline + '.</div>' : '') + '</div>';
   }).join("") + '</div>';
@@ -3254,14 +3801,16 @@ function showGov(){
   });
   const chars = Object.values(G.chars).filter(c => c.fid === P && (c.role === "admiral" || c.role === "governor"))
     .sort((a, b) => (a.role === b.role ? a.loyalty - b.loyalty : a.role === "admiral" ? -1 : 1));
-  h += '<h3>Amiraux et gouverneurs</h3><p class="muted" style="font-size:.84rem">Récompenser : ' + REWARD_COST + ' influence, loyauté +20. Démettre : remplacé par un inconnu, et ses pairs n\'aiment pas ça (−8).</p>';
+  h += '<h3>Amiraux et gouverneurs</h3><p class="muted" style="font-size:.84rem">Récompenser : ' + REWARD_COST + ' influence, loyauté +20. Démettre : remplacé par un inconnu, et ses pairs n\'aiment pas ça (−8).' +
+    (P !== "sith" ? ' Enquêter : ' + PROBE_COST + ' influence, ' + Math.round(probeChance(G, P) * 100) + ' % de démasquer un agent Sith s\'il y en a un ; un innocent soupçonné perd 5 de loyauté.' : '') + '</p>';
   h += chars.map(c => {
     const where = c.role === "admiral" ? (fleetById(G, c.at) ? fleetById(G, c.at).name : "") : SYS[c.at] ? SYS[c.at].name : "";
     const risk = c.role === "admiral" && c.ambition >= 75 && c.loyalty <= 35;
     return '<div class="card"><div>' + charTitle(G, c) + ' <b>' + esc(c.name) + '</b> <span class="muted">· ' + esc(where) + '</span>' + (risk ? ' <span class="bad">· rival</span>' : '') + '</div>' +
       '<div>' + traitChips(c) + '<span class="muted" style="font-size:.8rem">loyauté ' + c.loyalty + (c.role === "admiral" ? ' · exp. ' + c.xp + ' · ambition ' + c.ambition : '') + '</span></div>' +
       '<div class="row" style="margin-top:.3em"><button class="small" data-gov="reward" data-id="' + c.id + '"' + (canReward(G, c) ? "" : " disabled") + '>Récompenser</button>' +
-      '<button class="small" data-gov="dismiss" data-id="' + c.id + '">Démettre</button></div></div>';
+      '<button class="small" data-gov="dismiss" data-id="' + c.id + '">Démettre</button>' +
+      (P !== "sith" ? '<button class="small" data-gov="probe" data-id="' + c.id + '"' + (canProbe(G, P, c) ? "" : " disabled") + '>Enquêter</button>' : '') + '</div></div>';
   }).join("");
   showModal(h, [{label:"Fermer", primary:true}], true);
 }
@@ -3272,8 +3821,72 @@ function govAction(act, id, v){
   else if(act === "revoke") revokeDecree(G, P, id);
   else if(act === "reward") rewardChar(G, charOf(G, +id));
   else if(act === "dismiss") dismissChar(G, charOf(G, +id));
+  else if(act === "breaktruce") breakTruce(G, P, id);
+  else if(act === "probe"){ const m = probeChar(G, P, charOf(G, +id)); save(); render(); if(m) return showModal('<h2>Enquête</h2><p>' + esc(m) + '</p>', [{label:"Retour", primary:true, fn:showGov}]); }
   save(); render(); showGov();
   box.scrollTop = y;
+}
+
+// ---------- L'Ombre : écran du joueur Sith (v0.6) ----------
+const shadowUi = {tab:"emp"};
+function showShadow(){
+  const S = G.factions.sith;
+  if(!S.alive) return;
+  const left = sithActionsLeft(G), next = S.phase === 1 ? "Phase 2 à Puissance " + SITH_PHASE2.dark + " et " + SITH_PHASE2.corrupted + " personnages corrompus" : S.phase === 2 ? "Phase 3 à Puissance " + SITH_PHASE3.dark : "Revendication possible";
+  let h = '<h2>L\'Ombre — phase ' + S.phase + ' : ' + SITH_PHASES[S.phase] + '</h2>';
+  h += '<dl class="kv"><dt>Puissance obscure</dt><dd>' + Math.round(S.dark) + ' <span class="muted">· ' + next + '</span></dd>' +
+    '<dt>Actions ce tour</dt><dd>' + left + '/' + sithActionsMax(G) + ' <span class="muted">(1 + un par paire d\'acolytes)</span></dd>' +
+    '<dt>Acolytes</dt><dd>' + S.acolytes + '/' + MAX_ACOLYTES + '</dd>' +
+    (S.shadow ? '<dt>Exposition</dt><dd class="' + (S.exposure >= 50 ? "bad" : "") + '">' + S.exposure + '/100 <span class="muted">· redescend si tu fais le mort</span>' + synBar(S.exposure) + '</dd>' : '') +
+    '<dt>Ordre Jedi</dt><dd>' + G.jedi.strength + ' chevaliers' + (G.jedi.strength ? '' : ' · <span class="good">anéanti</span>') + '</dd>' +
+    '<dt>Sites Sith</dt><dd>' + G.sithFound.length + '/' + G.sithSites.length + ' trouvés, ' + G.sithSearched.length + ' systèmes fouillés</dd></dl>';
+  h += '<h3>Actions</h3><div class="row">' +
+    '<button class="small" data-sh="recruit"' + (canSithRecruit(G) ? "" : " disabled") + '>Recruter un acolyte (' + SITH_COST.recruit + ' Puissance)</button>' +
+    '<button class="small" data-sh="hunt"' + (canSithHunt(G) ? "" : " disabled") + '>Traquer les Jedi (phase 2, 2 acolytes, Exposition +10)</button></div>';
+  if(S.phase >= 3 && S.shadow){
+    h += '<h3>La Revendication</h3><div class="row">' +
+      '<button class="small primary" data-sh="coup"' + (sithCoupReady(G) ? "" : " disabled") + '>Coup d\'État sur les Vestiges impériaux</button>' +
+      '<button class="small primary" data-sh="claim"' + (sithEmpireReady(G) ? "" : " disabled") + '>Proclamer l\'Empire Sith (' + sithHeldPlanets(G).length + '/' + SITH_EMPIRE_WORLDS + ' mondes)</button></div>' +
+      '<p class="muted" style="font-size:.84rem">Coup d\'État : deux Moffs corrompus (ou le Grand Moff). Empire Sith : quatre mondes dont le gouverneur est corrompu.</p>';
+  }
+  const cor = corruptedChars(G);
+  h += '<h3>Tes agents (' + cor.length + ')</h3>' + (cor.length ? cor.map(c => '<div style="font-size:.86rem"><span class="dot" style="background:' + FACTIONS[c.fid].color + '"></span>' + esc(charTitle(G, c)) + ' ' + esc(c.name) + ' <span class="muted">· ' + esc(FACTIONS[c.fid].name) + (c.role === "governor" ? ' · ' + esc(SYS[c.at].name) : '') + '</span></div>').join("") : '<div class="muted">Aucun.</div>');
+  const tabs = FACTION_IDS.filter(x => x !== "sith" && G.factions[x].alive);
+  if(!tabs.includes(shadowUi.tab)) shadowUi.tab = tabs[0];
+  h += '<h3>Cibles</h3><div class="row">' + tabs.map(x => '<button class="small ' + (shadowUi.tab === x ? "on" : "") + '" data-sh="tab" data-id="' + x + '">' + esc(FACTIONS[x].name) + '</button>').join("") + '</div>';
+  const T = shadowUi.tab;
+  if(T){
+    if(S.phase >= 2) h += '<div class="row" style="margin:.4em 0"><button class="small" data-sh="rig" data-id="' + T + '"' + (canSithRig(G, T) ? "" : " disabled") + '>Truquer un vote : renverser le dirigeant (il faut un chef de groupe corrompu)</button></div>';
+    const order = ["leader", "chief", "admiral", "governor"];
+    const list = Object.values(G.chars).filter(c => c.fid === T).sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role) || b.xp - a.xp);
+    h += list.map(c => {
+      const where = c.role === "governor" ? SYS[c.at].name : c.role === "admiral" && fleetById(G, c.at) ? fleetById(G, c.at).name : "";
+      return '<div class="card" style="padding:6px 8px"><div style="font-size:.88rem">' + esc(charTitle(G, c)) + ' <b>' + esc(c.name) + '</b>' + (where ? ' <span class="muted">· ' + esc(where) + '</span>' : '') +
+        (c.sith ? ' <span class="good">· ton agent</span>' : c.dossier ? ' <span class="warn">· dossier</span>' : '') + '</div>' +
+        '<div>' + traitChips(c) + '<span class="muted" style="font-size:.8rem">loyauté ' + c.loyalty + ' · corruption ' + Math.round(corruptChance(G, c) * 100) + ' %</span></div>' +
+        '<div class="row" style="margin-top:.2em">' +
+        (c.sith ? '' : '<button class="small" data-sh="dossier" data-id="' + c.id + '"' + (canSithInvestigate(G, c) ? "" : " disabled") + '>Dossier (Expo. +1)</button>' +
+          '<button class="small" data-sh="corrupt" data-id="' + c.id + '"' + (canSithCorrupt(G, c) ? "" : " disabled") + '>Corrompre (' + SITH_COST.corrupt + ' Puissance)</button>') +
+        (S.phase >= 2 ? '<button class="small" data-sh="kill" data-id="' + c.id + '"' + (canSithKill(G, c) ? "" : " disabled") + '>Faire tuer (Expo. +6)</button>' : '') + '</div></div>';
+    }).join("");
+  }
+  showModal(h, [{label:"Fermer", primary:true}], true);
+}
+function shadowAction(act, id){
+  const box = $("modalBox"), y = box.scrollTop;
+  let msg = null;
+  if(act === "tab"){ shadowUi.tab = id; showShadow(); return; }
+  if(act === "recruit") msg = sithRecruit(G);
+  else if(act === "hunt") msg = sithHunt(G);
+  else if(act === "coup") msg = sithCoup(G);
+  else if(act === "claim") msg = sithClaim(G);
+  else if(act === "rig") msg = sithRig(G, id);
+  else if(act === "dossier") msg = sithInvestigate(G, charOf(G, +id));
+  else if(act === "corrupt") msg = sithCorrupt(G, charOf(G, +id));
+  else if(act === "kill") msg = sithKill(G, charOf(G, +id));
+  save(); render();
+  if(msg) return showModal('<h2>L\'Ombre</h2><p>' + esc(msg) + '</p>', [{label:"Retour", primary:true, fn:() => { showShadow(); $("modalBox").scrollTop = y; }}]);
+  showShadow(); box.scrollTop = y;
 }
 
 // ---------- Syndicat (v0.5) ----------
@@ -3283,7 +3896,7 @@ function synBar(v){
 }
 function showSynd(){
   const P = G.player, F = G.factions[P];
-  const here = ui.sel && G.systems[ui.sel].owner === P ? G.systems[ui.sel] : capitalOf(G, P);
+  const here = ui.sel && G.systems[ui.sel].owner === P ? G.systems[ui.sel] : planetsOf(G, P).length ? capitalOf(G, P) : null;
   const willing = syndWilling(G, P);
   let h = '<h2>Le Syndicat</h2><p class="muted" style="font-size:.88rem">Son seul but est le profit. Il sert tout le monde : ce que tu lui paies finance aussi tes ennemis. Chaque contrat fait grimper son emprise sur tes mondes.</p>';
   if(!willing) h += '<p class="bad">Tant que la Guerre au crime est en vigueur, le Syndicat refuse de traiter avec toi.</p>';
@@ -3293,9 +3906,11 @@ function showSynd(){
     '<div class="row" style="margin-top:.3em"><button class="small" data-syn="repay"' + (canRepay(G, P) ? "" : " disabled") + '>Rembourser</button></div></div>';
   else h += '<div class="card">Emprunter ' + LOAN.amount + ' crédits, à rendre ' + LOAN.repay + ' d\'ici ' + LOAN.turns + ' tours. Emprise +10 sur ta capitale, +3 ailleurs. À l\'échéance, remboursement d\'office si tes caisses le permettent ; sinon, pirates, sabotages et assassinats.' +
     '<div class="row" style="margin-top:.3em"><button class="small" data-syn="loan"' + (canLoan(G, P) ? "" : " disabled") + '>Emprunter</button></div></div>';
-  h += '<h3>Mercenaires à ' + esc(SYS[here.id].name) + '</h3><p class="muted" style="font-size:.84rem">Sélectionne un de tes mondes sur la carte pour les y faire venir. Emprise +12 sur ce monde.</p>';
-  h += '<div class="row"><button class="small" data-syn="fleet" data-id="' + here.id + '"' + (canHire(G, P, "fleet", here.id) ? "" : " disabled") + '>Flotte : ' + esc(describeShips(MERC_FLEET)) + ' (' + SYND_COST.fleet + ' cr)</button>' +
-    '<button class="small" data-syn="troops" data-id="' + here.id + '"' + (canHire(G, P, "troops", here.id) ? "" : " disabled") + '>Compagnie : ' + esc(describeTroops(troops(MERC_TROOPS))) + ' (' + SYND_COST.troops + ' cr)</button></div>';
+  if(here){
+    h += '<h3>Mercenaires à ' + esc(SYS[here.id].name) + '</h3><p class="muted" style="font-size:.84rem">Sélectionne un de tes mondes sur la carte pour les y faire venir. Emprise +12 sur ce monde.</p>';
+    h += '<div class="row"><button class="small" data-syn="fleet" data-id="' + here.id + '"' + (canHire(G, P, "fleet", here.id) ? "" : " disabled") + '>Flotte : ' + esc(describeShips(MERC_FLEET)) + ' (' + SYND_COST.fleet + ' cr)</button>' +
+      '<button class="small" data-syn="troops" data-id="' + here.id + '"' + (canHire(G, P, "troops", here.id) ? "" : " disabled") + '>Compagnie : ' + esc(describeTroops(troops(MERC_TROOPS))) + ' (' + SYND_COST.troops + ' cr)</button></div>';
+  }
   h += '<h3>Renseignements</h3><div class="row"><button class="small" data-syn="intel"' + (canIntel(G, P) ? "" : " disabled") + '>Acheter des rapports sur tes rivaux, 5 tours (' + SYND_COST.intel + ' cr)</button>' +
     (F.intel >= G.turn ? '<span class="muted" style="font-size:.85rem">Actifs jusqu\'au tour ' + F.intel + ' : voir « Gouvernement ».</span>' : '') + '</div>';
   const blocked = planetsOf(G, P).filter(p => blockaded(G, p.id));
@@ -3359,13 +3974,15 @@ function promptGround(gs, done){
     return showModal('<h2>' + esc(name) + '</h2><p class="good">' + esc(r.msg) + '</p>', [{label:"Continuer", primary:true, fn:() => { render(); done(); }}]);
   }
   const pw = groundPower(G, gs), orb = orbitalSupport(G, f, s);
+  const extra = (gs.jedi ? '<p class="warn">Un Chevalier Jedi est venu défendre ce monde.</p>' : '') +
+    ((f.heroes || []).length ? '<p class="muted">Héros en première ligne : ' + esc(heroNames(f)) + '.</p>' : '');
   showModal('<h2>Invasion de ' + esc(name) + '</h2>' +
     '<p class="muted">' + (gs.attFid === P ? "Tes troupes débarquent." : "Ta garnison est attaquée.") + ' Tenir 2 points de contrôle sur 3 à la fin du 10e round fait tomber la planète.</p>' +
     '<div class="vs"><div><b style="color:' + fcolor(gs.attFid) + '">' + esc(fname(gs.attFid)) + '</b><div style="font-size:.88rem">' + esc(describeTroops(f.troops)) + '</div>' +
       '<div class="muted" style="font-size:.85rem">Force ' + Math.round(pw.att) + (orb ? ' · ' + orb + ' frappe(s) orbitale(s)/round' : ' · bouclier planétaire levé : pas d\'appui orbital') + '</div></div>' +
     '<div class="mid">contre</div>' +
-    '<div><b style="color:' + fcolor(gs.defFid) + '">' + esc(fname(gs.defFid)) + '</b><div style="font-size:.88rem">' + esc(describeTroops(s.garrison)) + '</div>' +
-      '<div class="muted" style="font-size:.85rem">Force ' + Math.round(pw.def) + (fortification(s) > 0 ? ' · retranchés (défenses ' + s.def + '/' + s.maxDef + ')' : '') + '</div></div></div>',
+    '<div><b style="color:' + fcolor(gs.defFid) + '">' + esc(fname(gs.defFid)) + '</b><div style="font-size:.88rem">' + esc(describeTroops(s.garrison)) + (gs.jedi ? ', 1 Chevalier Jedi' : '') + '</div>' +
+      '<div class="muted" style="font-size:.85rem">Force ' + Math.round(pw.def) + (fortification(s) > 0 ? ' · retranchés (défenses ' + s.def + '/' + s.maxDef + ')' : '') + '</div></div></div>' + extra,
     [
       {label:"Résolution automatique", fn:() => {
         const r = applyGround(G, gs, autoGround(G, gs, P));
@@ -3460,6 +4077,10 @@ function renderBattle(){
     else if(u.type === "inf") h += '<g fill="' + col + '" stroke="#070b14" stroke-width="1"><circle cx="-6" cy="-6" r="4"/><circle cx="6" cy="-6" r="4"/><circle cx="0" cy="5" r="4"/></g>';
     else if(u.type === "tank") h += '<g fill="' + col + '" stroke="#070b14" stroke-width="1.5"><rect x="-11" y="-8" width="20" height="16" rx="3"/><rect x="4" y="-2" width="12" height="4"/></g>';
     else if(u.type === "walk") h += '<g fill="' + col + '" stroke="#070b14" stroke-width="1.5"><rect x="-12" y="-7" width="18" height="12" rx="2"/><rect x="6" y="-5" width="9" height="7" rx="1"/><path d="M-9 5 v8 M-3 5 v8 M3 5 v8" stroke="' + col + '" stroke-width="3"/></g>';
+    else if(UNITS[u.type].hero){
+      const hc = u.type === "jedi" ? "#6fb7ff" : u.type === "sith" ? "#ff3b4e" : "#b3263a";
+      h += '<g stroke="#070b14" stroke-width="1.5"><circle r="' + (u.type === "acolyte" ? 7 : 9) + '" fill="' + col + '"/><rect x="3" y="-2" width="' + (u.type === "acolyte" ? 12 : 16) + '" height="4" fill="' + hc + '" stroke="none"/></g>';
+    }
     else if(u.type === "art") h += '<g fill="' + col + '" stroke="#070b14" stroke-width="1.5"><circle r="8"/><rect x="2" y="-2.5" width="16" height="5"/></g>';
     h += '</g>';
     const hp = u.hull / u.maxHull;
@@ -3602,6 +4223,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("btnMenu").addEventListener("click", showMenu);
   $("btnGov").addEventListener("click", () => { if(G && !G.over) showGov(); });
   $("btnSynd").addEventListener("click", () => { if(G && !G.over) showSynd(); });
+  $("btnShadow").addEventListener("click", () => { if(G && !G.over) showShadow(); });
   $("modal").addEventListener("click", onModal);
   $("board").addEventListener("click", onBoard);
   $("bPanel").addEventListener("click", onBPanel);

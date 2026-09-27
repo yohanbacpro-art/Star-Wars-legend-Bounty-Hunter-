@@ -11,7 +11,7 @@ const HTML = fs.readFileSync(path.join(__dirname, "..", "star-wars.html"), "utf8
 const ENGINE = [...HTML.matchAll(/<script>([\s\S]*?)<\/script>/g)][0][1];
 const ctx = {Math, JSON, Object, Array, String, Number, Set, Map, console};
 vm.createContext(ctx);
-vm.runInContext(ENGINE + "\n;globalThis.__E = {newGame, runAI, finishTurn, applyBattle, autoBattle, battleValid, createBattle, bRunAI, bResult, bDamage, bArc, bSideUnits, makeBattle, addFleet, fleetById, shipCount, planetsOf, income, FACTION_IDS, SYSTEMS, SYS, ADJ, FLEET_MP, BMAX_ROUNDS, BMAX_ROUNDS_GROUND, troops, troopCount, fleetLoad, fleetCap, makeInvasion, invasionValid, createGroundBattle, applyGround, bOrbital, bUnitAt, TROOP_TYPES, charOf, voteSupport, canEnact, enactDecree, hasDecree, resolveDilemma, dilemmaOptions, MAX_DECREES, DECREE_IDS, EVENTS, eventOptions, resolveEvent, takeLoan, repayLoan, hireMercs, assassinate, assassinTargets, purge, buyIntel, syndicateTurn, finishTurnOnly:finishTurn, LOAN};", ctx);
+vm.runInContext(ENGINE + "\n;globalThis.__E = {newGame, runAI, finishTurn, applyBattle, autoBattle, battleValid, createBattle, bRunAI, bResult, bDamage, bArc, bSideUnits, makeBattle, addFleet, fleetById, shipCount, planetsOf, income, FACTION_IDS, SYSTEMS, SYS, ADJ, FLEET_MP, BMAX_ROUNDS, BMAX_ROUNDS_GROUND, troops, troopCount, fleetLoad, fleetCap, makeInvasion, invasionValid, createGroundBattle, applyGround, bOrbital, bUnitAt, TROOP_TYPES, charOf, voteSupport, canEnact, enactDecree, hasDecree, resolveDilemma, dilemmaOptions, MAX_DECREES, DECREE_IDS, EVENTS, eventOptions, resolveEvent, takeLoan, repayLoan, hireMercs, assassinate, assassinTargets, purge, buyIntel, syndicateTurn, finishTurnOnly:finishTurn, LOAN, sithCoup, sithCoupReady, sithClaim, sithTurn, charDies, makeTruce, moveFleet, canInvade, hostileFleetsAt, probeChar, checkVictory, HEROES, genChar};", ctx);
 const E = ctx.__E;
 
 const GAMES = +process.argv[2] || 24;
@@ -63,12 +63,17 @@ function checkInvariants(st, where){
     if(!(F.weariness >= 0 && F.weariness <= 100 && F.syndicate >= 0 && F.syndicate <= 100)) fail(where + " : jauges hors bornes " + fid);
   });
   Object.values(st.chars).forEach(c => { if(!st.factions[c.fid].alive) fail(where + " : personnage d'une faction effondrée"); });
+  const S = st.factions.sith;
+  if(!(st.jedi.strength >= 0)) fail(where + " : force Jedi négative");
+  if(S.alive && !(S.acolytes >= 0 && S.acolytes <= 6 && S.exposure >= 0 && S.exposure <= 100 && S.dark >= 0)) fail(where + " : jauges Sith hors bornes");
+  if(S.alive && S.shadow && (E.planetsOf(st, "sith").length || st.fleets.some(f => f.owner === "sith"))) fail(where + " : un Sith caché ne devrait rien posséder");
+  st.fleets.forEach(f => (f.heroes || []).forEach(h => { if(!E.HEROES[h.kind]) fail(where + " : héros inconnu " + h.kind); }));
 }
 
 // ---------- Parties complètes ----------
 const results = [];
 for(let g = 0; g < GAMES; g++){
-  const player = E.FACTION_IDS[g % 4];
+  const player = E.FACTION_IDS[g % 5];
   const st = E.newGame(player, 1000 + g);
   checkInvariants(st, "partie " + g + " départ");
   let battles = 0, invasions = 0;
@@ -254,6 +259,80 @@ console.log("Batailles tactiques : " + tactical + " terminées, " + (rounds / Ma
   if(!E.purge(st, "lothal") || cap.synd !== 55 || cap.loyalty !== Math.max(0, loy - 15)) fail("purge incorrecte");
   checkInvariants(st, "services du Syndicat");
   console.log("Syndicat : prêt, dette impayée, mercenaires, assassinat et purge vérifiés");
+}
+
+// ---------- La Force : coup d'État, Empire Sith, découverte, succession, trêve, héros ----------
+{
+  // Coup d'État : deux Moffs corrompus livrent les Vestiges impériaux.
+  let st = E.newGame("sith", 6100), S = st.factions.sith;
+  S.phase = 3; S.dark = 300;
+  Object.values(st.chars).filter(c => c.fid === "emp" && c.role === "chief").slice(0, 2).forEach(c => { c.sith = true; });
+  if(!E.sithCoupReady(st)) fail("coup d'État attendu");
+  const empPlanets = E.planetsOf(st, "emp").length;
+  E.sithCoup(st);
+  if(st.factions.emp.alive || S.shadow || E.planetsOf(st, "sith").length !== empPlanets) fail("coup d'État incomplet");
+  if(!st.fleets.some(f => f.owner === "sith" && f.heroes.some(h => h.kind === "sith"))) fail("le Seigneur Sith devrait mener une flotte");
+  checkInvariants(st, "coup d'État");
+  for(let t = 0; t < 10 && !st.over; t++){ E.runAI(st, {includePlayer:true}); E.finishTurnOnly(st); }
+  checkInvariants(st, "après le coup d'État");
+
+  // Empire Sith : trois gouverneurs corrompus font sécession.
+  st = E.newGame("rep", 6200); S = st.factions.sith; S.phase = 3;
+  const worlds = ["corellia", "ryloth", "concord", "chandrila"];
+  worlds.forEach(id => { E.charOf(st, st.systems[id].governor).sith = true; });
+  if(!E.sithClaim(st) || worlds.some(id => st.systems[id].owner !== "sith") || S.shadow) fail("Empire Sith non proclamé");
+  checkInvariants(st, "Empire Sith");
+
+  // Découvert trop tôt : c'est la fin.
+  st = E.newGame("emp", 6300); S = st.factions.sith; S.exposure = 100; S.lastAct = st.turn;
+  E.sithTurn(st);
+  if(S.alive) fail("un Sith à 100 d'Exposition devrait être anéanti");
+  checkInvariants(st, "Sith découvert");
+
+  // Succession : un acolyte prend la place du maître, puis la lignée s'éteint.
+  st = E.newGame("emp", 6400); S = st.factions.sith; S.acolytes = 1;
+  E.charDies(st, E.charOf(st, S.leader), "tombe");
+  if(!S.alive || S.acolytes !== 0 || !E.charOf(st, S.leader)) fail("succession du Seigneur Sith ratée");
+  E.charDies(st, E.charOf(st, S.leader), "tombe");
+  if(S.alive) fail("sans disciple, la lignée Sith devrait s'éteindre");
+
+  // Trêve : ni bataille ni invasion entre partenaires.
+  st = E.newGame("rep", 6500);
+  E.makeTruce(st, "rep", "man");
+  const a = E.addFleet(st, "rep", "iridonia", {frig:2}, 0), b = E.addFleet(st, "man", "ordmantell", {frig:2}, 0);
+  a.troops = E.troops({inf:1});
+  if(E.moveFleet(st, b, "iridonia")) fail("une trêve devrait empêcher la bataille");
+  a.at = "concord"; a.landed = 0;
+  if(E.canInvade(st, a)) fail("une trêve devrait empêcher l'invasion");
+
+  // Invasion menée par des héros, face à un Chevalier Jedi.
+  st = E.newGame("sith", 6600);
+  const f = E.addFleet(st, "man", "iridonia", {dest:1, frig:1}, 0);
+  f.troops = E.troops({inf:3, tank:1});
+  f.heroes = [{kind:"acolyte", name:"Acolyte Test"}, {kind:"jedi", name:"Chevalier Test"}];
+  const gs = E.makeInvasion(st, f); gs.jedi = true;
+  const bt = E.createGroundBattle(st, gs);
+  if(!bt.units.some(u => u.type === "jedi" && u.side === 1) || !bt.units.some(u => u.type === "acolyte")) fail("héros absents de la bataille");
+  E.bRunAI(bt);
+  E.applyGround(st, gs, E.bResult(bt));
+  checkInvariants(st, "invasion avec héros");
+
+  // Enquête : un Moff corrompu finit démasqué.
+  st = E.newGame("emp", 6700);
+  const moff = Object.values(st.chars).find(c => c.fid === "emp" && c.role === "chief");
+  moff.sith = true; st.factions.emp.inf = 500;
+  let found = false;
+  for(let i = 0; i < 20 && !found; i++){ st.turn++; E.probeChar(st, "emp", E.charOf(st, moff.id) || moff); found = !E.charOf(st, moff.id); }
+  if(!found) fail("l'enquête ne démasque jamais l'agent");
+
+  // Victoire Sith : il faut aussi que l'Ordre Jedi ait disparu.
+  st = E.newGame("sith", 6800); S = st.factions.sith; S.shadow = false; S.capital = "kaldor";
+  ["emp", "rep", "man", "lig"].forEach(x => { st.factions[x].alive = false; });
+  Object.values(st.systems).forEach(p => { if(p.owner) p.owner = "sith"; });
+  if(E.checkVictory(st) === "sith") fail("le Sith ne gagne pas tant que les Jedi vivent");
+  st.jedi.strength = 0;
+  if(E.checkVictory(st) !== "sith") fail("victoire Sith attendue");
+  console.log("Force : coup d'État, Empire Sith, découverte, succession, trêve, héros, enquête et victoire vérifiés");
 }
 
 // ---------- Boucliers orientés : un tir dans le dos fait plus mal ----------
