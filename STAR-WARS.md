@@ -1,11 +1,11 @@
-# L'Effondrement — 75 ap. BY (prototype v0.3)
+# L'Effondrement — 75 ap. BY (prototype v0.4)
 
 Jeu de grande stratégie galactique au tour par tour, dans l'esprit de Total War.
 Tout tient dans `star-wars.html` : l'ouvrir dans un navigateur, sans dépendance ni build.
 Jouable sur ordinateur et sur téléphone. Ranch Dynasty (`index.html`) reste inchangé.
 
 Le game design complet vit dans le doc « Game design — Jeu de stratégie Star Wars (75 ap. BY) ».
-Ce prototype couvre les trois premières étapes de sa feuille de route.
+Ce prototype couvre les quatre premières étapes de sa feuille de route.
 
 ## v0.1 — la carte galactique
 
@@ -42,14 +42,31 @@ Ce prototype couvre les trois premières étapes de sa feuille de route.
 - Défenses planétaires : tant qu'elles tiennent, les défenseurs sont retranchés (jusqu'à −30 % de dégâts). Sous 50 %, le bouclier tombe et la flotte peut appuyer l'assaut par des frappes orbitales, qui touchent aussi ses propres troupes.
 - Mandalore a les meilleures troupes au sol (+30 %).
 
+## v0.4 — la politique
+
+Bouton « Gouvernement » en haut de l'écran.
+
+- Chaque faction a son régime et trois groupes internes, chacun avec une satisfaction et un chef :
+  - Vestiges impériaux, Conseil des Moffs (Militaristes, Technocrates, Loyalistes). Un Moff mécontent détourne 10 % des crédits ; quatre tours sous 20, il fait sécession avec un monde et la flotte qui s'y trouve.
+  - République restaurée, Sénat (Faucons, Mondes du Noyau, Humanistes). Les décrets importants passent au vote (50 sièges sur 100) ; l'influence achète les voix qui manquent. Après une défaite, un Sénat mécontent dépose une motion de défiance.
+  - Mandalore, Clans (guerriers, mercenaires, Anciens). L'autorité du Mand'alor monte avec les victoires ; sous 30, un chef de clan le défie en duel.
+  - Ligue de la Bordure, Assemblée (Bloc frontalier, Guildes marchandes, Mondes libres). Chaque bloc représente des mondes ; trois tours sous 20, il quitte la Ligue avec eux.
+- Chaque groupe a un rôle : l'armée veut des victoires, l'économie des revenus, l'ordre de la loyauté, le peuple la paix et des impôts modérés. Tous les 5 à 7 tours, le groupe le plus mécontent formule une exigence (prendre un monde, atteindre un revenu, tenir l'ordre, faire baisser la lassitude).
+- Les 7 décrets du doc : Conscription, Économie de guerre, Loi martiale, Propagande, Amnistie des contrebandiers, Guerre au crime, Doctrine de terreur (Vestiges impériaux seulement, irréversible). Chacun coûte de l'influence, dure plusieurs tours, a une contrepartie et fait réagir les groupes. Trois décrets au plus à la fois.
+- Personnages générés : dirigeant, chefs de groupe, un amiral par flotte, un gouverneur par monde. Traits (brillant, incompétent, corrompu, ambitieux, cruel, prudent, populaire, loyal), loyauté, ambition, expérience. On peut les récompenser ou les démettre.
+- Un amiral qui gagne prend de l'expérience et de l'ambition ; trop ambitieux et peu loyal, il devient un rival puis fait défection avec sa flotte. Un gouverneur corrompu et déloyal peut vendre son monde. Les personnages meurent au combat ou partent à la retraite, et leurs traits partent avec eux.
+- Dilemmes à trancher en début de tour : duel pour le titre de Mand'alor, motion de défiance, amiral rival.
+- Lassitude de guerre : elle monte à chaque tour de combat, même victorieux, et fait baisser la loyauté (jusqu'à −10).
+- Deux jauges préparent la suite : l'emprise du Syndicat (qui ronge les crédits, v0.5) et la réputation auprès des Jedi (v0.6).
+
 ## Architecture
 
 Deux blocs `<script>` dans `star-wars.html` :
 
 | Bloc | Contenu |
 |---|---|
-| Moteur | Données (`SYSTEMS`, `LINKS`, `FACTIONS`, `SHIPS`, `TROOPS`, `UNITS`), `newGame`, économie, loyauté, troupes et invasions (`embark`, `makeInvasion`, `autoGround`, `applyGround`), `runAI`, `finishTurn`, batailles (`autoBattle`, `createBattle`, `createGroundBattle`, `bAttack`, `bOrbital`, `bRunAI`, `bResult`, `applyBattle`). Aucune dépendance au DOM. |
-| Interface | Écran titre, carte SVG, panneau, bataille sur grille SVG, modales, sauvegarde `localStorage` (`sw75-save`). |
+| Moteur | Données (`SYSTEMS`, `LINKS`, `FACTIONS`, `SHIPS`, `TROOPS`, `UNITS`), `newGame`, économie, loyauté, troupes et invasions (`embark`, `makeInvasion`, `autoGround`, `applyGround`), politique (`REGIMES`, `DECREES`, `TRAITS`, `genChar`, `enactDecree`, `voteSupport`, `politicsTurn`, `resolveDilemma`), `runAI`, `finishTurn`, batailles (`autoBattle`, `createBattle`, `createGroundBattle`, `bAttack`, `bOrbital`, `bRunAI`, `bResult`, `applyBattle`). Aucune dépendance au DOM. |
+| Interface | Écran titre, carte SVG, panneau, écran Gouvernement, dilemmes, bataille sur grille SVG, modales, sauvegarde `localStorage` (`sw75-save`). |
 
 L'aléatoire est un mulberry32 dont l'état vit dans la partie (`st.rng`) : une graine rejoue la même partie.
 
@@ -59,4 +76,4 @@ L'aléatoire est un mulberry32 dont l'état vit dans la partie (`st.rng`) : une 
 node tests/sw-sim.js [parties] [tours max]
 ```
 
-Joue des parties complètes où l'IA contrôle toutes les factions et vérifie les invariants à chaque tour (soutes jamais surchargées, garnisons positives…). Joue aussi 60 batailles spatiales et 60 batailles terrestres IA contre IA, et contrôle les boucliers orientés et les frappes orbitales.
+Joue des parties complètes où l'IA contrôle toutes les factions et vérifie les invariants à chaque tour (soutes jamais surchargées, garnisons positives…). Vérifie aussi que chaque monde a son gouverneur et chaque flotte son amiral. Joue 60 batailles spatiales et 60 batailles terrestres IA contre IA, contrôle les boucliers orientés, les frappes orbitales, le vote du Sénat et chaque option de chaque dilemme.

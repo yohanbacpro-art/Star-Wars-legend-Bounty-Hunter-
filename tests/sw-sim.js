@@ -11,7 +11,7 @@ const HTML = fs.readFileSync(path.join(__dirname, "..", "star-wars.html"), "utf8
 const ENGINE = [...HTML.matchAll(/<script>([\s\S]*?)<\/script>/g)][0][1];
 const ctx = {Math, JSON, Object, Array, String, Number, Set, Map, console};
 vm.createContext(ctx);
-vm.runInContext(ENGINE + "\n;globalThis.__E = {newGame, runAI, finishTurn, applyBattle, autoBattle, battleValid, createBattle, bRunAI, bResult, bDamage, bArc, bSideUnits, makeBattle, addFleet, fleetById, shipCount, planetsOf, income, FACTION_IDS, SYSTEMS, SYS, ADJ, FLEET_MP, BMAX_ROUNDS, BMAX_ROUNDS_GROUND, troops, troopCount, fleetLoad, fleetCap, makeInvasion, invasionValid, createGroundBattle, applyGround, bOrbital, bUnitAt, TROOP_TYPES};", ctx);
+vm.runInContext(ENGINE + "\n;globalThis.__E = {newGame, runAI, finishTurn, applyBattle, autoBattle, battleValid, createBattle, bRunAI, bResult, bDamage, bArc, bSideUnits, makeBattle, addFleet, fleetById, shipCount, planetsOf, income, FACTION_IDS, SYSTEMS, SYS, ADJ, FLEET_MP, BMAX_ROUNDS, BMAX_ROUNDS_GROUND, troops, troopCount, fleetLoad, fleetCap, makeInvasion, invasionValid, createGroundBattle, applyGround, bOrbital, bUnitAt, TROOP_TYPES, charOf, voteSupport, canEnact, enactDecree, hasDecree, resolveDilemma, dilemmaOptions, MAX_DECREES, DECREE_IDS};", ctx);
 const E = ctx.__E;
 
 const GAMES = +process.argv[2] || 24;
@@ -45,7 +45,22 @@ function checkInvariants(st, where){
   });
   Object.values(st.systems).forEach(s => {
     if(E.TROOP_TYPES.some(t => !(s.garrison[t] >= 0))) fail(where + " : garnison négative " + s.id);
+    const g = E.charOf(st, s.governor);
+    if(s.owner && (!g || g.fid !== s.owner || g.at !== s.id)) fail(where + " : " + s.id + " sans gouverneur valide");
   });
+  st.fleets.forEach(f => {
+    const a = E.charOf(st, f.admiral);
+    if(!a || a.fid !== f.owner || a.at !== f.id) fail(where + " : flotte " + f.id + " sans amiral valide");
+  });
+  E.FACTION_IDS.forEach(fid => {
+    const F = st.factions[fid];
+    if(!F.alive) return;
+    F.groups.forEach(g => { if(!(g.sat >= 0 && g.sat <= 100)) fail(where + " : satisfaction hors bornes " + fid + "." + g.key); if(!E.charOf(st, g.chief)) fail(where + " : groupe sans chef " + fid + "." + g.key); });
+    if(!E.charOf(st, F.leader)) fail(where + " : " + fid + " sans dirigeant");
+    if(F.decrees.length > E.MAX_DECREES) fail(where + " : trop de décrets " + fid);
+    if(!(F.weariness >= 0 && F.weariness <= 100 && F.syndicate >= 0 && F.syndicate <= 100)) fail(where + " : jauges hors bornes " + fid);
+  });
+  Object.values(st.chars).forEach(c => { if(!st.factions[c.fid].alive) fail(where + " : personnage d'une faction effondrée"); });
 }
 
 // ---------- Parties complètes ----------
@@ -147,6 +162,40 @@ console.log("Batailles tactiques : " + tactical + " terminées, " + (rounds / Ma
   console.log("Frappe orbitale : " + (hp - Math.max(0, t.hull)) + " dégâts sur la cible");
 }
 
+// ---------- Politique : vote du Sénat, décrets, dilemmes ----------
+{
+  const st = E.newGame("rep", 4242);
+  const F = st.factions.rep;
+  F.inf = 200;
+  F.groups.forEach(g => { g.sat = 20; });                // Sénat furieux
+  const v = E.voteSupport(st, "rep", "conscription");
+  if(v.pass) fail("un Sénat furieux ne devrait pas voter la conscription");
+  if(E.canEnact(st, "rep", "conscription", false)) fail("décret soumis au vote promulgué sans majorité");
+  if(!E.enactDecree(st, "rep", "conscription", true)) fail("l'achat des voix devrait permettre la conscription");
+  if(!E.hasDecree(st, "rep", "conscription")) fail("conscription absente après promulgation");
+  if(E.enactDecree(st, "rep", "terror", false)) fail("la Doctrine de terreur est réservée aux Vestiges impériaux");
+  // Chaque option de chaque dilemme se résout sans erreur.
+  const kinds = [
+    {kind:"duel", fid:"man", group:"war"}, {kind:"defiance", fid:"rep"},
+    {kind:"rival", fid:"emp", char:st.fleets.find(f => f.owner === "emp").admiral},
+  ];
+  let n = 0;
+  kinds.forEach(base => {
+    const probe = E.newGame("emp", 99);
+    probe.factions[base.fid].inf = 100;
+    const d0 = Object.assign({title:"", text:""}, base);
+    if(d0.kind === "rival") d0.char = probe.fleets.find(f => f.owner === "emp").admiral;
+    E.dilemmaOptions(probe, d0).forEach(o => {
+      const game = E.newGame("emp", 99);
+      game.factions[base.fid].inf = 100;
+      const d = Object.assign({}, d0);
+      try{ E.resolveDilemma(game, d, o.key); n++; checkInvariants(game, "dilemme " + d.kind + "/" + o.key); }
+      catch(e){ fail("dilemme " + d.kind + "/" + o.key + " : " + e.message); }
+    });
+  });
+  console.log("Politique : vote " + v.yes + "/100 sans achat, " + n + " options de dilemme résolues");
+}
+
 // ---------- Boucliers orientés : un tir dans le dos fait plus mal ----------
 {
   const st = E.newGame("emp", 42);
@@ -154,6 +203,7 @@ console.log("Batailles tactiques : " + tactical + " terminées, " + (rounds / Ma
   const d = E.addFleet(st, "man", "fondor", {frig:1}, 0);
   const b = E.createBattle(st, E.makeBattle(st, a, d));
   const [att] = E.bSideUnits(b, 0), [tgt] = E.bSideUnits(b, 1);
+  att.dmgMul = 1; b.terrain = {};                        // sans amiral ni terrain
   tgt.c = 5; tgt.r = 4; tgt.facing = 3;     // tourné vers l'ouest
   const front = E.bDamage(b, att, tgt, 3, 4, "hull", true); // tir depuis l'ouest
   const rear = E.bDamage(b, att, tgt, 7, 4, "hull", true);  // tir depuis l'est
