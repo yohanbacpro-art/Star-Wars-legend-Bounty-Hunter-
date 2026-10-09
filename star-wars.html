@@ -145,7 +145,7 @@
   <div class="factions" id="factionCards"></div>
   <div class="row">
     <button id="btnContinue" class="primary hidden">Continuer la partie</button>
-    <span class="muted" style="font-size:.85rem">Prototype v0.7 — carte, batailles, invasions, politique, Syndicat, événements, la Force et les grandes crises.</span>
+    <span class="muted" style="font-size:.85rem">Prototype v0.8 — carte, batailles, invasions, politique, Syndicat, événements, la Force, les grandes crises, bâtiments et spécialisation.</span>
   </div>
 </div>
 
@@ -345,7 +345,7 @@ function costOf(fid, type, st){
 // ---------- Nouvelle partie ----------
 function newGame(player, seed){
   seed = (seed == null ? Math.floor(Math.random() * 2 ** 32) : seed) >>> 0;
-  const st = {version:7, turn:1, rng:seed, seed, player, systems:{}, fleets:[], nextFleet:1,
+  const st = {version:8, turn:1, rng:seed, seed, player, systems:{}, fleets:[], nextFleet:1,
               fleetCount:{}, factions:{}, log:[], report:[], pending:[], over:null,
               chars:{}, nextChar:1, dilemmas:[], events:[], delayed:[],
               synd:{cash:100, paid:{emp:0, rep:0, man:0, lig:0, sith:0, war:0}},
@@ -386,11 +386,14 @@ function newGame(player, seed){
       // Emprise du Syndicat : forte en Bordure et sur les carrefours commerciaux.
       synd:clamp(({core:10, col:10, mid:12, outer:14, unk:6})[region] + rint(st, 0, 10) + (hubs.has(id) ? 10 : 0), 0, 100),
       cartel:false, bought:false, smuggle:0, malus:null, taxLock:0,
+      // v0.8 : emplacements, spécialisation, bâtiments et file de construction
+      slots:SLOTS[region] + (cap ? 1 : 0), spec:null, build:yards.has(id) ? {yard:1} : {}, bqueue:[], baseDef:maxDef, unique:null,
     };
     const g = st.systems[id];
     g.garrison = owner ? troops(cap ? START_GARRISON.capital : START_GARRISON.other) : militia(g);
     if(owner === "man") g.garrison.inf++;
   });
+  placeUniques(st, capitals);
   FACTION_IDS.forEach(f => START_FLEETS[f].forEach(([at, ships, tr]) => {
     const fl = addFleet(st, f, at, ships, FACTIONS[f].vet);
     fl.troops = troops(tr);
@@ -481,15 +484,23 @@ function recruitCost(st, fid, type){
   const m = cons ? 0.75 : 1;
   return {cr:Math.round(T.cr * m), mat:Math.round(T.mat * m), turns:Math.max(1, T.turns + FACTIONS[fid].turnsAdd - (cons ? 1 : 0))};
 }
+// Coût d'une troupe dans une caserne précise.
+function recruitCostAt(st, sysId, type){
+  const s = st.systems[sysId], c = recruitCost(st, s.owner, type), B = bl(s, "barracks");
+  const m = B >= 1 ? 0.8 : 1;
+  return {cr:Math.round(c.cr * m), mat:Math.round(c.mat * m), turns:Math.max(1, c.turns - (B >= 3 ? 1 : 0))};
+}
+function drillSlots(s){ return MAX_DRILL + (bl(s, "barracks") >= 2 ? 1 : 0); }
+function canRecruitHeavy(s){ return s.yard || bl(s, "barracks") >= 2; }
 function canRecruit(st, sysId, type){
   const s = st.systems[sysId], fid = s.owner;
-  if(!fid || s.drill.length >= MAX_DRILL || s.loyalty < 35 || (TROOPS[type].yard && !s.yard)) return false;
-  const c = recruitCost(st, fid, type), F = st.factions[fid];
+  if(!fid || s.drill.length >= drillSlots(s) || s.loyalty < 35 || (TROOPS[type].yard && !canRecruitHeavy(s))) return false;
+  const c = recruitCostAt(st, sysId, type), F = st.factions[fid];
   return F.cr >= c.cr && F.mat >= c.mat;
 }
 function queueRecruit(st, sysId, type){
   if(!canRecruit(st, sysId, type)) return false;
-  const s = st.systems[sysId], c = recruitCost(st, s.owner, type), F = st.factions[s.owner];
+  const s = st.systems[sysId], c = recruitCostAt(st, sysId, type), F = st.factions[s.owner];
   F.cr -= c.cr; F.mat -= c.mat;
   s.drill.push({type, left:c.turns, total:c.turns});
   return true;
@@ -556,7 +567,11 @@ function planetYield(st, s){
   if(s.loyalty < 35) m *= 0.5;
   if(tradeBlocked(st, s.id)) m *= 0.5;
   if(s.malus && s.malus.until >= st.turn) m *= s.malus.mul;
-  return {cr:s.prod.cr * TAX[s.tax].mul * m * syndCut(s), mat:s.prod.mat * m, inf:s.prod.inf * (s.loyalty < 35 ? 0.5 : 1)};
+  const crMul = (1 + 0.2 * bl(s, "trade")) * (s.spec === "fortress" ? 0.8 : 1);
+  const matMul = (1 + 0.3 * bl(s, "foundry")) * (s.spec === "factory" ? 1.5 : 1);
+  return {cr:(s.prod.cr * TAX[s.tax].mul * crMul + (s.unique === "spice" ? 40 : 0)) * m * syndCut(s),
+          mat:s.prod.mat * matMul * m,
+          inf:(s.prod.inf + bl(s, "palace")) * (s.loyalty < 35 ? 0.5 : 1)};
 }
 // Une route rapporte quand ses deux bouts sont tenus par la même faction et qu'aucun n'est bloqué.
 function tradeRoutes(st, fid){
@@ -574,7 +589,8 @@ function income(st, fid){
   cr *= cm;
   if(hasTrait(charOf(st, st.factions[fid].leader), "brilliant")) inf += 2;
   const trade = tradeRoutes(st, fid).reduce((s, [a, b]) => s + routeValue(st, a, b), 0) * cm;
-  const tUp = t => TROOP_TYPES.reduce((u, k) => u + t[k] * TROOPS[k].upkeep, 0);
+  const relief = 1 - granaryRelief(st, fid);
+  const tUp = t => TROOP_TYPES.reduce((u, k) => u + t[k] * TROOPS[k].upkeep, 0) * relief;
   // Une garnison vit en partie sur son monde : elle coûte moitié moins qu'une troupe embarquée.
   const upkeep = Math.round(st.fleets.filter(f => f.owner === fid).reduce((s, f) => s + SHIP_TYPES.reduce((u, t) => u + f.ships[t] * SHIPS[t].upkeep, 0) + tUp(f.troops), 0)
     + planetsOf(st, fid).reduce((s, p) => s + tUp(p.garrison) / 2, 0));
@@ -584,15 +600,23 @@ function income(st, fid){
 function planetsOf(st, fid){ return Object.values(st.systems).filter(s => s.owner === fid); }
 
 // ---------- Gestion : ordres du joueur (et de l'IA) ----------
+// Coût d'un vaisseau dans un chantier précis : niveau du chantier, monde-usine, chantiers légendaires.
+function shipCostAt(st, sysId, type){
+  const s = st.systems[sysId], c = costOf(s.owner, type, st), L = yardLevel(s);
+  let m = L >= 3 ? 0.85 : L === 2 ? 0.9 : 1, dt = L >= 3 ? 2 : L === 2 ? 1 : 0;
+  if(s.unique === "legendyard") m *= 0.7;
+  if(s.spec === "factory") dt++;
+  return {cr:Math.round(c.cr * m), mat:Math.round(c.mat * m), turns:Math.max(1, c.turns - dt)};
+}
 function canBuild(st, sysId, type){
   const s = st.systems[sysId]; const fid = s.owner;
   if(!fid || !s.yard || s.queue.length >= MAX_QUEUE) return false;
-  const c = costOf(fid, type, st), F = st.factions[fid];
+  const c = shipCostAt(st, sysId, type), F = st.factions[fid];
   return F.cr >= c.cr && F.mat >= c.mat;
 }
 function queueBuild(st, sysId, type){
   if(!canBuild(st, sysId, type)) return false;
-  const s = st.systems[sysId], c = costOf(s.owner, type, st), F = st.factions[s.owner];
+  const s = st.systems[sysId], c = shipCostAt(st, sysId, type), F = st.factions[s.owner];
   F.cr -= c.cr; F.mat -= c.mat;
   s.queue.push({type, left:c.turns, total:c.turns});
   return true;
@@ -626,6 +650,7 @@ function loyaltyTarget(st, s){
   if(fs.cr < 0) t -= 12;
   t -= fs.shock;
   t += politicsLoyalty(st, s);
+  t += buildingLoyalty(st, s);
   return clamp(Math.round(t), 0, 100);
 }
 
@@ -730,7 +755,10 @@ function genChar(st, fid, role, extra){
     const t = TRAIT_KEYS[rint(st, 0, TRAIT_KEYS.length - 1)];
     if(!traits.includes(t) && !traits.includes(OPPOSED[t])) traits.push(t);
   }
-  const c = {id:st.nextChar++, fid, name, role, traits, xp:0,
+  // Académie militaire : de meilleurs officiers.
+  const academy = role === "admiral" && st.systems && holds(st, fid, "academy");
+  if(academy && traits.includes("inept")) traits.splice(traits.indexOf("inept"), 1, "cautious");
+  const c = {id:st.nextChar++, fid, name, role, traits, xp:academy ? 1 : 0,
     loyalty: traits.includes("loyal") ? 90 : rint(st, 45, 75),
     ambition: clamp(rint(st, 15, 50) + (traits.includes("ambitious") ? 35 : 0), 0, 100),
     group:extra.group || null, at:extra.at != null ? extra.at : null, warned:0};
@@ -826,7 +854,7 @@ function politicsOnCapture(st, s, fid, old){
 // Un monde se libère (révolte, sécession) : il redevient indépendant avec une milice.
 function planetSecedes(st, s){
   const old = s.owner;
-  s.owner = null; s.queue = []; s.drill = []; s.garrison = militia(s); s.bought = false; s.taxLock = 0;
+  s.owner = null; s.queue = []; s.drill = []; s.bqueue = []; s.garrison = militia(s); s.bought = false; s.taxLock = 0;
   s.def = Math.round(s.maxDef * 0.6); s.loyalty = 50; s.tax = "normal"; s.conquered = false; s.sabotage = false;
   if(old && st.factions[old].capital === s.id) st.factions[old].shock = Math.min(20, st.factions[old].shock + 12);
   politicsOnCapture(st, s, null, old);
@@ -1432,6 +1460,8 @@ function syndicateTurn(st){
     if(hasDecree(st, fid, "amnesty")) d += 3;
     if(hasDecree(st, fid, "crime")) d -= 6;
     if(s.hub && rnd(st) < 0.5) d += 1;
+    if(s.unique === "spice") d += 3;
+    if(bl(s, "trade") >= 3) d += 1;
     if(s.synd < 30 && s.loyalty >= 50) d -= 1;
     s.synd = clamp(s.synd + d, 0, 100);
     if(s.synd >= 80 && !s.bought){
@@ -2069,7 +2099,7 @@ function sithClaim(st){
 // ---------- Chasse aux agents Sith ----------
 // Toute faction peut faire enquêter sur un de ses personnages ; la bienveillance des Jedi aide.
 const PROBE_COST = 10;
-function probeChance(st, fid){ return clamp(0.4 + st.factions[fid].jediRep / 200, 0.4, 0.9); }
+function probeChance(st, fid){ return clamp(0.4 + st.factions[fid].jediRep / 200 + (holds(st, fid, "intel") ? 0.2 : 0), 0.4, 0.95); }
 function canProbe(st, fid, c){ return !!c && c.fid === fid && fid !== "sith" && st.factions[fid].inf >= PROBE_COST && c.probed !== st.turn; }
 function unmask(st, c, how){
   const S = st.factions.sith, fid = c.fid;
@@ -2489,6 +2519,204 @@ function aiCrisis(st, fid){
   if(st.plague) planetsOf(st, fid).forEach(s => { if(canQuarantine(st, fid, s.id) && st.factions[fid].cr > 60) quarantine(st, fid, s.id); });
 }
 
+// =====================================================================
+// v0.8 — Bâtiments, spécialisation des planètes, bâtiments uniques
+// =====================================================================
+// Chaque monde a un nombre d'emplacements : on ne peut pas tout faire partout.
+const SLOTS = {core:4, col:3, mid:3, outer:2, unk:2};
+const SPECS = {
+  fortress:{name:"Monde-forteresse", short:"F", color:"#9fb3c8", desc:"Défenses planétaires +50 %, sièges ennemis −30 %, crédits −20 %."},
+  factory: {name:"Monde-usine",      short:"U", color:"#e39a3b", desc:"Matériaux +50 %, vaisseaux construits un tour plus vite, loyauté −3."},
+  granary: {name:"Monde-grenier",    short:"G", color:"#62c27f", desc:"Loyauté +5 ici et +2 sur les mondes voisins ; entretien des troupes −10 % par grenier (jusqu'à −50 %)."},
+};
+const SPEC_COST = {cr:50, inf:10};
+// Chaînes à trois niveaux. `spec` : réservé à une spécialisation ; `l3spec` : le niveau 3 l'exige.
+const BUILDINGS = {
+  yard:    {name:"Chantier orbital", l3spec:"factory",
+            cost:[{cr:150, mat:80, t:4}, {cr:180, mat:100, t:5}, {cr:260, mat:150, t:6}],
+            lv:["Construire des vaisseaux", "Vaisseaux 1 tour plus vite, 10 % moins chers", "Vaisseaux 2 tours plus vite, 15 % moins chers (monde-usine)"]},
+  barracks:{name:"Casernes",
+            cost:[{cr:60, mat:30, t:2}, {cr:100, mat:50, t:3}, {cr:150, mat:80, t:4}],
+            lv:["Troupes 20 % moins chères", "Une place de caserne en plus ; blindés et marcheurs sans chantier", "Troupes 1 tour plus vite"]},
+  trade:   {name:"Comptoirs commerciaux",
+            cost:[{cr:80, mat:20, t:2}, {cr:130, mat:40, t:3}, {cr:200, mat:60, t:4}],
+            lv:["Crédits du monde +20 %", "Crédits du monde +40 %", "Crédits du monde +60 %, mais le Syndicat s'y intéresse"]},
+  defense: {name:"Défenses planétaires", l3spec:"fortress",
+            cost:[{cr:70, mat:50, t:2}, {cr:120, mat:80, t:3}, {cr:180, mat:120, t:4}],
+            lv:["Défenses +25 %", "Défenses +50 %", "Défenses +100 % (monde-forteresse)"]},
+  palace:  {name:"Palais du gouverneur",
+            cost:[{cr:90, mat:30, t:3}, {cr:140, mat:50, t:4}, {cr:220, mat:80, t:5}],
+            lv:["Loyauté +5, influence +1", "Loyauté +10, influence +2", "Loyauté +15, influence +3"]},
+  foundry: {name:"Fonderies", spec:"factory",
+            cost:[{cr:90, mat:40, t:3}, {cr:140, mat:70, t:4}, {cr:210, mat:100, t:5}],
+            lv:["Matériaux +30 %", "Matériaux +60 %", "Matériaux +90 %"]},
+  farms:   {name:"Fermes hydroponiques", spec:"granary",
+            cost:[{cr:70, mat:30, t:2}, {cr:110, mat:50, t:3}, {cr:170, mat:80, t:4}],
+            lv:["Loyauté +4 ici, +1 chez les voisins", "Loyauté +8 ici, +2 chez les voisins", "Loyauté +12 ici, +3 chez les voisins"]},
+  bunker:  {name:"Bunkers souterrains", spec:"fortress",
+            cost:[{cr:80, mat:60, t:3}, {cr:130, mat:90, t:4}, {cr:190, mat:130, t:5}],
+            lv:["Défenseurs au sol −10 % de dégâts", "Défenseurs au sol −20 % de dégâts", "Défenseurs au sol −30 % de dégâts"]},
+};
+const BUILDING_IDS = Object.keys(BUILDINGS);
+// Bâtiments uniques : placés au hasard en début de partie, pris avec le monde qui les abrite.
+const UNIQUES = {
+  legendyard:{name:"Chantiers orbitaux légendaires", desc:"Chantier de niveau 3 d'office ; vaisseaux construits ici 30 % moins cher et 2 tours plus vite."},
+  forges:    {name:"Forges mandaloriennes", desc:"Troupes d'élite équipées en beskar : +15 % au sol pour toute la faction."},
+  spice:     {name:"Mines d'épice", desc:"+40 crédits par tour, mais l'emprise du Syndicat y grimpe de 3 points par tour."},
+  academy:   {name:"Académie militaire", desc:"Les nouveaux amiraux de la faction arrivent avec 1 d'expérience et ne sont jamais incompétents."},
+  intel:     {name:"Centre de renseignement", desc:"Rapports d'espions permanents sur les rivaux ; enquêtes contre les agents Sith +20 %."},
+};
+const UNIQUE_IDS = Object.keys(UNIQUES);
+
+function bl(s, type){ return (s.build && s.build[type]) || 0; }
+function yardLevel(s){ return s.unique === "legendyard" ? 3 : bl(s, "yard"); }
+function holds(st, fid, u){ return !!fid && planetsOf(st, fid).some(s => s.unique === u); }
+function slotsUsed(s){ return BUILDING_IDS.filter(t => bl(s, t) > 0 || (s.bqueue || []).some(q => q.type === t)).length; }
+function defenseMul(s){ return (1 + [0, 0.25, 0.5, 1][bl(s, "defense")]) * (s.spec === "fortress" ? 1.5 : 1); }
+// Recalcule ce qui découle des bâtiments : chantier, défense maximale.
+function refreshPlanet(s){
+  s.yard = yardLevel(s) > 0;
+  s.maxDef = Math.round(s.baseDef * defenseMul(s));
+  s.def = Math.min(s.def, s.maxDef);
+}
+function groundBonus(st, fid){ return fid && holds(st, fid, "forges") ? 0.15 : 0; }
+function granaryRelief(st, fid){ return Math.min(0.5, 0.1 * planetsOf(st, fid).filter(s => s.spec === "granary").length); }
+// Loyauté apportée par les bâtiments et la spécialisation (y compris celle des voisins).
+function buildingLoyalty(st, s){
+  let t = 5 * bl(s, "palace") + 4 * bl(s, "farms") + (s.spec === "granary" ? 5 : 0) - (s.spec === "factory" ? 3 : 0);
+  let near = 0;
+  nb(st, s.id).forEach(n => { const o = st.systems[n]; if(o.owner === s.owner && o.spec === "granary") near += 2 + bl(o, "farms"); });
+  return t + Math.min(6, near);
+}
+
+function placeUniques(st, capitals){
+  const pool = shuffle(st, SYSTEMS.map(x => x[0]).filter(id => !capitals.has(id)));
+  UNIQUE_IDS.forEach((u, i) => {
+    const s = st.systems[pool[i]];
+    s.unique = u;
+    refreshPlanet(s);
+  });
+}
+
+// ---------- Spécialisation ----------
+function specCost(s){ return s.spec ? {cr:SPEC_COST.cr * 2, inf:SPEC_COST.inf * 2} : SPEC_COST; }
+function canSpecialize(st, sysId, spec){
+  const s = st.systems[sysId];
+  if(!s.owner || !SPECS[spec] || s.spec === spec) return false;
+  const c = specCost(s), F = st.factions[s.owner];
+  return F.cr >= c.cr && F.inf >= c.inf;
+}
+function specialize(st, sysId, spec){
+  if(!canSpecialize(st, sysId, spec)) return false;
+  const s = st.systems[sysId], c = specCost(s), F = st.factions[s.owner];
+  F.cr -= c.cr; F.inf -= c.inf;
+  // Changer de vocation rase ce qui ne servait qu'à l'ancienne.
+  BUILDING_IDS.forEach(t => {
+    const B = BUILDINGS[t];
+    if(B.spec && B.spec !== spec) delete s.build[t];
+    if(B.l3spec && B.l3spec !== spec && bl(s, t) > 2) s.build[t] = 2;
+  });
+  s.bqueue = s.bqueue.filter(q => { const B = BUILDINGS[q.type]; return !(B.spec && B.spec !== spec) && !(B.l3spec && B.l3spec !== spec && q.level > 2); });
+  s.spec = spec;
+  refreshPlanet(s);
+  return true;
+}
+
+// ---------- Construction ----------
+function buildingCost(type, level){ return BUILDINGS[type].cost[level - 1]; }
+// Pourquoi on ne peut pas construire (null = possible, hors coût).
+function buildBlock(st, sysId, type){
+  const s = st.systems[sysId], B = BUILDINGS[type], next = bl(s, type) + 1;
+  if(!s.owner) return "monde hors de ton contrôle";
+  if(s.bqueue.length) return "un chantier est déjà en cours ici";
+  if(next > 3) return "niveau maximal";
+  if(type === "yard" && s.unique === "legendyard") return "chantiers légendaires déjà au niveau 3";
+  if(B.spec && s.spec !== B.spec) return "réservé au " + SPECS[B.spec].name.toLowerCase();
+  if(next === 3 && B.l3spec && s.spec !== B.l3spec) return "niveau 3 réservé au " + SPECS[B.l3spec].name.toLowerCase();
+  if(next === 1 && slotsUsed(s) >= s.slots) return "plus d'emplacement libre";
+  return null;
+}
+function canQueueBuilding(st, sysId, type){
+  const s = st.systems[sysId];
+  if(buildBlock(st, sysId, type)) return false;
+  const c = buildingCost(type, bl(s, type) + 1), F = st.factions[s.owner];
+  return F.cr >= c.cr && F.mat >= c.mat;
+}
+function queueBuilding(st, sysId, type){
+  if(!canQueueBuilding(st, sysId, type)) return false;
+  const s = st.systems[sysId], level = bl(s, type) + 1, c = buildingCost(type, level), F = st.factions[s.owner];
+  F.cr -= c.cr; F.mat -= c.mat;
+  s.bqueue.push({type, level, left:c.t, total:c.t});
+  return true;
+}
+function buildingsTurn(st){
+  Object.values(st.systems).forEach(s => {
+    if(!s.owner || !s.bqueue.length) return;
+    const q = s.bqueue[0];
+    if(--q.left > 0) return;
+    s.bqueue.shift();
+    s.build[q.type] = q.level;
+    refreshPlanet(s);
+    if(s.owner === st.player) logEv(st, BUILDINGS[q.type].name + " niveau " + q.level + " achevé à " + SYS[s.id].name + ".", "good", [st.player]);
+  });
+  FACTION_IDS.forEach(fid => {
+    const F = st.factions[fid];
+    if(!F.alive) return;
+    if(holds(st, fid, "intel")) F.intel = Math.max(F.intel || 0, st.turn + 1);
+  });
+}
+// Une conquête abîme les installations : chaque bâtiment a 30 % de chances de perdre un niveau.
+function warDamage(st, s){
+  s.bqueue = [];
+  BUILDING_IDS.forEach(t => { if(bl(s, t) && rnd(st) < 0.3){ s.build[t]--; if(!s.build[t]) delete s.build[t]; } });
+  refreshPlanet(s);
+}
+
+// ---------- IA ----------
+function frontier(st, s){ return nb(st, s.id).some(n => st.systems[n].owner !== s.owner); }
+// Greniers par défaut (la loyauté tient les conquêtes) ; quelques forteresses sur
+// les fronts menacés et quelques usines autour des chantiers.
+function aiSpecFor(st, s){
+  const mine = planetsOf(st, s.owner), n = k => mine.filter(x => x.spec === k).length;
+  const cap = s.id === st.factions[s.owner].capital;
+  const threat = nb(st, s.id).some(m => { const o = st.systems[m].owner; return o && o !== s.owner && hostile(st, s.owner, o); });
+  if(threat && !cap && s.loyalty >= 55 && n("fortress") < Math.floor(mine.length / 6)) return "fortress";
+  if((s.yard || s.prod.mat >= 12) && s.loyalty >= 60 && n("factory") < Math.max(1, Math.floor(mine.length / 5))) return "factory";
+  return "granary";
+}
+function aiBuildValue(st, s, t){
+  const cap = s.id === st.factions[s.owner].capital, front = frontier(st, s);
+  const v = {
+    trade: s.prod.cr / 5,
+    palace: Math.max(0, 60 - s.loyalty) / 10 + (cap ? 1.5 : 0),
+    defense: front ? 3 : 0.5,
+    barracks: cap || front ? 2 : 0.4,
+    yard: s.spec === "factory" ? (s.yard ? 2 : 3) : 0.3,
+    foundry: s.prod.mat / 4,
+    farms: 2,
+    bunker: front ? 2.5 : 0.5,
+  }[t];
+  return v - bl(s, t) * 0.6;
+}
+function aiDevelop(st, fid){
+  const F = st.factions[fid];
+  if(st.turn < 3) return;
+  // Une vocation par tour au plus, en gardant de quoi armer.
+  const raw = planetsOf(st, fid).filter(s => !s.spec);
+  if(raw.length && F.cr >= SPEC_COST.cr + 80 && F.inf >= SPEC_COST.inf + 10){
+    const s = raw.sort((a, b) => (b.prod.cr + b.prod.mat) - (a.prod.cr + a.prod.mat))[0];
+    specialize(st, s.id, aiSpecFor(st, s));
+  }
+  if(F.cr < 140) return;
+  let best = null;
+  planetsOf(st, fid).forEach(s => BUILDING_IDS.forEach(t => {
+    if(!canQueueBuilding(st, s.id, t) || buildingCost(t, bl(s, t) + 1).cr > F.cr - 60) return;
+    const v = aiBuildValue(st, s, t) + rnd(st) * 0.5;
+    if(!best || v > best.v) best = {v, s, t};
+  }));
+  if(best && best.v > 0.8) queueBuilding(st, best.s.id, best.t);
+}
+
 // ---------- Batailles : côté carte ----------
 // Les flottes adjacentes peuvent rejoindre une bataille : on prend la plus forte de chaque camp.
 function pickReinforcement(st, fid, sysId, exclude){
@@ -2635,8 +2863,8 @@ function invasionValid(st, gs){
 function groundPower(st, gs){
   const f = fleetById(st, gs.fleet), s = st.systems[gs.sys];
   const heroes = (f.heroes || []).reduce((a, h) => a + HEROES[h.kind].power, 0) * FACTIONS[f.owner].ground;
-  return {att:troopPower(f.troops, f.owner) + orbitalSupport(st, f, s) * 2 + heroes,
-          def:troopPower(s.garrison, s.owner) * (1 + 0.6 * fortification(s)) + (gs.jedi ? HEROES.jedi.power : 0)};
+  return {att:troopPower(f.troops, f.owner) * (1 + groundBonus(st, f.owner)) + orbitalSupport(st, f, s) * 2 + heroes,
+          def:troopPower(s.garrison, s.owner) * (1 + groundBonus(st, s.owner)) * (1 + 0.6 * fortification(s) + 0.2 * bl(s, "bunker")) + (gs.jedi ? HEROES.jedi.power : 0)};
 }
 function autoGround(st, gs, penalFid){
   const f = fleetById(st, gs.fleet), s = st.systems[gs.sys];
@@ -2724,6 +2952,8 @@ function capture(st, s, fid){
   s.queue = []; s.drill = []; s.tax = "normal"; s.besieged = false; s.sabotage = false;
   if(s.cartel){ s.cartel = false; s.synd = 40; logEv(st, FACTIONS[fid].name + " arrache " + SYS[s.id].name + " au Syndicat.", fid === st.player ? "good" : "info", [fid]); }
   s.bought = false; s.smuggle = 0; s.taxLock = 0;
+  warDamage(st, s);
+  if(s.unique) logEv(st, FACTIONS[fid].name + " met la main sur " + UNIQUES[s.unique].name + " (" + SYS[s.id].name + ").", fid === st.player ? "good" : old === st.player ? "bad" : "info", []);
   politicsOnCapture(st, s, fid, old);
   const who = old ? [fid, old] : [fid];
   if(old && st.factions[old].capital === s.id){
@@ -2747,7 +2977,7 @@ function finishTurn(st){
       hostile.forEach(f => { byOwner[f.owner] = (byOwner[f.owner] || 0) + siegePower(f); });
       const total = Object.values(byOwner).reduce((a, b) => a + b, 0);
       const top = Object.keys(byOwner).sort((a, b) => byOwner[b] - byOwner[a])[0];
-      s.def = Math.max(0, s.def - Math.round(total * (hasTrait(charOf(st, s.governor), "cautious") ? 0.8 : 1)));
+      s.def = Math.max(0, s.def - Math.round(total * (hasTrait(charOf(st, s.governor), "cautious") ? 0.8 : 1) * (s.spec === "fortress" ? 0.7 : 1)));
       s.besieged = true;
       if(s.owner === P || top === P)
         logEv(st, "Siège de " + SYS[s.id].name + " : défenses à " + s.def + "/" + s.maxDef + (s.def ? "" : ", les fortifications sont tombées") + ".", s.owner === P ? "bad" : "info", [top, s.owner]);
@@ -2779,6 +3009,8 @@ function finishTurn(st){
     } else addFleet(st, s.owner, s.id, ships, 0);
     if(s.owner === P) logEv(st, SHIPS[q.type].name + " sorti des chantiers de " + SYS[s.id].name + ".", "good", [P]);
   });
+  // 3a. Bâtiments
+  buildingsTurn(st);
   // 3b. Recrutement des troupes et milices indépendantes qui se reforment
   Object.values(st.systems).forEach(s => {
     if(!s.owner){
@@ -2876,6 +3108,8 @@ function sysValue(st, s){
   let v = s.prod.cr + s.prod.mat + 5 * s.prod.inf + (s.yard ? 10 : 0) + (s.hub ? 6 : 0);
   if(FACTION_IDS.some(f => FACTIONS[f].capital === s.id)) v += 25;
   if(st.relic && !st.relic.owner && st.relic.sys === s.id) v += 60; // l'arme ancienne attire tout le monde
+  if(s.unique) v += 40;                                                // les bâtiments uniques aussi
+  v += 3 * BUILDING_IDS.reduce((a, t) => a + bl(s, t), 0);
   return v;
 }
 function maxHostileAdj(st, sysId, fid){
@@ -2980,6 +3214,7 @@ function aiManage(st, fid){
   const canTax = !people || people.sat >= 45;
   mine.forEach(s => { s.tax = s.loyalty >= 68 && canTax ? "high" : s.loyalty <= 42 ? "low" : "normal"; });
   mine.slice().sort((a, b) => a.loyalty - b.loyalty).forEach(s => { if(s.loyalty < 35) appease(st, s.id); });
+  aiDevelop(st, fid);
   const inc = income(st, fid);
   // Une file par chantier, deux quand les caisses débordent.
   mine.filter(s => s.yard && s.queue.length < (F.cr > 400 ? 2 : 1)).forEach(s => {
@@ -3192,7 +3427,8 @@ function createGroundBattle(st, gs){
   const f = fleetById(st, gs.fleet), s = st.systems[gs.sys];
   const b = baseBattle(st, gs.sys, [{fid:gs.attFid, ids:[], ai:true}, {fid:gs.defFid, ids:[], ai:true}]);
   b.ground = true; b.maxRounds = BMAX_ROUNDS_GROUND;
-  b.fort = Math.round(30 * fortification(s)) / 100;          // jusqu'à −30 % de dégâts pour les défenseurs
+  // Jusqu'à −30 % de dégâts pour les défenseurs retranchés, et jusqu'à −30 % de plus avec les bunkers.
+  b.fort = Math.min(0.6, Math.round(30 * fortification(s)) / 100 + 0.1 * bl(s, "bunker"));
   b.weather = ["clear", "clear", "storm", "mud"][rint(b, 0, 3)];
   const per = orbitalSupport(st, f, s);
   if(per) b.orbital = {side:0, per, left:0};
@@ -3205,9 +3441,9 @@ function createGroundBattle(st, gs){
     b.points.push({c, r, owner:1});
   });
   const list = (t, src) => { const out = []; TROOP_TYPES.forEach(k => { for(let i = 0; i < t[k]; i++) out.push({type:k, src}); }); return out; };
-  const attSrc = {id:"att", vet:0, fid:gs.attFid, mul:admiralMul(st, f), morale:hasTrait(charOf(st, f.admiral), "cruel") ? 10 : 0};
+  const attSrc = {id:"att", vet:0, fid:gs.attFid, mul:admiralMul(st, f) * (1 + groundBonus(st, gs.attFid)), morale:hasTrait(charOf(st, f.admiral), "cruel") ? 10 : 0};
   bDeploy(b, 0, (f.heroes || []).map((h, i) => ({type:h.kind, src:Object.assign({}, attSrc, {id:"hero:" + i})})).concat(list(f.troops, attSrc)));
-  bDeploy(b, 1, (gs.jedi ? [{type:"jedi", src:{id:"jedi", vet:1, fid:null}}] : []).concat(list(s.garrison, {id:"def", vet:0, fid:gs.defFid})));
+  bDeploy(b, 1, (gs.jedi ? [{type:"jedi", src:{id:"jedi", vet:1, fid:null}}] : []).concat(list(s.garrison, {id:"def", vet:0, fid:gs.defFid, mul:1 + groundBonus(st, gs.defFid)})));
   if(gs.jedi) bLog(b, "Un Chevalier Jedi se tient parmi les défenseurs.", "info");
   bLog(b, "Débarquement sur " + SYS[gs.sys].name + ". " + WEATHER[b.weather].name + " (" + WEATHER[b.weather].desc + ").", "info");
   if(b.fort) bLog(b, "Les défenseurs sont retranchés : −" + Math.round(b.fort * 100) + " % de dégâts subis.", "info");
@@ -3610,7 +3846,7 @@ function loadSave(){
     const s = store(); const raw = s && s.getItem(SAVE_KEY);
     if(!raw) return null;
     const st = JSON.parse(raw);
-    return st && st.version === 7 ? st : null;
+    return st && st.version === 8 ? st : null;
   }catch(e){ return null; }
 }
 function clearSave(){ try{ const s = store(); if(s) s.removeItem(SAVE_KEY); }catch(e){} }
@@ -3715,6 +3951,8 @@ function renderMap(){
     h += '<circle cx="' + S.x + '" cy="' + S.y + '" r="' + r + '" fill="' + (s.cartel ? CARTEL_COLOR : fcolor(s.owner)) + '" stroke="#070b14" stroke-width="2"/>';
     if(cap) h += '<circle cx="' + S.x + '" cy="' + S.y + '" r="5" fill="#070b14"/>';
     if(s.yard) h += '<rect x="' + (S.x - r - 6) + '" y="' + (S.y + r - 6) + '" width="8" height="8" fill="#dfe6f3" stroke="#070b14"/>';
+    if(s.spec) h += '<text x="' + (S.x + r + 7) + '" y="' + (S.y + r + 3) + '" style="font-size:10px;font-weight:800;fill:' + SPECS[s.spec].color + '">' + SPECS[s.spec].short + '</text>';
+    if(s.unique) h += '<text x="' + (S.x - r - 9) + '" y="' + (S.y - r + 2) + '" style="font-size:12px;fill:var(--accent)">★</text>';
     if(G.relic && G.relic.sys === id && !G.relic.owner) h += '<polygon points="' + S.x + ',' + (S.y - r - 11) + ' ' + (S.x + 6) + ',' + (S.y - r - 5) + ' ' + S.x + ',' + (S.y - r + 1) + ' ' + (S.x - 6) + ',' + (S.y - r - 5) + '" fill="var(--accent)" stroke="#070b14"/>';
     if(G.plague && G.plague.infected[id] >= G.turn) h += '<circle cx="' + (S.x - r - 3) + '" cy="' + (S.y - r) + '" r="5" fill="#8fd14f" stroke="#070b14"/>';
     h += '<text x="' + S.x + '" y="' + (S.y + r + 15) + '">' + esc(S.name) + '</text>';
@@ -3793,6 +4031,8 @@ function renderPanel(){
     if(G.plague && G.plague.infected[id] >= G.turn) h += '<span class="tag bad">Pandémie' + (s.quarantine >= G.turn ? ' · en quarantaine' : '') + '</span>';
     if(G.relic && G.relic.sys === id && !G.relic.owner) h += '<span class="tag warn">Arme ancienne' + (G.relic.holder ? ' · ' + esc(fname(G.relic.holder)) + ' ' + (G.turn - G.relic.since) + '/' + WEAPON_TURNS : '') + '</span>';
     if(s.droids) h += '<span class="tag">Droïdes libres</span>';
+    if(s.spec) h += '<span class="tag" style="border-color:' + SPECS[s.spec].color + ';color:' + SPECS[s.spec].color + '">' + SPECS[s.spec].name + '</span>';
+    if(s.unique) h += '<span class="tag warn">★ ' + esc(UNIQUES[s.unique].name) + '</span>';
     h += '</div>';
     const y = planetYield(G, s);
     h += '<dl class="kv">';
@@ -3816,22 +4056,23 @@ function renderPanel(){
       h += '<div class="muted" style="font-size:.85rem;margin-top:.3em">Élevés : +45 % de crédits, la loyauté visée baisse de 15. Bas : −40 %, +12.</div>';
       h += '<div class="row" style="margin-top:.5em"><button class="small" data-act="appease" data-id="' + id + '"' + (canAppease(G, id) ? "" : " disabled") + '>Apaiser (−' + APPEASE_COST + ' influence, +12 loyauté)</button></div>';
       if(s.yard){
-        h += '<h3>Chantier</h3>';
+        h += '<h3>Chantier (niveau ' + yardLevel(s) + ')</h3>';
         if(s.queue.length) h += '<div style="font-size:.9rem">' + s.queue.map((q, i) => (i === 0 ? '<b>' : '') + SHIPS[q.type].name + ' — ' + (i === 0 ? q.left + ' tour(s)' : 'en attente') + (i === 0 ? '</b>' : '')).join('<br>') + '</div>';
         h += '<div class="list">' + SHIP_TYPES.map(t => {
-          const c = costOf(P, t, G);
+          const c = shipCostAt(G, id, t);
           return '<button data-act="build" data-id="' + id + '" data-v="' + t + '"' + (canBuild(G, id, t) ? "" : " disabled") + '><span>' + SHIPS[t].name + ' <span class="muted">· ' + FLEET_CAP[t] + ' places</span></span><span class="muted">' + c.cr + ' cr · ' + c.mat + ' mat · ' + c.turns + ' t</span></button>';
         }).join("") + '</div>';
       }
       h += '<h3>Caserne</h3>';
       if(s.drill.length) h += '<div style="font-size:.9rem">' + s.drill.map((q, i) => (i === 0 ? '<b>' : '') + TROOPS[q.type].name + ' — ' + (i === 0 ? q.left + ' tour(s)' : 'en attente') + (i === 0 ? '</b>' : '')).join('<br>') + '</div>';
       if(s.loyalty < 35) h += '<div class="muted" style="font-size:.85rem">Loyauté trop basse pour recruter.</div>';
-      h += '<div class="list">' + TROOP_TYPES.filter(t => !TROOPS[t].yard || s.yard).map(t => {
-        const c = recruitCost(G, P, t);
+      h += '<div class="list">' + TROOP_TYPES.filter(t => !TROOPS[t].yard || canRecruitHeavy(s)).map(t => {
+        const c = recruitCostAt(G, id, t);
         return '<button data-act="recruit" data-id="' + id + '" data-v="' + t + '"' + (canRecruit(G, id, t) ? "" : " disabled") + '><span>' + TROOPS[t].name + ' <span class="muted">· ' + TROOPS[t].cap + ' pl.</span></span><span class="muted">' + c.cr + ' cr · ' + c.mat + ' mat · ' + c.turns + ' t</span></button>';
       }).join("") + '</div>';
-      if(!s.yard) h += '<div class="muted" style="font-size:.85rem">Blindés et marcheurs demandent un chantier.</div>';
-    }
+      if(!canRecruitHeavy(s)) h += '<div class="muted" style="font-size:.85rem">Blindés et marcheurs demandent un chantier ou des casernes de niveau 2.</div>';
+      h += buildingPanel(s, true);
+    } else if(s.spec || slotsUsed(s) || s.unique) h += buildingPanel(s, false);
     const here = G.fleets.filter(f => f.at === id);
     h += '<h3>Flottes en orbite</h3>';
     h += here.length ? here.map(fleetCard).join("") : '<div class="muted">Aucune.</div>';
@@ -3881,6 +4122,36 @@ function renderPanel(){
   $("panel").innerHTML = h;
 }
 
+// ---------- Aménagement d'un monde (v0.8) ----------
+function buildingPanel(s, mine){
+  let h = '<h3>Aménagement (' + slotsUsed(s) + '/' + s.slots + ' emplacements)</h3>';
+  if(s.unique) h += '<div class="card"><b class="warn">★ ' + esc(UNIQUES[s.unique].name) + '</b><div style="font-size:.85rem">' + esc(UNIQUES[s.unique].desc) + '</div></div>';
+  if(s.spec) h += '<div style="font-size:.9rem"><b style="color:' + SPECS[s.spec].color + '">' + SPECS[s.spec].name + '</b> <span class="muted">· ' + esc(SPECS[s.spec].desc) + '</span></div>';
+  if(mine){
+    const c = specCost(s);
+    h += '<div class="muted" style="font-size:.85rem;margin-top:.3em">' + (s.spec
+      ? 'Changer de vocation (' + c.cr + ' cr, ' + c.inf + ' influence) rase les bâtiments propres à l\'ancienne.'
+      : 'Choisis la vocation de ce monde (' + c.cr + ' cr, ' + c.inf + ' influence). On ne peut pas tout faire partout.') + '</div>';
+    if(!s.spec) h += '<div style="font-size:.82rem;margin:.2em 0">' + Object.keys(SPECS).map(k => '<b style="color:' + SPECS[k].color + '">' + SPECS[k].name + '</b> : ' + esc(SPECS[k].desc)).join('<br>') + '</div>';
+    h += '<div class="row">' + Object.keys(SPECS).filter(k => k !== s.spec).map(k =>
+      '<button class="small" data-act="spec" data-id="' + s.id + '" data-v="' + k + '"' + (canSpecialize(G, s.id, k) ? "" : " disabled") + '>' + SPECS[k].name + '</button>').join("") + '</div>';
+  }
+  if(s.bqueue.length){ const q = s.bqueue[0]; h += '<div style="font-size:.9rem;margin-top:.4em"><b>En construction :</b> ' + BUILDINGS[q.type].name + ' niveau ' + q.level + ' · ' + q.left + ' tour(s)</div>'; }
+  const shown = BUILDING_IDS.filter(t => bl(s, t) > 0 || (mine && !(BUILDINGS[t].spec && BUILDINGS[t].spec !== s.spec)));
+  if(!shown.length) return h;
+  h += '<div class="list">' + shown.map(t => {
+    const B = BUILDINGS[t], lvl = bl(s, t), next = lvl + 1;
+    const cur = lvl ? 'niveau ' + lvl + ' : ' + B.lv[lvl - 1] : 'non construit';
+    if(!mine) return '<div style="font-size:.88rem;margin:.2em 0"><b>' + B.name + '</b> <span class="muted">· ' + esc(cur) + '</span></div>';
+    const block = buildBlock(G, s.id, t), c = next <= 3 ? buildingCost(t, next) : null;
+    const detail = c && !block ? '<br><span style="font-size:.82rem">Niveau ' + next + ' : ' + esc(B.lv[next - 1]) + '</span>'
+      : block && !s.bqueue.length ? '<br><span class="muted" style="font-size:.82rem">' + esc(block) + '</span>' : '';
+    return '<button data-act="bld" data-id="' + s.id + '" data-v="' + t + '"' + (canQueueBuilding(G, s.id, t) ? "" : " disabled") + '><span><b>' + B.name + '</b> <span class="muted">· ' + esc(cur) + '</span>' + detail + '</span>' +
+      '<span class="muted">' + (c && !block ? c.cr + ' cr · ' + c.mat + ' mat · ' + c.t + ' t' : '') + '</span></button>';
+  }).join("") + '</div>';
+  return h;
+}
+
 // ---------- Actions du joueur ----------
 function onPanel(e){
   const btn = e.target.closest("[data-act]");
@@ -3895,6 +4166,8 @@ function onPanel(e){
   else if(act === "appease"){ appease(G, id); }
   else if(act === "purge"){ purge(G, id); }
   else if(act === "quarantine"){ quarantine(G, P, id); }
+  else if(act === "spec"){ specialize(G, id, v); }
+  else if(act === "bld"){ queueBuilding(G, id, v); }
   else if(act === "search"){ const m = sithSearch(G, id); render(); if(m) showModal('<h2>Fouilles</h2><p>' + esc(m) + '</p>', [{label:"Continuer", primary:true}]); return; }
   else if(act === "chaos"){ sithChaos(G, id); }
   else if(act === "shadow"){ return showShadow(); }
@@ -4045,6 +4318,7 @@ function showMenu(){
     '<li><b>Loyauté</b> : sous 35, sabotages ; sous 20, révolte possible si aucune flotte ne garde le monde. Défaites et capitale perdue ébranlent le régime.</li>' +
     '<li><b>Batailles</b> : boucliers avant / flancs / arrière ; frapper de dos fait mal et brise le moral. Une unité à moins de 25 de moral fuit ; celles rattrapées sont massacrées.</li>' +
     '<li><b>Terrain spatial</b> : nébuleuse = portée réduite à 1 ; astéroïdes = couverture (−30 % de dégâts) mais 2 points de mouvement.</li>' +
+    '<li><b>Bâtiments</b> : chaque monde a 2 à 5 emplacements. Donne-lui une vocation (forteresse, usine, grenier), puis construis des chaînes à trois niveaux (chantier, casernes, comptoirs, défenses, palais, et un bâtiment propre à chaque vocation). Cinq bâtiments uniques, placés au hasard, font de leur monde une cible : chantiers légendaires, forges mandaloriennes, mines d\'épice, académie militaire, centre de renseignement. Une conquête abîme les installations.</li>' +
     '<li><b>Grandes crises</b> : une ou deux par partie (seigneur de guerre, route hyperspatiale coupée, arme ancienne, pandémie, soulèvement des droïdes). Elles bouleversent l\'équilibre et forcent tout le monde à s\'adapter.</li>' +
     '<li><b>Victoire</b> : domination (la moitié des systèmes et les capitales des rivaux encore debout), hégémonie politique (une coalition d\'au moins deux alliés que tu mènes et qui tient 65 % des systèmes, puis 80 d\'influence pour convoquer le Congrès galactique), ou, pour le Sith, domination et Ordre Jedi éradiqué.</li>' +
     '<li><b>La Force</b> : l\'Ordre Jedi juge chaque faction. Honorable (réputation 75+), il t\'envoie un Chevalier ; cruelle (20 ou moins), il soutient la résistance et protège les mondes que tu envahis. Il propose des trêves aux factions épuisées. Un culte Sith agit peut-être dans l\'ombre : « Enquêter » sur un personnage (Gouvernement) peut démasquer un agent.</li>' +

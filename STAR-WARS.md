@@ -1,4 +1,4 @@
-# L'Effondrement — 75 ap. BY (prototype v0.7)
+# L'Effondrement — 75 ap. BY (prototype v0.8)
 
 Jeu de grande stratégie galactique au tour par tour, dans l'esprit de Total War.
 Tout tient dans `star-wars.html` : l'ouvrir dans un navigateur, sans dépendance ni build.
@@ -113,13 +113,48 @@ Les choix de v0.4 et v0.5 servent ici : la réputation Jedi accumulée, et l'enf
 - Vestiges impériaux : 30 d'influence au départ. Mandalore : troupes au sol +20 % au lieu de +30 %.
 - Résultat : 27 % de parties sans vainqueur au tour 150 (contre 57 % en v0.6). Victoires : République 22, Ligue 13, Mandalore 13, Vestiges impériaux 6, Sith 4 ; 31 par domination, 27 par hégémonie.
 
+## v0.8 — bâtiments et spécialisation
+
+**Emplacements** : chaque monde en a de 2 (Bordure, Régions inconnues) à 4 (Noyau), plus un pour une capitale. On ne peut pas tout faire partout. Un seul chantier à la fois par monde.
+
+**Spécialisation** (50 crédits et 10 d'influence ; le double pour changer d'avis) :
+- **Monde-forteresse** : défenses +50 %, sièges ennemis −30 %, crédits −20 %.
+- **Monde-usine** : matériaux +50 %, vaisseaux construits un tour plus vite, loyauté −3.
+- **Monde-grenier** : loyauté +5 ici et +2 chez les voisins ; entretien des troupes −10 % par grenier (jusqu'à −50 %).
+
+Changer de vocation rase les bâtiments propres à l'ancienne.
+
+**Bâtiments**, chacun à trois niveaux :
+
+| Bâtiment | Effet | Restriction |
+|---|---|---|
+| Chantier orbital | construire des vaisseaux ; plus vite et moins cher aux niveaux 2 et 3 | niveau 3 : monde-usine |
+| Casernes | troupes −20 % ; blindés et marcheurs sans chantier ; recrutement plus rapide | |
+| Comptoirs commerciaux | crédits +20/40/60 % ; au niveau 3, le Syndicat s'y intéresse | |
+| Défenses planétaires | défenses +25/50/100 % | niveau 3 : monde-forteresse |
+| Palais du gouverneur | loyauté +5/10/15, influence +1/2/3 | |
+| Fonderies | matériaux +30/60/90 % | monde-usine |
+| Fermes hydroponiques | loyauté ici et chez les voisins | monde-grenier |
+| Bunkers souterrains | défenseurs au sol mieux protégés | monde-forteresse |
+
+**Bâtiments uniques**, cinq par partie, placés au hasard hors des capitales, marqués d'une ★ sur la carte :
+- Chantiers orbitaux légendaires (vaisseaux 30 % moins chers, 2 tours plus vite) ;
+- Forges mandaloriennes (+15 % au sol pour toute la faction) ;
+- Mines d'épice (+40 crédits par tour, mais le Syndicat s'y installe) ;
+- Académie militaire (amiraux expérimentés, jamais incompétents) ;
+- Centre de renseignement (espionnage permanent, enquêtes Sith +20 %).
+
+Ils changent de mains avec leur monde. Une conquête abîme les installations : chaque bâtiment a 30 % de chances de perdre un niveau.
+
+**IA et équilibrage** (80 parties IA contre IA) : l'IA investit avant d'armer, à raison d'une vocation et d'un bâtiment par tour au plus, en gardant une réserve. Une première version faisait de chaque monde frontalier une forteresse : 55 % des parties finissaient sans vainqueur, car les mondes conquis, peu loyaux, se révoltaient. Désormais elle fait des greniers par défaut, et seulement quelques forteresses (fronts menacés et loyaux, un monde sur six au plus) et quelques usines (autour des chantiers, un monde sur cinq). Résultat : 35 % de parties sans vainqueur au tour 150. Victoires : Vestiges impériaux 18, Ligue 15, République 8, Mandalore 7, Sith 3, seigneur de guerre 1 ; 29 par domination, 23 par hégémonie.
+
 ## Architecture
 
 Deux blocs `<script>` dans `star-wars.html` :
 
 | Bloc | Contenu |
 |---|---|
-| Moteur | Données (`SYSTEMS`, `LINKS`, `FACTIONS`, `SHIPS`, `TROOPS`, `UNITS`), `newGame`, économie, loyauté, troupes et invasions (`embark`, `makeInvasion`, `autoGround`, `applyGround`), politique (`REGIMES`, `DECREES`, `TRAITS`, `genChar`, `enactDecree`, `voteSupport`, `politicsTurn`, `resolveDilemma`), Syndicat et événements (`syndCut`, `takeLoan`, `hireMercs`, `assassinate`, `purge`, `syndicateTurn`, `EVENTS`, `DELAYED`, `eventsTurn`, `resolveEvent`), la Force (`hostile`, `jediTurn`, `sithTurn`, `sithCorrupt`, `sithCoup`, `sithClaim`, `probeChar`, `aiSith`, `HEROES`), crises et diplomatie (`CRISES`, `startCrisis`, `crisisTurn`, `nb`, `makeAlliance`, `proposeAlliance`, `hegemonyStatus`, `convokeCongress`, `aiDiplomacy`), `runAI`, `finishTurn`, batailles (`autoBattle`, `createBattle`, `createGroundBattle`, `bAttack`, `bOrbital`, `bRunAI`, `bResult`, `applyBattle`). Aucune dépendance au DOM. |
+| Moteur | Données (`SYSTEMS`, `LINKS`, `FACTIONS`, `SHIPS`, `TROOPS`, `UNITS`), `newGame`, économie, loyauté, troupes et invasions (`embark`, `makeInvasion`, `autoGround`, `applyGround`), politique (`REGIMES`, `DECREES`, `TRAITS`, `genChar`, `enactDecree`, `voteSupport`, `politicsTurn`, `resolveDilemma`), Syndicat et événements (`syndCut`, `takeLoan`, `hireMercs`, `assassinate`, `purge`, `syndicateTurn`, `EVENTS`, `DELAYED`, `eventsTurn`, `resolveEvent`), la Force (`hostile`, `jediTurn`, `sithTurn`, `sithCorrupt`, `sithCoup`, `sithClaim`, `probeChar`, `aiSith`, `HEROES`), bâtiments (`SPECS`, `BUILDINGS`, `UNIQUES`, `specialize`, `queueBuilding`, `buildingsTurn`, `warDamage`, `aiDevelop`), crises et diplomatie (`CRISES`, `startCrisis`, `crisisTurn`, `nb`, `makeAlliance`, `proposeAlliance`, `hegemonyStatus`, `convokeCongress`, `aiDiplomacy`), `runAI`, `finishTurn`, batailles (`autoBattle`, `createBattle`, `createGroundBattle`, `bAttack`, `bOrbital`, `bRunAI`, `bResult`, `applyBattle`). Aucune dépendance au DOM. |
 | Interface | Écran titre, carte SVG, panneau, écrans Gouvernement, Syndicat et Ombre, dilemmes et événements, bataille sur grille SVG, modales, sauvegarde `localStorage` (`sw75-save`). |
 
 L'aléatoire est un mulberry32 dont l'état vit dans la partie (`st.rng`) : une graine rejoue la même partie.
@@ -130,4 +165,4 @@ L'aléatoire est un mulberry32 dont l'état vit dans la partie (`st.rng`) : une 
 node tests/sw-sim.js [parties] [tours max]
 ```
 
-Joue des parties complètes où l'IA contrôle toutes les factions et vérifie les invariants à chaque tour (soutes jamais surchargées, garnisons positives…). Vérifie aussi que chaque monde a son gouverneur et chaque flotte son amiral. Joue 60 batailles spatiales et 60 batailles terrestres IA contre IA, contrôle les boucliers orientés, les frappes orbitales, le vote du Sénat, chaque option de chaque dilemme et de chaque événement (suivie de 12 tours pour déclencher les effets différés), les services du Syndicat (prêt, dette impayée, mercenaires, assassinat, purge), et la Force (coup d'État, Empire Sith, découverte fatale, succession du Seigneur Sith, trêve, invasion avec héros et Chevalier Jedi, enquête, condition de victoire Sith). Le Sith fait partie de la rotation des factions jouées. Enfin, chaque grande crise est lancée puis jouée 15 tours, et la route coupée, l'arme ancienne, la pandémie avec quarantaine, les alliances et la victoire par le Congrès galactique sont vérifiées.
+Joue des parties complètes où l'IA contrôle toutes les factions et vérifie les invariants à chaque tour (soutes jamais surchargées, garnisons positives…). Vérifie aussi que chaque monde a son gouverneur et chaque flotte son amiral. Joue 60 batailles spatiales et 60 batailles terrestres IA contre IA, contrôle les boucliers orientés, les frappes orbitales, le vote du Sénat, chaque option de chaque dilemme et de chaque événement (suivie de 12 tours pour déclencher les effets différés), les services du Syndicat (prêt, dette impayée, mercenaires, assassinat, purge), et la Force (coup d'État, Empire Sith, découverte fatale, succession du Seigneur Sith, trêve, invasion avec héros et Chevalier Jedi, enquête, condition de victoire Sith). Le Sith fait partie de la rotation des factions jouées. Enfin, chaque grande crise est lancée puis jouée 15 tours, et la route coupée, l'arme ancienne, la pandémie avec quarantaine, les alliances et la victoire par le Congrès galactique sont vérifiées. En v0.8 : emplacements jamais dépassés, niveaux et vocations valides, défense maximale cohérente avec les bâtiments ; spécialisation, construction, changement de vocation, chantier naval, comptoirs, bâtiment unique capturé, et développement de l'IA.

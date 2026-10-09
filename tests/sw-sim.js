@@ -11,7 +11,7 @@ const HTML = fs.readFileSync(path.join(__dirname, "..", "star-wars.html"), "utf8
 const ENGINE = [...HTML.matchAll(/<script>([\s\S]*?)<\/script>/g)][0][1];
 const ctx = {Math, JSON, Object, Array, String, Number, Set, Map, console};
 vm.createContext(ctx);
-vm.runInContext(ENGINE + "\n;globalThis.__E = {newGame, runAI, finishTurn, applyBattle, autoBattle, battleValid, createBattle, bRunAI, bResult, bDamage, bArc, bSideUnits, makeBattle, addFleet, fleetById, shipCount, planetsOf, income, FACTION_IDS, SYSTEMS, SYS, ADJ, FLEET_MP, BMAX_ROUNDS, BMAX_ROUNDS_GROUND, troops, troopCount, fleetLoad, fleetCap, makeInvasion, invasionValid, createGroundBattle, applyGround, bOrbital, bUnitAt, TROOP_TYPES, charOf, voteSupport, canEnact, enactDecree, hasDecree, resolveDilemma, dilemmaOptions, MAX_DECREES, DECREE_IDS, EVENTS, eventOptions, resolveEvent, takeLoan, repayLoan, hireMercs, assassinate, assassinTargets, purge, buyIntel, syndicateTurn, finishTurnOnly:finishTurn, LOAN, sithCoup, sithCoupReady, sithClaim, sithTurn, charDies, makeTruce, moveFleet, canInvade, hostileFleetsAt, probeChar, checkVictory, HEROES, genChar, startCrisis, crisisTurn, canMove, tradeRoutes, makeAlliance, allied, hostile, hegemonyStatus, convokeCongress, quarantine, canQuarantine, WEAPON_TURNS, playableFactions, SYS};", ctx);
+vm.runInContext(ENGINE + "\n;globalThis.__E = {newGame, runAI, finishTurn, applyBattle, autoBattle, battleValid, createBattle, bRunAI, bResult, bDamage, bArc, bSideUnits, makeBattle, addFleet, fleetById, shipCount, planetsOf, income, FACTION_IDS, SYSTEMS, SYS, ADJ, FLEET_MP, BMAX_ROUNDS, BMAX_ROUNDS_GROUND, troops, troopCount, fleetLoad, fleetCap, makeInvasion, invasionValid, createGroundBattle, applyGround, bOrbital, bUnitAt, TROOP_TYPES, charOf, voteSupport, canEnact, enactDecree, hasDecree, resolveDilemma, dilemmaOptions, MAX_DECREES, DECREE_IDS, EVENTS, eventOptions, resolveEvent, takeLoan, repayLoan, hireMercs, assassinate, assassinTargets, purge, buyIntel, syndicateTurn, finishTurnOnly:finishTurn, LOAN, sithCoup, sithCoupReady, sithClaim, sithTurn, charDies, makeTruce, moveFleet, canInvade, hostileFleetsAt, probeChar, checkVictory, HEROES, genChar, startCrisis, crisisTurn, canMove, tradeRoutes, makeAlliance, allied, hostile, hegemonyStatus, convokeCongress, quarantine, canQuarantine, WEAPON_TURNS, playableFactions, SYS, SPECS, BUILDINGS, UNIQUE_IDS, slotsUsed, defenseMul, specialize, canSpecialize, queueBuilding, canQueueBuilding, buildBlock, buildingsTurn, shipCostAt, recruitCostAt, planetYield, capture, warDamage, groundBonus, refreshPlanet};", ctx);
 const E = ctx.__E;
 
 const GAMES = +process.argv[2] || 24;
@@ -71,6 +71,16 @@ function checkInvariants(st, where){
   const W = st.factions.war;
   if(W.shadow && (E.planetsOf(st, "war").length || st.fleets.some(f => f.owner === "war"))) fail(where + " : seigneur de guerre dormant mais présent");
   st.closedLinks.forEach(([a, b]) => { if(!E.SYS[a] || !E.SYS[b]) fail(where + " : route fermée inconnue"); });
+  Object.values(st.systems).forEach(s => {
+    if(E.slotsUsed(s) > s.slots) fail(where + " : " + s.id + " dépasse ses emplacements");
+    if(Object.values(s.build).some(l => !(l >= 1 && l <= 3))) fail(where + " : niveau de bâtiment invalide " + s.id);
+    if(s.spec !== null && !E.SPECS[s.spec]) fail(where + " : spécialisation inconnue " + s.spec);
+    if(Object.keys(s.build).some(t => E.BUILDINGS[t].spec && E.BUILDINGS[t].spec !== s.spec)) fail(where + " : bâtiment hors vocation " + s.id);
+    if(s.maxDef !== Math.round(s.baseDef * E.defenseMul(s))) fail(where + " : défense maximale incohérente " + s.id);
+    if(s.bqueue.length > 1) fail(where + " : plusieurs chantiers à " + s.id);
+  });
+  const uniques = Object.values(st.systems).filter(s => s.unique).length;
+  if(uniques !== E.UNIQUE_IDS.length) fail(where + " : " + uniques + " bâtiments uniques au lieu de " + E.UNIQUE_IDS.length);
 }
 
 // ---------- Parties complètes ----------
@@ -388,6 +398,60 @@ console.log("Batailles tactiques : " + tactical + " terminées, " + (rounds / Ma
   if(!h.ready) fail("hégémonie attendue : " + JSON.stringify(h));
   if(!E.convokeCongress(st, "rep") || !st.over || st.over.winner !== "rep" || st.over.how !== "hegemony") fail("le Congrès galactique devrait donner la victoire");
   console.log("v0.7 : cinq crises, seigneur de guerre, route coupée, arme ancienne, pandémie, alliances et hégémonie vérifiés");
+}
+
+// ---------- v0.8 : bâtiments, spécialisation, bâtiments uniques ----------
+{
+  const st = E.newGame("rep", 8100);
+  const F = st.factions.rep;
+  F.cr = 5000; F.mat = 5000; F.inf = 500;
+  const s = st.systems[F.capital];
+  // Spécialisation : forteresse → défense +50 %.
+  const def0 = s.maxDef;
+  if(!E.specialize(st, s.id, "fortress") || s.maxDef !== Math.round(s.baseDef * 1.5)) fail("un monde-forteresse devrait avoir +50 % de défense (" + def0 + " → " + s.maxDef + ")");
+  // Construction : une seule à la fois, achevée au bout de son délai.
+  if(!E.queueBuilding(st, s.id, "defense")) fail("défenses impossibles à construire");
+  if(E.canQueueBuilding(st, s.id, "trade")) fail("deux chantiers en même temps");
+  for(let t = 0; t < 2; t++) E.buildingsTurn(st);
+  if(s.build.defense !== 1 || s.maxDef !== Math.round(s.baseDef * 1.5 * 1.25)) fail("défenses niveau 1 non appliquées");
+  // Bâtiment réservé à une vocation, niveau 3 réservé.
+  if(!E.buildBlock(st, s.id, "foundry")) fail("les fonderies devraient être réservées au monde-usine");
+  if(E.buildBlock(st, s.id, "bunker")) fail("les bunkers devraient être permis sur une forteresse");
+  E.queueBuilding(st, s.id, "bunker"); for(let t = 0; t < 3; t++) E.buildingsTurn(st);
+  if(s.build.bunker !== 1) fail("bunkers non achevés");
+  // Changer de vocation rase les bunkers.
+  E.specialize(st, s.id, "factory");
+  if(s.build.bunker || s.maxDef !== Math.round(s.baseDef * 1.25)) fail("changer de vocation devrait raser les bunkers et retirer le bonus");
+  // Emplacements limités.
+  const o = Object.values(st.systems).find(x => x.owner === "rep" && x.id !== s.id && !x.unique);
+  o.build = {}; o.bqueue = []; o.spec = null;
+  for(let i = 0; i < o.slots; i++) o.build[["trade", "palace", "barracks", "defense"][i]] = 1;
+  E.refreshPlanet(o);
+  if(E.buildBlock(st, o.id, "yard") !== "plus d'emplacement libre") fail("emplacements illimités");
+  // Chantier : un niveau supérieur réduit coût et délai.
+  s.build.yard = 1; s.yard = true;
+  const c1 = E.shipCostAt(st, s.id, "dest");
+  s.build.yard = 3;
+  const c3 = E.shipCostAt(st, s.id, "dest");
+  if(!(c3.cr < c1.cr && c3.turns < c1.turns)) fail("un chantier de niveau 3 devrait coûter moins et aller plus vite");
+  // Comptoirs : crédits en hausse.
+  const y0 = E.planetYield(st, o).cr;
+  o.build.trade = 3;
+  if(!(E.planetYield(st, o).cr > y0)) fail("les comptoirs devraient augmenter les crédits");
+  // Bâtiment unique : il change de mains avec le monde.
+  const u = Object.values(st.systems).find(x => x.unique === "forges");
+  const owner0 = u.owner;
+  u.owner = "man";
+  if(E.groundBonus(st, "man") !== 0.15 || E.groundBonus(st, "rep") !== 0) fail("forges mandaloriennes mal attribuées");
+  u.owner = owner0;
+  checkInvariants(st, "v0.8");
+  // L'IA construit et se spécialise.
+  const g = E.newGame("emp", 8200);
+  for(let t = 0; t < 40 && !g.over; t++){ E.runAI(g, {includePlayer:true}); E.finishTurnOnly(g); }
+  const all = Object.values(g.systems).filter(x => x.owner);
+  const specs = all.filter(x => x.spec).length, built = all.reduce((n, x) => n + Object.keys(x.build).length, 0);
+  if(!specs || built <= all.filter(x => x.yard).length) fail("l'IA ne se développe pas (" + specs + " spécialisations, " + built + " bâtiments)");
+  console.log("v0.8 : vocations, chantiers, emplacements, chantier naval, comptoirs, bâtiment unique vérifiés ; IA au tour 40 : " + specs + " mondes spécialisés, " + built + " bâtiments");
 }
 
 // ---------- Boucliers orientés : un tir dans le dos fait plus mal ----------
