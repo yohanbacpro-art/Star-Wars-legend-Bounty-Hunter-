@@ -11,7 +11,7 @@ const HTML = fs.readFileSync(path.join(__dirname, "..", "star-wars.html"), "utf8
 const ENGINE = [...HTML.matchAll(/<script>([\s\S]*?)<\/script>/g)][0][1];
 const ctx = {Math, JSON, Object, Array, String, Number, Set, Map, console};
 vm.createContext(ctx);
-vm.runInContext(ENGINE + "\n;globalThis.__E = {newGame, runAI, finishTurn, applyBattle, autoBattle, battleValid, createBattle, bRunAI, bResult, bDamage, bArc, bSideUnits, makeBattle, addFleet, fleetById, shipCount, planetsOf, income, FACTION_IDS, SYSTEMS, SYS, ADJ, FLEET_MP, BMAX_ROUNDS, BMAX_ROUNDS_GROUND, troops, troopCount, fleetLoad, fleetCap, makeInvasion, invasionValid, createGroundBattle, applyGround, bOrbital, bUnitAt, TROOP_TYPES, charOf, voteSupport, canEnact, enactDecree, hasDecree, resolveDilemma, dilemmaOptions, MAX_DECREES, DECREE_IDS, EVENTS, eventOptions, resolveEvent, takeLoan, repayLoan, hireMercs, assassinate, assassinTargets, purge, buyIntel, syndicateTurn, finishTurnOnly:finishTurn, LOAN, sithCoup, sithCoupReady, sithClaim, sithTurn, charDies, makeTruce, moveFleet, canInvade, hostileFleetsAt, probeChar, checkVictory, HEROES, genChar, startCrisis, crisisTurn, canMove, tradeRoutes, makeAlliance, allied, hostile, hegemonyStatus, convokeCongress, quarantine, canQuarantine, WEAPON_TURNS, playableFactions, SYS, SPECS, BUILDINGS, UNIQUE_IDS, slotsUsed, defenseMul, specialize, canSpecialize, queueBuilding, canQueueBuilding, buildBlock, buildingsTurn, shipCostAt, recruitCostAt, planetYield, capture, warDamage, groundBonus, refreshPlanet};", ctx);
+vm.runInContext(ENGINE + "\n;globalThis.__E = {newGame, runAI, finishTurn, applyBattle, autoBattle, battleValid, createBattle, bRunAI, bResult, bDamage, bArc, bSideUnits, makeBattle, addFleet, fleetById, shipCount, planetsOf, income, FACTION_IDS, SYSTEMS, SYS, ADJ, FLEET_MP, BMAX_ROUNDS, BMAX_ROUNDS_GROUND, troops, troopCount, fleetLoad, fleetCap, makeInvasion, invasionValid, createGroundBattle, applyGround, bOrbital, bUnitAt, TROOP_TYPES, charOf, voteSupport, canEnact, enactDecree, hasDecree, resolveDilemma, dilemmaOptions, MAX_DECREES, DECREE_IDS, EVENTS, eventOptions, resolveEvent, takeLoan, repayLoan, hireMercs, assassinate, assassinTargets, purge, buyIntel, syndicateTurn, finishTurnOnly:finishTurn, LOAN, sithCoup, sithCoupReady, sithClaim, sithTurn, charDies, makeTruce, moveFleet, canInvade, hostileFleetsAt, probeChar, checkVictory, HEROES, genChar, startCrisis, crisisTurn, canMove, tradeRoutes, makeAlliance, allied, hostile, hegemonyStatus, convokeCongress, quarantine, canQuarantine, WEAPON_TURNS, playableFactions, SYS, SPECS, BUILDINGS, UNIQUE_IDS, slotsUsed, defenseMul, specialize, canSpecialize, queueBuilding, canQueueBuilding, buildBlock, buildingsTurn, shipCostAt, recruitCostAt, planetYield, capture, warDamage, groundBonus, refreshPlanet, JEDI_MASTERS, MASTER_IDS, trainPadawan, lendJedi, recallJedi, guardWorld, guardAt, mediate, canMediate, sendAid, jediHunt, jediDuel, canDuel, jediSearch, jediJudge, conclaveStatus, convokeConclave, jediTotal, jediTurn, aiJedi, heroMul, hireGeneral, generalToFleet, generalToPlanet, generalMul, generalsOf, mergeFleets, removeFleet, groundPower, autoGround, applyGround};", ctx);
 const E = ctx.__E;
 
 const GAMES = +process.argv[2] || 24;
@@ -79,6 +79,30 @@ function checkInvariants(st, where){
     if(s.maxDef !== Math.round(s.baseDef * E.defenseMul(s))) fail(where + " : défense maximale incohérente " + s.id);
     if(s.bqueue.length > 1) fail(where + " : plusieurs chantiers à " + s.id);
   });
+  // v0.9 : généraux à leur poste, Ordre Jedi cohérent
+  st.fleets.forEach(f => {
+    if(f.general == null) return;
+    const c = E.charOf(st, f.general);
+    if(!c || c.role !== "general" || c.fid !== f.owner || c.at !== f.id || c.post !== "fleet") fail(where + " : général invalide sur " + f.id);
+  });
+  Object.values(st.systems).forEach(s => {
+    if(s.general == null) return;
+    const c = E.charOf(st, s.general);
+    if(!c || c.role !== "general" || c.fid !== s.owner || c.at !== s.id || c.post !== "sys") fail(where + " : général invalide à " + s.id);
+  });
+  Object.values(st.chars).filter(c => c.role === "general").forEach(c => {
+    const ok = c.post === "fleet" ? st.fleets.some(f => f.general === c.id) : st.systems[c.at] && st.systems[c.at].general === c.id;
+    if(!ok) fail(where + " : général sans poste " + c.name);
+  });
+  const J = st.jedi;
+  if(!(J.strength >= 0) || J.padawans.length > 3) fail(where + " : Ordre Jedi incohérent");
+  E.MASTER_IDS.forEach(m => {
+    if(!["temple", "fleet", "guard", "away", "dead"].includes(J.masters[m].state)) fail(where + " : état de Maître inconnu " + m);
+    const inFleets = st.fleets.reduce((a, f) => a + (f.heroes || []).filter(h => h.master === m).length, 0);
+    if(inFleets > 1 || (inFleets && J.masters[m].state !== "fleet")) fail(where + " : Maître " + m + " mal placé");
+    if(J.guards.filter(g => g.master === m).length > (J.masters[m].state === "guard" ? 1 : 0)) fail(where + " : Maître " + m + " en double mission");
+  });
+  J.guards.forEach(g => { if(!E.SYS[g.sys]) fail(where + " : mission Jedi hors carte"); });
   const uniques = Object.values(st.systems).filter(s => s.unique).length;
   if(uniques !== E.UNIQUE_IDS.length) fail(where + " : " + uniques + " bâtiments uniques au lieu de " + E.UNIQUE_IDS.length);
 }
@@ -86,7 +110,7 @@ function checkInvariants(st, where){
 // ---------- Parties complètes ----------
 const results = [];
 for(let g = 0; g < GAMES; g++){
-  const player = E.playableFactions()[g % 5];
+  const player = E.playableFactions()[g % E.playableFactions().length];
   const st = E.newGame(player, 1000 + g);
   checkInvariants(st, "partie " + g + " départ");
   let battles = 0, invasions = 0;
@@ -344,6 +368,8 @@ console.log("Batailles tactiques : " + tactical + " terminées, " + (rounds / Ma
   Object.values(st.systems).forEach(p => { if(p.owner) p.owner = "sith"; });
   if(E.checkVictory(st) === "sith") fail("le Sith ne gagne pas tant que les Jedi vivent");
   st.jedi.strength = 0;
+  if(E.checkVictory(st) === "sith") fail("le Sith ne gagne pas tant qu'un Maître garde le Temple");
+  Object.keys(st.jedi.masters).forEach(m => { if(st.jedi.masters[m].state === "temple") st.jedi.masters[m] = {state:"dead"}; });
   if(E.checkVictory(st) !== "sith") fail("victoire Sith attendue");
   console.log("Force : coup d'État, Empire Sith, découverte, succession, trêve, héros, enquête et victoire vérifiés");
 }
@@ -452,6 +478,119 @@ console.log("Batailles tactiques : " + tactical + " terminées, " + (rounds / Ma
   const specs = all.filter(x => x.spec).length, built = all.reduce((n, x) => n + Object.keys(x.build).length, 0);
   if(!specs || built <= all.filter(x => x.yard).length) fail("l'IA ne se développe pas (" + specs + " spécialisations, " + built + " bâtiments)");
   console.log("v0.8 : vocations, chantiers, emplacements, chantier naval, comptoirs, bâtiment unique vérifiés ; IA au tour 40 : " + specs + " mondes spécialisés, " + built + " bâtiments");
+}
+
+// ---------- v0.9 : l'Ordre Jedi jouable, Maîtres uniques, généraux ----------
+{
+  let st = E.newGame("jedi", 9100);
+  const J = st.jedi, F = st.factions.jedi;
+  F.cr = 500; F.inf = 500;
+  if(E.planetsOf(st, "jedi").length || st.fleets.some(f => f.owner === "jedi")) fail("l'Ordre Jedi ne devrait avoir ni monde ni flotte");
+  if(E.MASTER_IDS.filter(m => J.masters[m].state === "temple").length !== 3) fail("trois Maîtres attendus au Temple");
+  // Padawans : huit tours pour faire un Chevalier.
+  const k0 = J.strength;
+  E.trainPadawan(st);
+  for(let i = 0; i < 8; i++){ st.turn++; E.jediTurn(st); }
+  if(J.strength !== k0 + 1) fail("un padawan devrait devenir Chevalier (" + k0 + " → " + J.strength + ")");
+  // Prêter puis rappeler un Chevalier
+  st.factions.rep.jediRep = 50; st.turn++;
+  E.lendJedi(st, "rep", null);
+  const lent = st.fleets.find(f => f.owner === "rep" && (f.heroes || []).some(h => h.kind === "jedi"));
+  if(!lent || !J.lent.rep) fail("Chevalier non prêté");
+  E.recallJedi(st, lent.id, lent.heroes.findIndex(h => h.kind === "jedi"));
+  if(J.lent.rep || J.strength !== k0 + 1) fail("Chevalier non rappelé");
+  // Un Maître prêté : Oro Dakkan renforce la flotte
+  J.masters.dakkan = {state:"temple"}; st.turn++;
+  E.lendJedi(st, "rep", "dakkan");
+  const df = st.fleets.find(f => (f.heroes || []).some(h => h.master === "dakkan"));
+  if(!df || J.masters.dakkan.state !== "fleet" || !(E.heroMul(df) >= 1.25)) fail("Oro Dakkan devrait porter sa flotte (+25 %)");
+  // Protéger un monde : l'envahisseur affronte un Maître
+  J.masters.vaal = {state:"temple"}; st.turn++;
+  E.guardWorld(st, "coruscant", "vaal");
+  const atk = E.addFleet(st, "man", "coruscant", {frig:2}, 0); atk.troops = {inf:4, tank:0, walk:0, art:0};
+  st.fleets.filter(f => f.at === "coruscant" && f.owner === "rep").forEach(f => E.removeFleet(st, f));
+  const gs = E.makeInvasion(st, atk);
+  if(!gs.jedi || !gs.jedi.guard || gs.jedi.master !== "vaal") fail("le Maître de garde devrait défendre Coruscant");
+  const rep0 = st.factions.man.jediRep;
+  E.applyGround(st, gs, E.autoGround(st, gs, null));
+  if(st.factions.man.jediRep !== rep0 - 10) fail("envahir un monde protégé devrait coûter 10 de réputation");
+  // Médiation entre deux factions en guerre
+  st.factions.lig.jediRep = 50;
+  let truce = false;
+  for(let i = 0; i < 6 && !truce; i++){
+    st.turn++; st.clashes["lig:emp"] = st.clashes["emp:lig"] = st.turn;
+    st.factions.lig.weariness = st.factions.emp.weariness = 100;
+    E.mediate(st, "lig", "emp");
+    truce = st.truces.some(x => (x.a === "lig" && x.b === "emp") || (x.a === "emp" && x.b === "lig"));
+  }
+  if(!truce) fail("la médiation devrait finir par aboutir");
+  // Enquête sur le culte Sith, fouille d'un site
+  const S = st.factions.sith, x0 = S.exposure;
+  st.turn++; E.jediHunt(st);
+  if(!(S.exposure > x0)) fail("l'enquête Jedi devrait exposer le Sith");
+  const site = st.sithSites[0];
+  E.jediSearch(st, site);
+  if(st.sithSites.includes(site)) fail("le site Sith devrait être scellé");
+  // Aide humanitaire
+  const w = st.systems.lothal; w.loyalty = 30; st.turn++;
+  E.sendAid(st, "lothal");
+  if(w.loyalty !== 42) fail("l'aide Jedi devrait donner +12 de loyauté");
+  checkInvariants(st, "v0.9 Jedi");
+  // Duel contre un Seigneur Sith révélé
+  st = E.newGame("jedi", 9200);
+  st.factions.sith.shadow = false; st.factions.sith.acolytes = 0; st.factions.jedi.inf = 500;
+  let dueled = false;
+  for(let i = 0; i < 30 && st.factions.sith.alive; i++){
+    st.turn += 5;
+    const m = E.MASTER_IDS.find(x => E.canDuel(st, x));
+    if(!m){ E.MASTER_IDS.forEach(x => { if(st.jedi.masters[x].state === "dead") st.jedi.masters[x] = {state:"temple"}; }); continue; }
+    E.jediDuel(st, m); dueled = true;
+  }
+  if(!dueled || st.factions.sith.alive) fail("un duel devrait finir par abattre le Seigneur Sith sans disciple");
+  // Conclave de la Paix
+  st = E.newGame("jedi", 9300);
+  st.factions.sith.alive = false; st.turn = 60; st.factions.jedi.inf = 200;
+  ["emp", "rep", "man", "lig"].forEach(x => { st.factions[x].jediRep = 60; });
+  E.makeTruce(st, "emp", "rep"); E.makeTruce(st, "man", "lig");
+  if(!E.conclaveStatus(st).ready || !E.convokeConclave(st) || st.over.winner !== "jedi") fail("le Conclave de la Paix devrait donner la victoire : " + JSON.stringify(E.conclaveStatus(st)));
+  // Extinction
+  st = E.newGame("jedi", 9400);
+  st.jedi.strength = 0; E.MASTER_IDS.forEach(x => { st.jedi.masters[x] = {state:"dead"}; });
+  E.jediTurn(st);
+  if(st.factions.jedi.alive) fail("un Ordre sans Jedi devrait s'éteindre");
+  // Généraux
+  st = E.newGame("rep", 9500);
+  const R = st.factions.rep; R.cr = 1000; R.inf = 200;
+  const g = E.hireGeneral(st, "coruscant");
+  if(!g || st.systems.coruscant.general !== g.id) fail("général non nommé");
+  const fl = st.fleets.find(f => f.owner === "rep" && f.at === "coruscant");
+  fl.troops = {inf:4, tank:0, walk:0, art:0};
+  E.generalToFleet(st, "coruscant", fl.id);
+  if(fl.general !== g.id || st.systems.coruscant.general != null) fail("le général devrait embarquer");
+  st.systems.chandrila.owner = "man";
+  fl.at = "chandrila";
+  g.traits = ["brilliant"]; g.xp = 2;
+  const gi = E.makeInvasion(st, fl), pw = E.groundPower(st, gi).att;
+  fl.general = null;
+  const pw0 = E.groundPower(st, gi).att;
+  fl.general = g.id;
+  if(!(pw > pw0 * 1.2)) fail("un général brillant devrait renforcer l'assaut (" + pw0 + " → " + pw + ")");
+  fl.at = "coruscant"; st.systems.chandrila.owner = "rep";
+  const g2 = E.hireGeneral(st, "coruscant");
+  const fl2 = E.addFleet(st, "rep", "coruscant", {frig:1}, 0);
+  E.generalToFleet(st, "coruscant", fl2.id);
+  E.mergeFleets(st, fl, fl2);
+  if(st.systems.coruscant.general !== g2.id) fail("le second général devrait redescendre sur le monde");
+  E.capture(st, st.systems.coruscant, "man");
+  if(E.charOf(st, g2.id)) fail("un monde pris devrait coûter son général");
+  checkInvariants(st, "v0.9 généraux");
+  // L'IA nomme des généraux, l'Ordre Jedi IA agit
+  const ga = E.newGame("emp", 9600);
+  for(let t = 0; t < 50 && !ga.over; t++){ E.runAI(ga, {includePlayer:true}); E.finishTurnOnly(ga); checkInvariants(ga, "v0.9 IA tour " + ga.turn); }
+  const gens = Object.values(ga.chars).filter(c => c.role === "general").length;
+  if(!gens) fail("l'IA devrait nommer des généraux");
+  if(!ga.jedi.searched.length && !ga.jedi.guards.length && !Object.values(ga.jedi.lent).some(Boolean) && ga.jedi.huntTurn === 0) fail("l'Ordre Jedi IA ne fait rien");
+  console.log("v0.9 : padawans, Chevaliers et Maîtres prêtés, protection, médiation, enquête, fouille, aide, duel, Conclave, extinction, généraux vérifiés ; IA au tour 50 : " + gens + " généraux, " + ga.jedi.strength + " Chevaliers au Temple");
 }
 
 // ---------- Boucliers orientés : un tir dans le dos fait plus mal ----------

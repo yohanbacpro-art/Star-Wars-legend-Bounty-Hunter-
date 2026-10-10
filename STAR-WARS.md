@@ -1,4 +1,4 @@
-# L'Effondrement — 75 ap. BY (prototype v0.8)
+# L'Effondrement — 75 ap. BY (prototype v0.9)
 
 Jeu de grande stratégie galactique au tour par tour, dans l'esprit de Total War.
 Tout tient dans `star-wars.html` : l'ouvrir dans un navigateur, sans dépendance ni build.
@@ -148,14 +148,69 @@ Ils changent de mains avec leur monde. Une conquête abîme les installations : 
 
 **IA et équilibrage** (80 parties IA contre IA) : l'IA investit avant d'armer, à raison d'une vocation et d'un bâtiment par tour au plus, en gardant une réserve. Une première version faisait de chaque monde frontalier une forteresse : 55 % des parties finissaient sans vainqueur, car les mondes conquis, peu loyaux, se révoltaient. Désormais elle fait des greniers par défaut, et seulement quelques forteresses (fronts menacés et loyaux, un monde sur six au plus) et quelques usines (autour des chantiers, un monde sur cinq). Résultat : 35 % de parties sans vainqueur au tour 150. Victoires : Vestiges impériaux 18, Ligue 15, République 8, Mandalore 7, Sith 3, seigneur de guerre 1 ; 29 par domination, 23 par hégémonie.
 
+## v0.9 — l'Ordre Jedi jouable, les Maîtres uniques et les généraux
+
+**L'Ordre Jedi**, sixième faction jouable, en miroir du Sith : ni monde ni flotte, il ne peut pas être conquis. Il agit par ses Chevaliers (12 au départ) depuis l'écran « Temple ». Deux actions par tour, trois avec dix Chevaliers au Temple :
+- **Prêter** un Chevalier (un par faction) ou un Maître à une faction qui l'accueille (réputation 35 ou plus) : il rejoint sa meilleure flotte. On peut le rappeler, la faction le prend mal.
+- **Protéger un monde** pendant huit tours : le Jedi se bat toujours parmi les défenseurs, et l'envahir coûte 10 de réputation.
+- **Médiation** entre deux factions en guerre (10 d'influence) : chance selon leur lassitude.
+- **Aide humanitaire** (30 crédits) : loyauté +12, guérit la pandémie.
+- **Enquêter sur le culte Sith** (8 d'influence, une fois par tour) : la trace du Sith monte ; un agent peut être démasqué, un acolyte abattu. À 100, le culte est démantelé. Révélé, le Sith voit ses mondes se soulever.
+- **Fouiller un système** (5 d'influence) : un site Sith oublié est scellé ; un site déjà exploité est purifié (Puissance obscure −30).
+- **Défier le Seigneur Sith** révélé en duel, avec un Maître.
+- **Jugements** : honorer une faction (15 d'influence, réputation +10) ou la condamner (réputation −20, résistance sur ses mondes).
+- **Padawans** (30 crédits, 5 d'influence, sans action) : Chevaliers en huit tours, trois à la fois.
+
+Ressources : dons en crédits et influence des factions qui estiment l'Ordre (réputation 60 et 75). Le **Haut Conseil** se divise : les Gardiens veulent agir, les Consulaires la paix, les Sentinelles la traque des Sith. Un groupe trois tours sous 20 fait schisme : deux Chevaliers partent, l'un d'eux peut rejoindre les acolytes Sith. L'Ordre s'éteint s'il n'a plus aucun Jedi ni padawan.
+
+**Victoire : le Conclave de la Paix**, à partir du tour 40. Il faut les Sith anéantis, au moins huit Jedi vivants, toutes les grandes puissances à 40 de réputation ou plus, deux trêves ou alliances en cours, et 40 d'influence.
+
+**Six Maîtres Jedi uniques**, inventés pour 75 ap. BY (les héros de la saga ne sont que des légendes). Trois sont au Temple au départ ; les autres sortent de leur retraite tous les 25 tours. Leur mort est définitive.
+
+| Maître | Don |
+|---|---|
+| Toren Vaal, maître d'armes | au sol, se bat comme une compagnie entière, tombe deux fois moins ; le meilleur duelliste |
+| Lyra Senn, diplomate | au Temple, médiations bien plus sûres ; dans une faction, +2 d'influence par tour |
+| Oro Dakkan, méditation de combat | dans l'espace, sa flotte se bat 25 % mieux |
+| Sela Varn, sentinelle | au Temple, enquêtes deux fois plus efficaces ; dans une faction, démasque des agents |
+| Ikar Thol, guérisseur | protégeant un monde, guérit la pandémie et fait monter la loyauté ; les héros de sa flotte tombent moins |
+| Neema Ossari, archiviste | au Temple, localise un site Sith tous les quinze tours ; +1 d'influence par tour |
+
+Au sol, les Maîtres sont une unité à part (« Maître Jedi »), plus solide qu'un Chevalier.
+
+**Les généraux**, pour toutes les factions territoriales : 25 crédits et 20 d'influence ; un pour quatre mondes, plus un. Posté sur un monde, un général commande la garnison. Embarqué, il mène les invasions : sans lui, c'est l'amiral qui commande au sol. Il a les traits des autres personnages :
+- brillant +15 %, incompétent −15 %, +5 % par point d'expérience ;
+- prudent : pertes réduites d'un quart ;
+- cruel : la conquête coûte de la loyauté et de la réputation Jedi ;
+- populaire : la conquête apaise le monde ;
+- corrompu : détourne 3 crédits par tour.
+
+Il gagne de l'expérience en victoire et meurt une fois sur quatre en défaite. Il est fait prisonnier si son monde tombe. Corrompu par le Sith, il peut trahir en plein assaut. Deux flottes qui fusionnent ne gardent qu'un général ; le second redescend sur le monde.
+
+**L'Ordre IA** suit les mêmes règles :
+- il prête des héros aux factions honorables ;
+- il protège les capitales assiégées des factions qu'il respecte ;
+- il arbitre les guerres les plus usantes ;
+- il ne traque le Sith qu'une fois les rumeurs bien établies ;
+- il défie un Seigneur Sith révélé.
+
+**L'IA et les généraux** : l'IA nomme un général quand une flotte embarque des troupes, et les réserve à l'offensive.
+
+**Équilibrage**, sur 160 parties IA contre IA (deux séries de graines), comparé à la v0.8 :
+- 36 % de parties sans vainqueur au tour 150, contre 41 % ;
+- Sith révélé dans 34 parties, éliminé dans 9 ;
+- victoires Sith plus rares (1 contre 7), car l'Ordre se défend désormais.
+
+Un joueur Jedi simulé qui traque le Sith, soigne les réputations et économise pour le Conclave l'emporte dans 15 parties sur 40.
+
 ## Architecture
 
 Deux blocs `<script>` dans `star-wars.html` :
 
 | Bloc | Contenu |
 |---|---|
-| Moteur | Données (`SYSTEMS`, `LINKS`, `FACTIONS`, `SHIPS`, `TROOPS`, `UNITS`), `newGame`, économie, loyauté, troupes et invasions (`embark`, `makeInvasion`, `autoGround`, `applyGround`), politique (`REGIMES`, `DECREES`, `TRAITS`, `genChar`, `enactDecree`, `voteSupport`, `politicsTurn`, `resolveDilemma`), Syndicat et événements (`syndCut`, `takeLoan`, `hireMercs`, `assassinate`, `purge`, `syndicateTurn`, `EVENTS`, `DELAYED`, `eventsTurn`, `resolveEvent`), la Force (`hostile`, `jediTurn`, `sithTurn`, `sithCorrupt`, `sithCoup`, `sithClaim`, `probeChar`, `aiSith`, `HEROES`), bâtiments (`SPECS`, `BUILDINGS`, `UNIQUES`, `specialize`, `queueBuilding`, `buildingsTurn`, `warDamage`, `aiDevelop`), crises et diplomatie (`CRISES`, `startCrisis`, `crisisTurn`, `nb`, `makeAlliance`, `proposeAlliance`, `hegemonyStatus`, `convokeCongress`, `aiDiplomacy`), `runAI`, `finishTurn`, batailles (`autoBattle`, `createBattle`, `createGroundBattle`, `bAttack`, `bOrbital`, `bRunAI`, `bResult`, `applyBattle`). Aucune dépendance au DOM. |
-| Interface | Écran titre, carte SVG, panneau, écrans Gouvernement, Syndicat et Ombre, dilemmes et événements, bataille sur grille SVG, modales, sauvegarde `localStorage` (`sw75-save`). |
+| Moteur | Données (`SYSTEMS`, `LINKS`, `FACTIONS`, `SHIPS`, `TROOPS`, `UNITS`), `newGame`, économie, loyauté, troupes et invasions (`embark`, `makeInvasion`, `autoGround`, `applyGround`), politique (`REGIMES`, `DECREES`, `TRAITS`, `genChar`, `enactDecree`, `voteSupport`, `politicsTurn`, `resolveDilemma`), Syndicat et événements (`syndCut`, `takeLoan`, `hireMercs`, `assassinate`, `purge`, `syndicateTurn`, `EVENTS`, `DELAYED`, `eventsTurn`, `resolveEvent`), la Force (`hostile`, `jediTurn`, `sithTurn`, `sithCorrupt`, `sithCoup`, `sithClaim`, `probeChar`, `aiSith`, `HEROES`), bâtiments (`SPECS`, `BUILDINGS`, `UNIQUES`, `specialize`, `queueBuilding`, `buildingsTurn`, `warDamage`, `aiDevelop`), Ordre Jedi et généraux (`JEDI_MASTERS`, `lendJedi`, `guardWorld`, `mediate`, `jediHunt`, `jediDuel`, `jediSearch`, `conclaveStatus`, `jediTurn`, `aiJedi`, `hireGeneral`, `generalToFleet`, `generalMul`, `aiGeneralFor`), crises et diplomatie (`CRISES`, `startCrisis`, `crisisTurn`, `nb`, `makeAlliance`, `proposeAlliance`, `hegemonyStatus`, `convokeCongress`, `aiDiplomacy`), `runAI`, `finishTurn`, batailles (`autoBattle`, `createBattle`, `createGroundBattle`, `bAttack`, `bOrbital`, `bRunAI`, `bResult`, `applyBattle`). Aucune dépendance au DOM. |
+| Interface | Écran titre, carte SVG, panneau, écrans Gouvernement, Syndicat, Ombre et Temple, dilemmes et événements, bataille sur grille SVG, modales, sauvegarde `localStorage` (`sw75-save`). |
 
 L'aléatoire est un mulberry32 dont l'état vit dans la partie (`st.rng`) : une graine rejoue la même partie.
 
@@ -165,4 +220,4 @@ L'aléatoire est un mulberry32 dont l'état vit dans la partie (`st.rng`) : une 
 node tests/sw-sim.js [parties] [tours max]
 ```
 
-Joue des parties complètes où l'IA contrôle toutes les factions et vérifie les invariants à chaque tour (soutes jamais surchargées, garnisons positives…). Vérifie aussi que chaque monde a son gouverneur et chaque flotte son amiral. Joue 60 batailles spatiales et 60 batailles terrestres IA contre IA, contrôle les boucliers orientés, les frappes orbitales, le vote du Sénat, chaque option de chaque dilemme et de chaque événement (suivie de 12 tours pour déclencher les effets différés), les services du Syndicat (prêt, dette impayée, mercenaires, assassinat, purge), et la Force (coup d'État, Empire Sith, découverte fatale, succession du Seigneur Sith, trêve, invasion avec héros et Chevalier Jedi, enquête, condition de victoire Sith). Le Sith fait partie de la rotation des factions jouées. Enfin, chaque grande crise est lancée puis jouée 15 tours, et la route coupée, l'arme ancienne, la pandémie avec quarantaine, les alliances et la victoire par le Congrès galactique sont vérifiées. En v0.8 : emplacements jamais dépassés, niveaux et vocations valides, défense maximale cohérente avec les bâtiments ; spécialisation, construction, changement de vocation, chantier naval, comptoirs, bâtiment unique capturé, et développement de l'IA.
+Joue des parties complètes où l'IA contrôle toutes les factions et vérifie les invariants à chaque tour (soutes jamais surchargées, garnisons positives…). Vérifie aussi que chaque monde a son gouverneur et chaque flotte son amiral. Joue 60 batailles spatiales et 60 batailles terrestres IA contre IA, contrôle les boucliers orientés, les frappes orbitales, le vote du Sénat, chaque option de chaque dilemme et de chaque événement (suivie de 12 tours pour déclencher les effets différés), les services du Syndicat (prêt, dette impayée, mercenaires, assassinat, purge), et la Force (coup d'État, Empire Sith, découverte fatale, succession du Seigneur Sith, trêve, invasion avec héros et Chevalier Jedi, enquête, condition de victoire Sith). Le Sith fait partie de la rotation des factions jouées. Enfin, chaque grande crise est lancée puis jouée 15 tours, et la route coupée, l'arme ancienne, la pandémie avec quarantaine, les alliances et la victoire par le Congrès galactique sont vérifiées. En v0.8 : emplacements jamais dépassés, niveaux et vocations valides, défense maximale cohérente avec les bâtiments ; spécialisation, construction, changement de vocation, chantier naval, comptoirs, bâtiment unique capturé, et développement de l'IA. En v0.9 : généraux toujours à un poste valide, Maîtres Jedi jamais en double ; padawans, Chevaliers et Maîtres prêtés puis rappelés, protection d'un monde contre une invasion, médiation, enquête, fouille, aide, duel contre le Seigneur Sith, Conclave de la Paix, extinction de l'Ordre, généraux (nomination, embarquement, bonus au sol, fusion, capture), et une partie IA de 50 tours où l'IA nomme des généraux et où l'Ordre agit.
