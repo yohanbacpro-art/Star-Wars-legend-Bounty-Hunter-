@@ -109,11 +109,11 @@ gr_dom = prefix_dom(dom, 'gr')
 js = re.sub(r"getElementById\('([^']+)'\)", lambda m: f"getElementById('gr-{m.group(1)}')", js)
 js = must(js, 'function frame(now){', GATE % 'ground')
 js = must(js, "  initEnemy=units.filter(u=>u.side==='e'&&!u.T.static)", """  if(window.__CFG&&window.__CFG.ground){const C=window.__CFG.ground;
-    units=units.filter(u=>u.side==='e'&&u.T.static).slice(0,C.turrets==null?1:C.turrets);
+    units=units.filter(u=>u.side==='e'&&u.T.static).slice(0,C.turrets==null?1:C.turrets);units.forEach(u=>u.style=C.eStyle||'reb');
     const PP=[[170,500],[300,370],[300,640],[230,250],[90,690],[330,505],[200,800],[400,220]];
     const pl=[{type:'cmd',name:C.commander||'Commandement'},...(C.player||[]).filter(u=>u.type!=='cmd').slice(0,7)];
-    pl.forEach((u,i)=>{const m=mkUnit('p',u.type,u.name,PP[i][0],PP[i][1],i===0);if(u.hp!=null&&u.hp<1)m.hp=Math.max(1,Math.round(m.hpMax*u.hp));const p=settle(m,m.x,m.y);m.x=p.x;m.y=p.y;units.push(m);});
-    (C.enemy||[]).slice(0,6).forEach((t,i)=>{const guard=MODE==='assaut'&&i%2===0;const x=guard?OBJ.x+rnd(-170,-60):rnd(1000,1200),y=guard?OBJ.y+rnd(-200,200):rnd(120,880);const u=mkUnit('e',t.type,t.name,x,y);u.role=guard?'guard':'assault';const p=settle(u,u.x,u.y);u.x=p.x;u.y=p.y;units.push(u);});
+    pl.forEach((u,i)=>{const m=mkUnit('p',u.type,u.name,PP[i][0],PP[i][1],i===0);m.style=C.pStyle||'imp';if(u.hp!=null&&u.hp<1)m.hp=Math.max(1,Math.round(m.hpMax*u.hp));const p=settle(m,m.x,m.y);m.x=p.x;m.y=p.y;units.push(m);});
+    (C.enemy||[]).slice(0,6).forEach((t,i)=>{const guard=MODE==='assaut'&&i%2===0;const x=guard?OBJ.x+rnd(-170,-60):rnd(1000,1200),y=guard?OBJ.y+rnd(-200,200):rnd(120,880);const u=mkUnit('e',t.type,t.name,x,y);u.style=C.eStyle||'reb';u.role=guard?'guard':'assault';const p=settle(u,u.x,u.y);u.x=p.x;u.y=p.y;units.push(u);});
     orbital=C.orbital?1:0;
   }
   initEnemy=units.filter(u=>u.side==='e'&&!u.T.static)""")
