@@ -80,6 +80,9 @@ js = must(js, "  initEnemyHull=ships.filter(s=>s.side==='e')", """  if(window.__
     if(!ships.some(s=>s.flag)&&ships[0])ships[0].flag=true;
     const en=(C.enemy||[]).slice(0,8),n=en.length;
     en.forEach((u,i)=>{const y=n===1?430:140+i*(560/Math.max(1,n-1));const x=(u.type==='cruiser'?1400:u.type==='frigate'?1320:1240)+rnd(-30,30);const s=mkShip('e',u.type,u.name,x,y);s.style=u.style||C.eStyle||'reb';const p=settle(s,s.x,s.y);s.x=p.x;s.y=p.y;ships.push(s);});
+    if(MISSION==='station'){const st=mkShip('e','station',C.stationName||'Station de combat',1390,480);st.style=C.eStyle||'reb';const q=settle(st,st.x,st.y);st.x=q.x;st.y=q.y;ships.push(st);}
+    if(MISSION==='escorte'){const cv=mkShip('p','convoy','Convoi',330,720);cv.style=C.pStyle||'imp';const q=settle(cv,cv.x,cv.y);cv.x=q.x;cv.y=q.y;ships.push(cv);}
+    if(SPWX==='ionique')ships.forEach(s=>s.sh=Math.round(s.shMax/2));
     comp.length=0;en.forEach(u=>comp.push(u.type));
   }
   initEnemyHull=ships.filter(s=>s.side==='e')""")
@@ -96,8 +99,16 @@ requestAnimationFrame(frame);
 window.ENGINES=window.ENGINES||{};
 window.ENGINES.space={start(){const C=window.__CFG&&window.__CFG.space;const sec=document.getElementById('eng-space');
   SCENE=SCENES[C&&C.decor]||SCENES.planete;canFlee=!!(C&&C.canFlee);
+  MISSION=C&&['bataille','escorte','blocus','station'].includes(C.mission)?C.mission:'bataille';SPWX=C&&C.meteo==='ionique'?'ionique':'calme';
   if(C){sec.querySelector('h1').textContent=C.title||'Bataille spatiale';sec.querySelector('.eyebrow').textContent='Bataille spatiale';
-    const fl=(C.player||[]).find(u=>u.flag)||(C.player||[])[0];sec.querySelector('.brief').textContent=C.solo?`Abattez ou faites fuir vos poursuivants. Si ${fl?fl.name:'votre vaisseau'} est détruit, c’est perdu. Dès le tour 3, vous pouvez sauter en hyperespace.`:`Détruisez la flotte ennemie ou forcez-la à fuir. Si ${fl?fl.name:'votre vaisseau amiral'} tombe, la bataille est perdue.${C.canFlee?' Dès le tour 3, vous pouvez sauter en hyperespace.':''}`;}
+    const fl=(C.player||[]).find(u=>u.flag)||(C.player||[])[0];
+    const MB={escorte:'Protégez le convoi jusqu’à la fin du tour 6, quand il pourra sauter en hyperespace. S’il est détruit, la mission échoue. ',blocus:`Amenez ${fl?fl.name:'votre vaisseau amiral'} dans la zone de saut, à droite de la carte. `,station:'Détruisez la station de combat ennemie. '}[MISSION]||'';
+    const ion=SPWX==='ionique'?' Tempête ionique : boucliers à moitié et sans recharge, précision réduite.':'';
+    const nm=fl?fl.name:'votre vaisseau amiral';
+    const base=C.solo?`Abattez ou faites fuir vos poursuivants. Si ${nm} est détruit, c’est perdu. Dès le tour 3, vous pouvez sauter en hyperespace.`
+      :MISSION==='bataille'?`Détruisez la flotte ennemie ou forcez-la à fuir. Si ${nm} tombe, la bataille est perdue.${C.canFlee?' Dès le tour 3, vous pouvez sauter en hyperespace.':''}`
+      :`Si ${nm} tombe, la bataille est perdue.`;
+    sec.querySelector('.brief').textContent=MB+base+ion;}
   newBattle();resize();}};
 })();""")
 sp_js = js
@@ -113,7 +124,10 @@ js = must(js, "  initEnemy=units.filter(u=>u.side==='e'&&!u.T.static)", """  if(
     const PP=[[170,500],[300,370],[300,640],[230,250],[90,690],[330,505],[200,800],[400,220]];
     const pl=[{type:'cmd',name:C.commander||'Commandement'},...(C.player||[]).filter(u=>u.type!=='cmd').slice(0,7)];
     pl.forEach((u,i)=>{const m=mkUnit('p',u.type,u.name,PP[i][0],PP[i][1],i===0);m.style=C.pStyle||'imp';if(u.hp!=null&&u.hp<1)m.hp=Math.max(1,Math.round(m.hpMax*u.hp));const p=settle(m,m.x,m.y);m.x=p.x;m.y=p.y;units.push(m);});
-    (C.enemy||[]).slice(0,6).forEach((t,i)=>{const guard=MODE==='assaut'&&i%2===0;const x=guard?OBJ.x+rnd(-170,-60):rnd(1000,1200),y=guard?OBJ.y+rnd(-200,200):rnd(120,880);const u=mkUnit('e',t.type,t.name,x,y);u.style=C.eStyle||'reb';u.role=guard?'guard':'assault';const p=settle(u,u.x,u.y);u.x=p.x;u.y=p.y;units.push(u);});
+    if(MODE==='escorte'){const c=mkUnit('p','convoy','Convoi',300,500);c.style=C.pStyle||'imp';const q=settle(c,c.x,c.y);c.x=q.x;c.y=q.y;units.push(c);}
+    (C.enemy||[]).slice(0,6).forEach((t,i)=>{const guard=(MODE==='assaut'||MODE==='sabotage')&&i%2===0;
+      let x=guard?OBJ.x+rnd(-170,-60):rnd(1000,1200),y=guard?OBJ.y+rnd(-200,200):rnd(120,880);
+      if(MODE==='embuscade'){x=rnd(320,820);y=i%2?rnd(60,150):rnd(850,940);}else if(MODE==='escorte'||MODE==='exfiltration'){x=rnd(650,1300);y=rnd(100,900);}const u=mkUnit('e',t.type,t.name,x,y);u.style=C.eStyle||'reb';u.role=guard?'guard':'assault';const p=settle(u,u.x,u.y);u.x=p.x;u.y=p.y;units.push(u);});
     orbital=C.orbital?1:0;
   }
   initEnemy=units.filter(u=>u.side==='e'&&!u.T.static)""")
@@ -127,10 +141,15 @@ js = must(js, "newBattle();\nrequestAnimationFrame(frame);\n})();", """newBattle
 requestAnimationFrame(frame);
 window.ENGINES=window.ENGINES||{};
 window.ENGINES.ground={start(){const C=window.__CFG&&window.__CFG.ground;const sec=document.getElementById('eng-ground');
-  BIOME=BIOMES[C&&C.terrain]||BIOMES.tempere;MODE=C&&['assaut','elimination','defense'].includes(C.mode)?C.mode:'assaut';HOLD=C&&C.hold||6;
+  BIOME=BIOMES[C&&C.terrain]||BIOMES.tempere;MODE=C&&['assaut','elimination','defense','escorte','exfiltration','sabotage','embuscade'].includes(C.mode)?C.mode:'assaut';HOLD=C&&C.hold||6;
+  MAP=C&&['plaine','ville','canyon','base','riviere'].includes(C.carte)?C.carte:'plaine';WEATHER=C&&WX[C.meteo]?C.meteo:'clair';
   if(C){sec.querySelector('h1').textContent=C.title||'Bataille terrestre';sec.querySelector('.eyebrow').textContent='Bataille terrestre';
     const cmd=`Si l’escouade de ${C.commander||'commandement'} tombe, la bataille est perdue.`;
-    sec.querySelector('.brief').textContent=MODE==='defense'?`Tenez la position jusqu’au tour ${HOLD} face à un ennemi plus nombreux. ${cmd}`:MODE==='elimination'?`Anéantissez l’ennemi ou mettez-le en déroute. ${cmd}`:`Anéantissez l’ennemi ou tenez le générateur deux tours d’affilée. ${cmd}`;}
+    const BR={defense:`Tenez la position jusqu’au tour ${HOLD} face à un ennemi plus nombreux.`,elimination:'Anéantissez l’ennemi ou mettez-le en déroute.',
+      escorte:'Menez le convoi jusqu’à la sortie, à droite de la carte. S’il est détruit, la mission échoue.',exfiltration:'Menez l’escouade de commandement jusqu’à la zone d’évacuation, à droite de la carte.',
+      sabotage:'Amenez de l’infanterie sur la cible et tenez-la un tour pour poser les charges.',embuscade:'Vous êtes pris en embuscade : survivez et repoussez l’ennemi.',assaut:'Anéantissez l’ennemi ou tenez le générateur deux tours d’affilée.'};
+    const WXT={pluie:' Pluie : portée réduite.',tempete:' Tempête de sable : portée et précision très réduites.',neige:' Blizzard : déplacements ralentis.',nuit:' Nuit : l’ennemi n’est visible qu’à proximité de vos unités.',brouillard:' Brouillard : visibilité très courte.'};
+    sec.querySelector('.brief').textContent=`${BR[MODE]} ${cmd}${WXT[WEATHER]||''}`;}
   newBattle();resize();}};
 })();""")
 gr_js = js

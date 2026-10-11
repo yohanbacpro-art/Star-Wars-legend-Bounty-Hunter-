@@ -897,7 +897,7 @@ function formMod(f,what){
 function roll3d6(){const d=[rint(1,6),rint(1,6),rint(1,6)];return{d,sum:d[0]+d[1]+d[2]};}
 function test(f,what,score){
   const r=roll3d6();score=Math.round(score);
-  const crit=r.sum<=4,fumble=r.sum>=17,ok=crit||(!fumble&&r.sum<=score);
+  const crit=r.sum<=4,fumble=r.sum>=(DSC==='glace'?16:17),ok=crit||(!fumble&&r.sum<=score);
   const res={...r,score,ok,crit,fumble,margin:score-r.sum,who:f.name,what};
   rolls.unshift(res);if(rolls.length>4)rolls.pop();
   const h=headWorld(f);floatT(h.x,h.y-70,`${r.sum} / ${score}${crit?' critique':fumble?' échec critique':''}`,ok?'#8dffad':'#ff8f8f',17);
@@ -983,7 +983,7 @@ async function fire(a,t,mod,dmgBonus,label,opts){
   if(!t||!t.alive){const o=otherSide(a);if(!o.length)return;t=o[0];}
   setPose(a,'aim',160);await wait(170);
   const st=stanceOf(t);
-  let m=mod+a.med+(a.offBal?-3:0);
+  let m=mod+a.med+(a.offBal?-3:0)-(DSC==='desert'||DSC==='foret'?1:0);
   if(st==='cover'&&!(opts&&opts.air))m-=3;if(st==='dodge')m-=2;if(st==='recover')m+=2;
   const r=test(a,label,a.tir+m);
   const mz=muzzleWorld(a);flash(mz.x,mz.y,26,'255,120,90');
@@ -1129,6 +1129,7 @@ async function resolveRound(){
   endRound();
 }
 function endRound(){
+  if(DSC==='lave'&&Math.random()<.3){const al=fighters.filter(f=>f.alive);if(al.length){const v=al[Math.floor(Math.random()*al.length)];boom(v.x,FLOOR-(v.zOff||0)-20,60);damage(v,rint(3,6),null);log(`Une gerbe de lave jaillit sous ${short(v.name)}.`,'kill');if(checkEnd())return;}}
   for(const f of fighters){
     if(!f.alive)continue;
     f.end=Math.min(f.endMax,f.end+1);f.med=f.medNext;f.medNext=0;f.offBal=f.offBalNext;f.offBalNext=false;
@@ -1184,6 +1185,7 @@ function startCombat(){
   fighters=[...roster.p,...roster.e].map(mkFighter);layout(fighters);
   fx=[];floats=[];logs=[];rolls=[];round=1;phase='orders';busy=false;over=false;pendingAct=null;lastP={};activeIdx=0;
   log(`${roster.p.map(f=>short(f.display||f.name)).join(', ')} face à ${roster.e.map(f=>short(f.display||f.name)).join(', ')}.`,'kill');
+  {const HZ={glace:'Le sol gelé est glissant : échec critique dès 16.',lave:'Le sol volcanique est instable : la lave peut jaillir à chaque échange.',desert:'Le sable gêne la visée : tous les tirs à −1.',foret:'Les arbres couvrent les combattants : tous les tirs à −1.'}[DSC];if(HZ)log(HZ,'kill');}
   $('over').hidden=true;showView('combat');renderCombat();
 }
 function renderDice(){

@@ -178,7 +178,9 @@ const TYPES={
   fighters:{label:'Escadron de chasseurs',elabel:'Chasseurs ennemis',hull:36,sh:0,move:260,range:130,dmg:[9,13],r:28,bolts:4,cost:1},
   interceptor:{label:'Escadron d’intercepteurs',elabel:'Intercepteurs ennemis',hull:28,sh:0,move:330,range:130,dmg:[8,12],r:26,bolts:4,cost:1},
   bomber:{label:'Escadron de bombardiers',elabel:'Bombardiers ennemis',hull:44,sh:10,move:200,range:140,dmg:[16,22],r:28,bolts:2,cost:2},
-  freighter:{label:'Cargo armé',elabel:'Cargo pirate',hull:90,sh:45,move:230,range:230,dmg:[12,17],r:30,bolts:2,cost:2}
+  freighter:{label:'Cargo armé',elabel:'Cargo pirate',hull:90,sh:45,move:230,range:230,dmg:[12,17],r:30,bolts:2,cost:2},
+  station:{label:'Station de combat',elabel:'Station de combat',hull:420,sh:200,move:0,range:330,dmg:[18,26],r:62,bolts:4,cost:6,static:true},
+  convoy:{label:'Convoi',elabel:'Convoi',hull:120,sh:40,move:130,range:0,dmg:[0,0],r:34,bolts:0,cost:2,unarmed:true}
 };
 const SMALL=t=>t==='fighters'||t==='interceptor'||t==='bomber';
 const EVADES=t=>t==='fighters'||t==='interceptor'||t==='freighter';
@@ -193,7 +195,13 @@ const MULT={
 };
 const ACC={cruiser:.95,frigate:.97,corvette:.95,fighters:.9,interceptor:.92,bomber:.85,freighter:.92};
 const DODGE={cruiser:.05,frigate:.07,corvette:.12,fighters:.15,interceptor:.22,bomber:.1,freighter:.1};
-const baseChance=(a,t)=>ACC[a]-DODGE[t]-(a==='cruiser'&&SMALL(t)?.3:0);
+for(const k of Object.keys(MULT)){MULT[k].station=MULT[k].cruiser;MULT[k].convoy=MULT[k].freighter;}
+MULT.station={...MULT.cruiser,station:1,convoy:1.1};MULT.convoy=Object.fromEntries(Object.keys(MULT.cruiser).map(k=>[k,0]));
+Object.assign(ACC,{station:.9,convoy:0});Object.assign(DODGE,{station:0,convoy:.05});
+const baseChance=(a,t)=>ACC[a]-DODGE[t]-((a==='cruiser'||a==='station')&&SMALL(t)?.3:0)-(SPWX==='ionique'?.05:0);
+/* Missions et météo spatiale */
+let MISSION='bataille',SPWX='calme';
+const EXIT_SX=1450;
 const PREF=MULT;
 /* Styles de faction : palette et silhouettes */
 const STEEL0=['#e1e6eb','#a7afb8','#7d8690','#4a525b'],SAND0=['#e3d6bf','#b9a98f','#93836c','#5a4e40'];
@@ -489,6 +497,19 @@ function drawEFreighter(g,now,P){
   g.fillStyle='#5a4e40';g.fillRect(-4,-25,10,6);g.fillRect(-4,19,10,6);
   engines(g,-31,[-7,7],now,P.eng,4);
 }
+function shStation(g,now,P){
+  const R=60;g.fillStyle='rgba(0,0,0,.35)';g.beginPath();g.arc(6,8,R,0,7);g.fill();
+  g.strokeStyle=P.hull[2];g.lineWidth=9;g.beginPath();g.arc(0,0,R-6,0,7);g.stroke();g.strokeStyle=P.hull[0];g.lineWidth=3;g.stroke();
+  g.strokeStyle=P.hull[1];g.lineWidth=6;g.beginPath();for(let i=0;i<6;i++){const a=i*Math.PI/3+now/9000;g.moveTo(Math.cos(a)*18,Math.sin(a)*18);g.lineTo(Math.cos(a)*(R-8),Math.sin(a)*(R-8));}g.stroke();
+  const cg=g.createRadialGradient(-6,-6,2,0,0,22);cg.addColorStop(0,P.hull[0]);cg.addColorStop(1,P.hull[3]);g.fillStyle=cg;g.beginPath();g.arc(0,0,20,0,7);g.fill();g.strokeStyle='rgba(15,12,10,.8)';g.lineWidth=1.2;g.stroke();
+  for(let i=0;i<6;i++){const a=i*Math.PI/3+Math.PI/6+now/9000;g.fillStyle=P.acc||P.hull[1];g.beginPath();g.arc(Math.cos(a)*(R-6),Math.sin(a)*(R-6),5,0,7);g.fill();}
+  const p=.5+.5*Math.sin(now/400);g.fillStyle=`rgba(${P.eng},${.4+.4*p})`;g.beginPath();g.arc(0,0,6,0,7);g.fill();
+}
+function shConvoy(g,now,P){
+  for(const [ox,oy] of [[14,-14],[0,0],[-14,14]]){g.save();g.translate(ox,oy);g.fillStyle='rgba(0,0,0,.3)';g.fillRect(-14,-4,32,12);
+    g.fillStyle=hullGrad(g,6,P.hull);g.fillRect(-16,-6,26,12);g.fillStyle=P.acc||P.hull[1];for(let x=-14;x<8;x+=6)g.fillRect(x,-5,4,10);
+    g.fillStyle=P.hull[0];g.beginPath();g.moveTo(10,-6);g.lineTo(18,0);g.lineTo(10,6);g.closePath();g.fill();engines(g,-17,[0],now,P.eng,2.4);g.restore();}
+}
 const SQ=[[12,0],[-4,-15],[-4,15],[-20,0]];
 function squad(g,now,P,craft){for(const [ox,oy] of SQ){g.save();g.translate(ox,oy);craft(g,now,P);g.restore();}}
 const CRAFT={
@@ -561,12 +582,12 @@ const SHAPES={
   wedge:drawPCruiser,organic:(g,now)=>drawECruiser(g,now),ring:shRing,rock:shRock,hammer:shHammer,
   impFrig:drawPFrigate,nebulon:(g,now)=>drawEFrigate(g,now),sepFrig:shSepFrig,blockFrig:shBlockFrig,rockS:(g,now,P)=>shRock(g,now,P,36,16),
   wedgeS:scaled(drawPCruiser,.5),cr90:shCR90,sepCorv:scaled(shSepFrig,.75),blockCorv:scaled(shBlockFrig,.75),rockXS:(g,now,P)=>shRock(g,now,P,28,13),
-  saucer:(g,now)=>drawPFreighter(g,now),wedgeF:drawEFreighter
+  saucer:(g,now)=>drawPFreighter(g,now),wedgeF:drawEFreighter,station:shStation,convoyS:shConvoy
 };
 for(const k of Object.keys(CRAFT))SHAPES[k]=(g,now,P)=>squad(g,now,P,CRAFT[k]);
 function drawArt(g,s,now){
   const st=styleOf(s),set=SHAPESET[st]||SHAPESET.imp,P=PAL[st]||PAL.imp;
-  const shape=set[s.type]||SHAPESET[s.side==='p'?'imp':'reb'][s.type]||'wedge';
+  const shape=s.type==='station'?'station':s.type==='convoy'?'convoyS':set[s.type]||SHAPESET[s.side==='p'?'imp':'reb'][s.type]||'wedge';
   (SHAPES[shape]||SHAPES.wedge)(g,now,P);
 }
 
@@ -673,7 +694,7 @@ function preview(a,t){
   chance+=(a.ace||0)-(t.ace||0);
   chance=Math.max(.1,Math.min(.95,chance));
   const cover=inField(t.x,t.y)?.7:1,m=MULT[a.type][t.type]*cover;
-  return{inRange:d<=a.range,chance,min:Math.round(T.dmg[0]*m),max:Math.round(T.dmg[1]*m),bypass:a.type==='fighters'||a.type==='bomber',cover:cover<1};
+  return{inRange:d<=a.range&&!T.unarmed,chance,min:Math.round(T.dmg[0]*m),max:Math.round(T.dmg[1]*m),bypass:a.type==='fighters'||a.type==='bomber',cover:cover<1};
 }
 function applyDamage(t,dmg,bypass){
   let toSh=0;if(!bypass){toSh=Math.min(t.sh,dmg);t.sh-=toSh;}
@@ -715,6 +736,9 @@ async function attack(a,t){
 }
 function checkEnd(){
   if(over)return true;
+  const conv=ships.find(s=>s.type==='convoy'),stn=ships.find(s=>s.type==='station');
+  if(MISSION==='escorte'&&conv&&!conv.alive){endBattle(false,'Le convoi a été détruit. La mission d’escorte a échoué.');return true;}
+  if(MISSION==='station'&&stn&&!stn.alive){endBattle(true,'La station de combat se disloque dans une gerbe de feu.');return true;}
   const flag=ships.find(s=>s.flag);
   if(!flag.alive){endBattle(false,'L’Inexorable a été détruit. Privée de son vaisseau amiral, la flotte du secteur se replie en désordre.');return true;}
   if(!ships.some(s=>s.side==='e'&&s.alive)){endBattle(true,'La flotte insurgée a été anéantie au-dessus de Kessaria IV.');return true;}
@@ -723,7 +747,7 @@ function checkEnd(){
 }
 
 /* ---------- IA ennemie ---------- */
-function score(e,t){return PREF[e.type][t.type]*100-dist(e,t)*.12-(t.hull+t.sh)*.25+(t.flag?15:0);}
+function score(e,t){return PREF[e.type][t.type]*(t.type==='convoy'?2.2:1)*100-dist(e,t)*.12-(t.hull+t.sh)*.25+(t.flag?15:0);}
 function pickTarget(e,list){let best=null,bs=-1e9;for(const t of list){const s=score(e,t);if(s>bs){bs=s;best=t;}}return best;}
 async function enemyAct(e){
   if(!e.alive||over)return;
@@ -752,9 +776,10 @@ async function enemyAct(e){
 async function enemyPhase(){
   phase='enemy';sel=null;busy=true;renderUI();
   const en=ships.filter(s=>s.side==='e'&&s.alive);
-  en.forEach(s=>s.sh=Math.min(s.shMax,s.sh+Math.round(s.shMax*.12)));
+  {const fl=ships.find(s=>s.flag&&s.alive);if(MISSION==='blocus'&&fl&&fl.x>=EXIT_SX){fled=false;endBattle(true,`${fl.name} force le blocus et saute en hyperespace.`);busy=false;return;}}
+  if(SPWX!=='ionique')en.forEach(s=>s.sh=Math.min(s.shMax,s.sh+Math.round(s.shMax*.12)));
   const left=en.reduce((a,s)=>a+s.hull+s.sh,0);
-  if(turn>=2&&left<initEnemyHull*.25){
+  if(turn>=2&&left<initEnemyHull*.25&&MISSION!=='station'){
     log('Les ennemis rompent le combat et sautent en hyperespace.','kill');
     await wait(500);
     endBattle(true,'Les derniers vaisseaux ennemis ont fui en hyperespace. L’orbite de Kessaria IV est à vous.');busy=false;return;
@@ -762,8 +787,9 @@ async function enemyPhase(){
   await wait(450);
   const order=[...en].sort((a,b)=>TYPES[a.type].cost-TYPES[b.type].cost);
   for(const e of order){await enemyAct(e);if(checkEnd()){busy=false;acting=null;return;}await wait(160);}
+  if(MISSION==='escorte'&&turn>=6){endBattle(true,'Le convoi a tenu jusqu’au saut : il disparaît en hyperespace.');busy=false;return;}
   turn++;phase='player';busy=false;
-  ships.filter(s=>s.side==='p'&&s.alive).forEach(s=>{s.moved=false;s.acted=false;s.evade=false;s.sh=Math.min(s.shMax,s.sh+Math.round(s.shMax*.12));});
+  ships.filter(s=>s.side==='p'&&s.alive).forEach(s=>{s.moved=false;s.acted=false;s.evade=false;if(SPWX!=='ionique')s.sh=Math.min(s.shMax,s.sh+Math.round(s.shMax*.12));});
   sel=ships.find(s=>s.side==='p'&&s.alive)||null;
   log(`Tour ${turn} : vos ordres.`);
   renderUI();
@@ -924,11 +950,19 @@ function drawHover(){
     if(inField(d.x,d.y)){g.font='600 13px "Chakra Petch",sans-serif';g.textAlign='center';g.fillStyle='#e8ab52';g.fillText('À COUVERT',d.x,d.y+sel.r*.7+18);}
   }
 }
+function drawMission(now){
+  const g=ctx;
+  if(MISSION==='blocus'){g.save();g.fillStyle='rgba(141,255,173,.05)';g.fillRect(EXIT_SX,0,W-EXIT_SX,H);g.strokeStyle='rgba(141,255,173,.55)';g.lineWidth=2;g.setLineDash([10,8]);g.lineDashOffset=-now/60;g.beginPath();g.moveTo(EXIT_SX,0);g.lineTo(EXIT_SX,H);g.stroke();g.setLineDash([]);
+    g.font='600 14px "Chakra Petch",sans-serif';g.textAlign='center';g.fillStyle='rgba(180,255,200,.85)';g.fillText('SAUT POSSIBLE',(EXIT_SX+W)/2,30);g.restore();}
+  if(SPWX==='ionique'){g.save();g.globalCompositeOperation='lighter';for(let i=0;i<3;i++){if(Math.random()<.6)continue;const x=rnd(0,W),y=rnd(0,H);g.strokeStyle=`rgba(140,200,255,${rnd(.15,.4)})`;g.lineWidth=1.4;g.beginPath();g.moveTo(x,y);for(let k=0;k<6;k++)g.lineTo(x+rnd(-90,90),y+rnd(-90,90));g.stroke();}
+    g.fillStyle='rgba(80,120,200,.05)';g.fillRect(0,0,W,H);g.restore();}
+}
 function frame(now){
   anims=anims.filter(f=>!f(now));
   ctx.setTransform(scale,0,0,scale,0,0);
   ctx.clearRect(0,0,W,H);
   if(bg)ctx.drawImage(bg,0,0,W,H);
+  drawMission(now);
   drawOverlays(now);
   for(const s of ships)if(s.alive)drawShip(s,now);
   drawFx(now);

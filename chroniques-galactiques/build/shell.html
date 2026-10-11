@@ -306,7 +306,10 @@ const PATH_FACTION={sith:'sith',jedi:'rep',moff:'imp',crime:'pirate',smuggler:'p
 const DIFF={facile:{l:'Facile',k:.75},normal:{l:'Normale',k:1},difficile:{l:'Difficile',k:1.25},brutal:{l:'Brutale',k:1.5}};
 const DECOR_SPACE={planete:'Orbite planétaire',espace:'Espace profond',asteroides:'Champ d’astéroïdes',nebuleuse:'Nébuleuse'};
 const TERRAIN={tempere:'Plaines tempérées',desert:'Désert',neige:'Toundra enneigée',urbain:'Ruines urbaines',jungle:'Jungle',volcan:'Monde volcanique'};
-const OBJECTIF={assaut:'Prendre le générateur',elimination:'Anéantir l’ennemi',defense:'Tenir la position'};
+const OBJECTIF={assaut:'Prendre le générateur',elimination:'Anéantir l’ennemi',defense:'Tenir la position',escorte:'Escorter un convoi',exfiltration:'Exfiltration',sabotage:'Sabotage',embuscade:'Embuscade'};
+const CARTES={plaine:'Plaine',ville:'Ville',canyon:'Canyon',base:'Base fortifiée',riviere:'Rivière et ponts'};
+const METEO={clair:'Temps clair',pluie:'Pluie',tempete:'Tempête de sable',neige:'Blizzard',nuit:'Nuit',brouillard:'Brouillard'};
+const MISSION_SP={bataille:'Bataille rangée',escorte:'Escorte de convoi',blocus:'Forcer le blocus',station:'Assaut de station'};
 const DECOR_DUEL={toits:'Toits sous la pluie',temple:'Temple ancien',desert:'Désert',foret:'Forêt',vaisseau:'Coursive de vaisseau',glace:'Monde de glace',lave:'Monde volcanique'};
 const TROOP_T={inf:'Escouade d’assaut',at:'Équipe antichar',speed:'Éclaireurs motorisés',ltank:'Char léger',tank:'Char lourd',art:'Artillerie',walker:'Marcheur lourd (AT-AT, AT-TE…)',scout:'Marcheur léger (AT-ST, AT-RT…)',air:'Glisseurs d’assaut',shield:'Troupes à bouclier'};
 const GALIAS={einf:'inf',eat:'at',eltank:'ltank',eturret:'turret'};
@@ -802,14 +805,14 @@ function balanceFleet(c){
     const ok=c.type==='ship'?['fighters','interceptor','bomber','freighter','corvette','frigate']:Object.keys(SHIP_COST);
     c.enemies=c.enemies.filter(x=>x&&ok.includes(x.type)).map(x=>({type:x.type,name:String(x.name||'Vaisseau ennemi').slice(0,30)}));
     const P=c.type==='ship'?2*(1+Math.max(0,(S.hero.skills.pilotage-10)*.05)):S.res.fleet.reduce((a,s)=>a+SHIP_COST[s.type],0);
-    trimTo(c.enemies,x=>SHIP_COST[x.type],P*k,n=>({type:'fighters',name:`Renforts ${n}`}),c.type==='ship'?4:7);
+    trimTo(c.enemies,x=>SHIP_COST[x.type],Math.max(1,P*k-(c.mission==='station'?5:0)),n=>({type:'fighters',name:`Renforts ${n}`}),c.type==='ship'?4:7);
   }else if(c.type==='ground'){
     c.enemies=c.enemies.map(x=>x&&({...x,type:GALIAS[x.type]||x.type})).filter(x=>x&&FOE_COST[x.type]).map(x=>({type:x.type,name:String(x.name||'Ennemis').slice(0,30)}));
     if(c.enemies.filter(x=>x.type==='turret').length>2){let t=0;c.enemies=c.enemies.filter(x=>x.type!=='turret'||++t<=2);}
     if(c.objectif!=='assaut')c.enemies=c.enemies.filter(x=>x.type!=='turret');
     const P=TROOP_COST.cmd+S.res.troops.slice(0,7).reduce((a,s)=>a+(TROOP_COST[s.type]||2),0);
     const mob=c.enemies.filter(x=>x.type!=='turret'),tur=c.enemies.filter(x=>x.type==='turret');
-    const target=P*k*(c.objectif==='defense'?1.4:1)-tur.length*FOE_COST.turret;
+    const target=P*k*({defense:1.4,embuscade:1.2,exfiltration:1.2,escorte:1.1}[c.objectif]||1)-tur.length*FOE_COST.turret;
     trimTo(mob,x=>FOE_COST[x.type],Math.max(2,target),n=>({type:n%3?'inf':'at',name:`Renforts ${n}`}),6);
     c.enemies=[...mob,...tur];
   }
@@ -883,11 +886,11 @@ const FORMAT=`FORMAT DE RÉPONSE OBLIGATOIRE :
 - choices : 3 actions courtes (moins de 12 mots) que le joueur pourrait tenter maintenant.
 - test : si l’action est risquée et incertaine : {"skill":"<clé>","mod":<entier de -6 à 2>,"why":"<raison courte>"}. Clés : sabre, tir, pilotage, commandement, discretion, persuasion, intimidation, technique, perception, athletisme, force (force seulement si le personnage est sensible à la Force). Dans ce cas, arrête la narration juste avant l’issue, ne la raconte pas, et mets "choices":[].
 - combat : si un affrontement doit être joué : {"type":"duel"|"ship"|"space"|"ground","title":"<titre court>","briefing":"<2 phrases>","allies":[…],"enemies":[…],"decor":"…"}. Arrête la narration au moment où le combat éclate et mets "choices":[]. Le jeu ajuste lui-même la force des ennemis à la difficulté choisie : décris l’adversité que l’histoire appelle.
-  · duel : "allies" = noms de compagnons existants (3 au plus, présents dans la scène). "enemies" = 1 à 4 objets {"name":"…","preset":"<modèle>","blade":"#rrggbb (facultatif)","form":"<forme facultative>","pv":<facultatif 10-60>}. Modèles par faction : ${lookCatalog()}. Pour un PNJ que les modèles ne décrivent pas, pars du modèle le plus proche et ajoute "look":{"head":"…","outfit":"…","cloth":"#rrggbb","cloth2":"#…","skin":"#…","hair":"#…","stripe":"#…","eyes":"#…","cloak":"none|long|tattered"}, "weapon":"saber|dual|double|pistol|rifle|staff|vibro", "tech":[…] et "kind":"sith|jedi|none" si besoin. Têtes : ${Object.keys(HEADS).join(', ')}. Tenues : ${Object.keys(OUTFITS).join(', ')}. Techniques : ${Object.keys(TECHS).join(', ')}. Formes : shiicho, makashi, soresu, ataru, shien, niman, juyo. "decor" : toits, temple, desert, foret, vaisseau, glace ou lave.
+  · duel : "allies" = noms de compagnons existants (3 au plus, présents dans la scène). "enemies" = 1 à 4 objets {"name":"…","preset":"<modèle>","blade":"#rrggbb (facultatif)","form":"<forme facultative>","pv":<facultatif 10-60>}. Modèles par faction : ${lookCatalog()}. Pour un PNJ que les modèles ne décrivent pas, pars du modèle le plus proche et ajoute "look":{"head":"…","outfit":"…","cloth":"#rrggbb","cloth2":"#…","skin":"#…","hair":"#…","stripe":"#…","eyes":"#…","cloak":"none|long|tattered"}, "weapon":"saber|dual|double|pistol|rifle|staff|vibro", "tech":[…] et "kind":"sith|jedi|none" si besoin. Têtes : ${Object.keys(HEADS).join(', ')}. Tenues : ${Object.keys(OUTFITS).join(', ')}. Techniques : ${Object.keys(TECHS).join(', ')}. Formes : shiicho, makashi, soresu, ataru, shien, niman, juyo. "decor" : toits, temple, desert (sable : tirs −1), foret (arbres : tirs −1), vaisseau, glace (sol glissant) ou lave (la lave jaillit).
   · Pour "ship", "space" et "ground", ajoute "camps":{"joueur":"<faction>","ennemi":"<faction>"} : ils donnent l’apparence des vaisseaux et des troupes. Factions : ${Object.entries(FACTIONS).map(([k,l])=>k+' ('+l+')').join(', ')}.
   · ship : le vaisseau personnel du joueur, seul, contre 1 à 4 objets {"type":"fighters"|"interceptor"|"bomber"|"freighter"|"corvette"|"frigate","name":"…"}. Poursuites, interceptions, pirates. Le joueur peut fuir en hyperespace. "decor" : planete, espace, asteroides ou nebuleuse.
-  · space : "enemies" = 2 à 7 objets {"type":"cruiser"|"frigate"|"corvette"|"fighters"|"interceptor"|"bomber"|"freighter","name":"…"}. Les bombardiers ravagent les gros vaisseaux, les intercepteurs chassent chasseurs et bombardiers. "decor" : planete, espace, asteroides ou nebuleuse. "fuite":true si la retraite est une option.
-  · ground : "enemies" = 2 à 6 objets {"type":"inf|at|speed|ltank|tank|art|walker|scout|air|shield|turret","name":"…"} (fantassins, antichar, motos, char léger, char lourd, artillerie, marcheur lourd type AT-AT, marcheur léger type AT-ST, glisseurs, troupes à bouclier ou droïdekas, tourelle). Les glisseurs peuvent faire tomber les marcheurs au câble de remorquage. "terrain" : tempere, desert, neige, urbain, jungle ou volcan. "objectif" : assaut (prendre un générateur gardé), elimination (anéantir l’ennemi) ou defense (tenir 6 tours face à un ennemi plus nombreux).
+  · space : "enemies" = 2 à 7 objets {"type":"cruiser"|"frigate"|"corvette"|"fighters"|"interceptor"|"bomber"|"freighter","name":"…"}. Les bombardiers ravagent les gros vaisseaux, les intercepteurs chassent chasseurs et bombardiers. "decor" : planete, espace, asteroides ou nebuleuse. "fuite":true si la retraite est une option. "mission" : bataille, escorte (protéger un convoi 6 tours), blocus (amener le vaisseau amiral à la zone de saut) ou station (détruire une station de combat). "meteo" : calme ou ionique (boucliers affaiblis).
+  · ground : "enemies" = 2 à 6 objets {"type":"inf|at|speed|ltank|tank|art|walker|scout|air|shield|turret","name":"…"} (fantassins, antichar, motos, char léger, char lourd, artillerie, marcheur lourd type AT-AT, marcheur léger type AT-ST, glisseurs, troupes à bouclier ou droïdekas, tourelle). Les glisseurs peuvent faire tomber les marcheurs au câble de remorquage. "terrain" : tempere, desert, neige, urbain, jungle ou volcan. "objectif" : assaut (prendre un générateur gardé), elimination (anéantir l’ennemi), defense (tenir 6 tours face à un ennemi plus nombreux), escorte (mener un convoi jusqu’à la sortie), exfiltration (mener le commandement jusqu’à l’évacuation), sabotage (poser des charges sur une cible) ou embuscade (le joueur est pris en embuscade). "carte" : plaine, ville, canyon, base (fortifiée, murs et porte) ou riviere (passage par deux ponts). "meteo" : clair, pluie, tempete (sable), neige (blizzard), nuit ou brouillard (l’ennemi n’est visible que de près).
 - updates : changements concrets, sinon null : {"credits":<±entier>,"addCompanions":[{"name":"…","preset":"<modèle>","note":"…"}],"removeCompanions":["nom"],"addFleet":[{"type":"cruiser|frigate|corvette|fighters|interceptor|bomber","name":"…"}],"addTroops":[{"type":"inf|at|speed|ltank|tank|art|walker|scout|air|shield","name":"…"}],"notes":["fait durable à retenir"],"xp":<0 à 3>,"heal":"repos"|<PV rendus au personnage>,"equipement":["beskar"|"jetpack"|"flamer"|"cortosis"|"grenades"],"faction":"<clé de faction, si les forces du joueur changent de camp>","perteEquipement":[…]}. Donne de l’équipement seulement quand l’histoire le met vraiment entre les mains du personnage (achat, butin, cadeau). "heal":"repos" soigne entièrement le personnage et ses compagnons.
 - chronicle : 1 ou 2 phrases factuelles résumant ce qui vient de se passer (c’est ta mémoire).
 - codex : le carnet que le joueur consulte, uniquement les entrées nouvelles ou modifiées (elles sont fusionnées par nom), sinon null : {"pnj":[{"nom":"…","role":"…","relation":"allié|amical|neutre|méfiant|hostile","statut":"vivant|mort|disparu|captif","note":"ce que le joueur sait","voix":"façon de parler, tics, ce qu’il cache","lien":"nature du lien en 2-4 mots (ex. dette d’honneur, rivalité, confiance fragile)","affinite":<−5 à +5 envers le joueur>,"evenement":"ce qui vient de changer le lien, s’il a changé","romance":"aucune|attirance|flirt|liaison|amour|rupture"}],"quetes":[{"titre":"…","etat":"en cours|réussie|échouée|abandonnée","note":"…"}],"lieux":[{"nom":"…","note":"…"}],"factions":[{"nom":"…","attitude":"alliée|neutre|hostile|…","note":"…"}]}. Ajoute chaque PNJ nommé important, chaque objectif que le joueur poursuit, chaque lieu marquant. N’y mets jamais ce que le joueur ignore (c’est la place du carnet secret).
@@ -1013,7 +1016,9 @@ function applyData(d){
     const dec={duel:DECOR_DUEL,ship:DECOR_SPACE,space:DECOR_SPACE,ground:TERRAIN}[c.type],dv=c.type==='ground'?c.terrain:c.decor;
     const combat={type:c.type,title:String(c.title||'Affrontement').slice(0,60),briefing:String(c.briefing||'').slice(0,400),allies:(c.allies||[]).slice(0,3),
       enemies:(Array.isArray(c.enemies)?c.enemies:[]).slice(0,c.type==='space'?7:c.type==='ground'?6:4),decor:dec[dv]?dv:Object.keys(dec)[0],
-      objectif:c.type==='ground'&&OBJECTIF[c.objectif]?c.objectif:'assaut',fuite:c.type==='ship'?c.fuite!==false:c.fuite===true};
+      objectif:c.type==='ground'&&OBJECTIF[c.objectif]?c.objectif:'assaut',fuite:c.type==='ship'?c.fuite!==false:c.fuite===true,
+      carte:c.type==='ground'&&CARTES[c.carte]?c.carte:'plaine',meteo:c.type==='ground'?(METEO[c.meteo]?c.meteo:'clair'):(c.meteo==='ionique'?'ionique':'calme'),
+      mission:c.type==='space'&&MISSION_SP[c.mission]?c.mission:'bataille'};
     if(c.type!=='duel'){const cp=c.camps||{},j=FACTIONS[cp.joueur]?cp.joueur:S.res.faction;combat.camps={joueur:j,ennemi:FACTIONS[cp.ennemi]?cp.ennemi:(OPP[j]||'pirate')};}
     balanceFleet(combat);
     S.pending={kind:'combat',combat};
@@ -1051,7 +1056,7 @@ function renderAct(){
     const c=S.pending.combat;const kind={duel:'Combat rapproché',ship:'Combat de vaisseau',space:'Bataille spatiale',ground:'Bataille terrestre'}[c.type];
     const foes=c.type==='duel'?c.enemies.map(e=>esc(e.name||'?')):c.enemies.map(e=>esc(e.name||e.type));
     const mine=c.type==='duel'?[esc(S.hero.name),...(c.allies||[]).map(n=>esc(typeof n==='string'?n:n.name))]:c.type==='ship'?[`${esc(S.res.ship)} (${pct(S.res.shipHull)})`]:c.type==='space'?S.res.fleet.map(s=>esc(s.name)):[esc(S.hero.name)+' (commandement)',...S.res.troops.map(s=>esc(s.name))];
-    const where=c.type==='ground'?`${TERRAIN[c.decor]} · ${OBJECTIF[c.objectif]}`:c.type==='duel'?DECOR_DUEL[c.decor]:DECOR_SPACE[c.decor];
+    const where=c.type==='ground'?`${TERRAIN[c.decor]} · ${CARTES[c.carte||'plaine']}${c.meteo&&c.meteo!=='clair'?' · '+METEO[c.meteo]:''} · ${OBJECTIF[c.objectif]}`:c.type==='duel'?DECOR_DUEL[c.decor]:`${DECOR_SPACE[c.decor]}${c.type==='space'&&c.mission&&c.mission!=='bataille'?' · '+MISSION_SP[c.mission]:''}${c.meteo==='ionique'?' · Tempête ionique':''}`;
     main=`<div class="combatcard"><span class="kind">${kind}</span><span class="t">${esc(c.title)}</span><span class="kind">${c.camps?esc(FACTIONS[c.camps.joueur]+' contre '+FACTIONS[c.camps.ennemi])+' · ':''}${esc(where||'')} · Difficulté ${DIFF[S.zero.diff||'normal'].l.toLowerCase()}${c.fuite?' · fuite possible':''}</span><span>${esc(c.briefing)}</span><ul><li>Ton camp : ${mine.join(', ')}</li><li>En face : ${foes.join(', ')}</li></ul><div><button type="button" class="primary" id="fightBtn">Engager le combat</button></div></div>`;
   }else{
     main=`<div class="choices">${(S.choices||[]).map((c,i)=>`<button type="button" data-choice="${i}">${esc(c)}</button>`).join('')}</div>
@@ -1211,12 +1216,12 @@ function launchCombat(){
     const player=c.type==='ship'?[{type:'freighter',name:S.res.ship,flag:true,hull:frac(S.res.shipHull),pilot:S.hero.skills.pilotage}]
       :S.res.fleet.slice(0,8).map((s,i)=>({type:s.type,name:s.name,flag:i===0,hull:frac(s.hull)}));
     const cp=c.camps||{joueur:S.res.faction,ennemi:OPP[S.res.faction]||'pirate'};
-    window.__CFG.space={title:c.title,solo:c.type==='ship',canFlee:!!c.fuite,decor:c.decor,pStyle:c.type==='ship'?'own':cp.joueur,eStyle:cp.ennemi,player,enemy:c.enemies.map(x=>({type:x.type,name:x.name}))};
+    window.__CFG.space={title:c.title,solo:c.type==='ship',canFlee:!!c.fuite,decor:c.decor,mission:c.type==='ship'?'bataille':c.mission,meteo:c.meteo,pStyle:c.type==='ship'?'own':cp.joueur,eStyle:cp.ennemi,player,enemy:c.enemies.map(x=>({type:x.type,name:x.name}))};
     if(!window.__CFG.space.enemy.length)window.__CFG.space.enemy=[{type:'fighters',name:'Chasseurs ennemis'}];
   }else{
     window.__CFG.ground={title:c.title,commander:S.hero.name,player:S.res.troops.slice(0,7).map(s=>({type:s.type,name:s.name,hp:frac(s.hp)})),
       enemy:c.enemies.filter(x=>x.type!=='turret').map(x=>({type:x.type,name:x.name})),
-      turrets:Math.min(2,c.enemies.filter(x=>x.type==='turret').length),orbital:S.res.fleet.some(s=>s.type==='cruiser'),terrain:c.decor,mode:c.objectif,
+      turrets:Math.min(2,c.enemies.filter(x=>x.type==='turret').length),orbital:S.res.fleet.some(s=>s.type==='cruiser'),terrain:c.decor,mode:c.objectif,carte:c.carte,meteo:c.meteo,
       pStyle:(c.camps||{}).joueur||S.res.faction,eStyle:(c.camps||{}).ennemi||OPP[S.res.faction]||'pirate'};
     if(!window.__CFG.ground.enemy.length)window.__CFG.ground.enemy=[{type:'einf',name:'Fantassins'},{type:'einf',name:'Tireurs'}];
   }
