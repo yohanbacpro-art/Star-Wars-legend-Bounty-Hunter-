@@ -1,0 +1,809 @@
+<title>Chroniques galactiques</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Serif:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+/* Layout : console du MJ — récit en colonne de lecture à gauche, fiche du personnage à droite (empilée sur mobile). Les moteurs de combat prennent tout l'écran quand l'histoire les déclenche. Monde sombre unique. */
+:root{
+  --void:#08070a;
+  --deck:#100e12;
+  --deck2:#17141a;
+  --line:#2b2630;
+  --steel:#e4dfe4;
+  --dim:#968e98;
+  --amber:#e8ab52;
+  --sith:#ff4a4a;
+  --jedi:#5fb4ff;
+  --ok:#8dffad;
+  --f-display:'Chakra Petch','Bahnschrift','Arial Narrow',sans-serif;
+  --f-body:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --f-read:'IBM Plex Serif',Georgia,'Times New Roman',serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,'SFMono-Regular',Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{background:var(--void)}
+body{color:var(--steel);font-family:var(--f-body);font-size:14px;line-height:1.5}
+#shell{max-width:1320px;margin:0 auto;padding-inline:16px;padding-block:14px 32px;display:grid;gap:14px}
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 20px}
+.eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.top h1{font-family:var(--f-display);font-weight:700;font-size:clamp(22px,3vw,30px);letter-spacing:.05em;text-transform:uppercase;margin:2px 0 0}
+.top h1 span{color:var(--amber)}
+.topr{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.save{font-family:var(--f-mono);font-size:11px;color:var(--dim)}
+button{font-family:var(--f-display);font-weight:600;font-size:13px;letter-spacing:.06em;text-transform:uppercase;padding:10px 14px;border-radius:3px;border:1px solid var(--line);background:var(--deck2);color:var(--steel);cursor:pointer}
+button:hover:not(:disabled){border-color:var(--dim)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.primary{background:var(--amber);border-color:var(--amber);color:#1a1206}
+button.ghost{background:transparent}
+button.small{padding:6px 9px;font-size:11px}
+input[type=text],input[type=number],select,textarea{font-family:var(--f-body);font-size:14px;background:var(--deck2);color:var(--steel);border:1px solid var(--line);border-radius:3px;padding:9px 10px;width:100%;min-width:0}
+textarea{resize:vertical;line-height:1.45}
+.label{font-family:var(--f-display);font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.muted{color:var(--dim)}
+.panel{background:var(--deck);border:1px solid var(--line);border-radius:4px;padding:18px}
+
+/* Titre */
+.hero{position:relative;overflow:hidden;min-height:340px;display:grid;align-content:end;gap:14px;padding:28px}
+.hero canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.hero>*:not(canvas){position:relative}
+.hero h2{font-family:var(--f-display);font-size:clamp(28px,5vw,52px);line-height:1;letter-spacing:.04em;text-transform:uppercase;margin:0;max-width:16ch;text-wrap:balance}
+.hero p{max-width:60ch;margin:0;color:#cfc6cf}
+.hero .row{display:flex;gap:10px;flex-wrap:wrap}
+.how{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.how div{border-top:1px solid var(--line);padding-top:10px}
+.how b{font-family:var(--f-display);text-transform:uppercase;letter-spacing:.06em;font-size:14px;display:block;margin-bottom:4px}
+.how p{margin:0;color:var(--dim);font-size:13px}
+
+/* Création */
+.steps{display:flex;gap:4px;flex-wrap:wrap}
+.steps button{font-size:11px;padding:7px 10px;background:transparent;color:var(--dim)}
+.steps button.on{color:var(--steel);border-color:var(--amber)}
+.steps button.done{color:var(--steel)}
+.stepbody{display:grid;gap:16px}
+.stepbody h3{font-family:var(--f-display);font-size:22px;letter-spacing:.05em;text-transform:uppercase;margin:0}
+.stepbody .intro{margin:0;color:var(--dim);max-width:70ch}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
+.opt{display:grid;gap:4px;text-align:left;padding:12px;text-transform:none;letter-spacing:0;font-family:var(--f-body);font-weight:400}
+.opt b{font-family:var(--f-display);font-size:15px;letter-spacing:.05em;text-transform:uppercase;font-weight:600}
+.opt span{color:var(--dim);font-size:12.5px;line-height:1.35}
+.opt.on{border-color:var(--amber);background:#211a12}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.fld{display:grid;gap:5px;font-size:13px}
+.fld>span{color:var(--dim)}
+.skills{display:grid;gap:6px}
+.sk{display:grid;grid-template-columns:minmax(0,1fr) 34px 120px 34px;gap:8px;align-items:center;padding:6px 8px;border:1px solid var(--line);border-radius:3px;background:var(--deck2)}
+.sk .v{font-family:var(--f-mono);font-size:18px;text-align:center;font-variant-numeric:tabular-nums}
+.sk .bar{height:5px;background:#2a252c;position:relative}
+.sk .bar i{position:absolute;inset:0 auto 0 0;background:var(--amber)}
+.sk button{padding:4px 0;font-size:16px}
+.pool{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.pool b{font-family:var(--f-mono);font-size:22px;font-weight:500}
+.derived{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--dim)}
+.derived b{color:var(--steel);font-family:var(--f-mono);font-weight:500}
+.pvwrap{display:grid;grid-template-columns:260px minmax(0,1fr);gap:16px}
+@media (max-width:720px){.pvwrap{grid-template-columns:minmax(0,1fr)}}
+.pvwrap canvas{width:100%;max-width:100%;aspect-ratio:1/1.15;background:#0a080c;border:1px solid var(--line);border-radius:3px;display:block}
+.colors{display:flex;gap:10px;flex-wrap:wrap}
+.colors label{display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--dim)}
+input[type=color]{width:34px;height:26px;border:1px solid var(--line);background:none;padding:0;border-radius:3px}
+.checks{display:flex;gap:6px 14px;flex-wrap:wrap}
+.checks label{display:flex;gap:6px;align-items:center;font-size:13px}
+.listed{display:grid;gap:6px}
+.lrow{display:grid;grid-template-columns:150px minmax(0,1fr) auto;gap:6px;align-items:center}
+.lrow.c3{grid-template-columns:minmax(0,1fr) 170px auto}
+@media (max-width:560px){.lrow,.lrow.c3{grid-template-columns:minmax(0,1fr) auto}.lrow>*:first-child{grid-column:1/-1}}
+.stepfoot{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:14px}
+.chipset{display:flex;flex-wrap:wrap;gap:6px}
+.chipset button{text-transform:none;letter-spacing:.02em;font-size:13px;padding:7px 11px;font-family:var(--f-body);font-weight:500}
+.chipset button.on{border-color:var(--amber);background:#211a12;color:var(--amber)}
+.err{color:#ff8f8f;font-size:13px;margin:0}
+
+/* Récit */
+.story{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;align-items:start}
+@media (max-width:980px){.story{grid-template-columns:minmax(0,1fr)}}
+.reader{display:grid;gap:12px;min-width:0}
+.chap{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.chap h2{font-family:var(--f-display);font-size:24px;letter-spacing:.04em;text-transform:uppercase;margin:0;text-wrap:balance}
+.feed{display:grid;gap:14px;max-height:62vh;overflow:auto;padding-right:6px;scroll-behavior:smooth}
+.e-mj{font-family:var(--f-read);font-size:16.5px;line-height:1.65;color:#ece6ea;max-width:70ch}
+.e-mj p{margin:0 0 .75em}
+.e-mj p:last-child{margin-bottom:0}
+.e-mj .dlg{padding-left:14px;border-left:2px solid rgba(232,171,82,.35)}
+.e-me{justify-self:end;max-width:60ch;background:var(--deck2);border:1px solid var(--line);border-radius:3px;padding:9px 12px;font-size:14px}
+.e-me small{display:block;font-family:var(--f-mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:2px}
+.e-sys{font-family:var(--f-mono);font-size:12px;color:var(--dim);border-left:2px solid var(--line);padding-left:10px}
+.e-sys.chapter{font-family:var(--f-display);font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--amber);border-color:var(--amber)}
+.dicecard{display:grid;gap:6px;border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:3px;padding:10px 12px;background:var(--deck2);max-width:520px}
+.dicecard .t{font-family:var(--f-display);font-size:14px;letter-spacing:.06em;text-transform:uppercase}
+.dicecard .why{color:var(--dim);font-size:13px}
+.dd{display:flex;gap:6px;align-items:center;font-family:var(--f-mono);font-size:13px;color:var(--dim)}
+.dd i{font-style:normal;width:28px;height:28px;display:grid;place-items:center;border-radius:5px;background:var(--steel);color:#120d12;font-size:15px;font-weight:500}
+.dd i.rolling{animation:spin .5s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.dd i.rolling{animation:none}.feed{scroll-behavior:auto}}
+.res-ok{color:var(--ok);font-family:var(--f-mono)}
+.res-ko{color:#ff8f8f;font-family:var(--f-mono)}
+.combatcard{display:grid;gap:8px;border:1px solid rgba(255,74,74,.5);border-radius:3px;padding:12px 14px;background:#1a0f12;max-width:620px}
+.combatcard .t{font-family:var(--f-display);font-size:18px;letter-spacing:.05em;text-transform:uppercase;color:#ffb3a6}
+.combatcard .kind{font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.combatcard ul{margin:0;padding-left:18px;color:var(--dim);font-size:13px}
+.typing{font-family:var(--f-mono);font-size:12px;color:var(--dim)}
+.act{display:grid;gap:8px;border-top:1px solid var(--line);padding-top:12px}
+.choices{display:grid;gap:6px}
+.choices button{text-align:left;text-transform:none;letter-spacing:0;font-family:var(--f-body);font-weight:500;font-size:14px;padding:9px 12px}
+.choices button::before{content:'›';color:var(--amber);margin-right:8px;font-family:var(--f-display)}
+.say{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end}
+.say textarea{min-height:46px;max-height:180px}
+.sheet{display:grid;gap:14px}
+.sheet .nm{font-family:var(--f-display);font-size:20px;letter-spacing:.05em;text-transform:uppercase;line-height:1.1}
+.sheet .sub{color:var(--dim);font-size:12.5px}
+.sheet section{display:grid;gap:6px}
+.sklist{display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;font-size:13px}
+.sklist div{display:flex;justify-content:space-between;border-bottom:1px dotted var(--line);padding:2px 0}
+.sklist b{font-family:var(--f-mono);font-weight:500}
+.reslist{display:grid;gap:3px;font-size:13px}
+.reslist div{display:flex;justify-content:space-between;gap:8px}
+.reslist span:last-child{color:var(--dim);text-align:right}
+.chron{display:grid;gap:6px;font-size:12.5px;color:var(--dim);max-height:220px;overflow:auto}
+.chron b{color:var(--steel);font-weight:600}
+.warnbox{border:1px solid rgba(255,74,74,.5);background:#1a0f12;border-radius:3px;padding:10px 12px;font-size:13px}
+
+/* Moteurs : plein écran pendant les combats */
+.engine{min-height:100vh}
+.engine [data-return]{margin-top:2px}
+#sp-againBtn,#sp-newBtn,#gr-againBtn,#gr-newBtn,#ar-againBtn,#ar-backBtn,#ar-backBtn2{display:none!important}
+.engbar{max-width:1480px;margin:0 auto;padding:10px 16px 0;display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+.engbar span{font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+/*ENGINE_CSS*/
+</style>
+
+<div id="shell">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Jeu de rôle Star Wars Legends · MJ intégré</div>
+      <h1>Chroniques <span>galactiques</span></h1>
+    </div>
+    <div class="topr">
+      <span class="save" id="saveState"></span>
+      <button type="button" class="small ghost" id="menuNew" hidden>Nouvelle campagne</button>
+    </div>
+  </header>
+
+  <!-- Écran titre -->
+  <section id="scr-title" class="panel" style="display:grid;gap:18px">
+    <div class="hero panel" style="padding:28px">
+      <canvas id="heroCv" aria-hidden="true"></canvas>
+      <div class="eyebrow">Ta galaxie, ton personnage, tes batailles</div>
+      <h2>Une campagne écrite pendant que tu la joues</h2>
+      <p>Tu crées ton personnage, le MJ intégré construit une histoire autour de lui, les dés décident, et chaque affrontement se joue : duels au sabre, fusillades, batailles spatiales et terrestres.</p>
+      <div class="row">
+        <button type="button" class="primary" id="btnNew">Nouvelle campagne</button>
+        <button type="button" id="btnContinue" hidden>Reprendre la campagne</button>
+      </div>
+    </div>
+    <div class="how">
+      <div><b>1 · Fiche</b><p>Époque, voie, compétences en 3d6, apparence et armes, ressources de départ.</p></div>
+      <div><b>2 · Session zéro</b><p>Ce que tu veux vivre, le ton, le dosage dialogues/combats. Le MJ en tire un carnet secret.</p></div>
+      <div><b>3 · Récit</b><p>Choisis une action ou écris la tienne. Jets 3d6 sous la compétence quand c’est risqué.</p></div>
+      <div><b>4 · Combats</b><p>Le MJ déclenche le bon moteur, et le résultat revient dans l’histoire.</p></div>
+    </div>
+    <p class="err" id="mjWarn" hidden></p>
+  </section>
+
+  <!-- Création -->
+  <section id="scr-create" class="panel" hidden style="display:grid;gap:16px">
+    <nav class="steps" id="steps" aria-label="Étapes de création"></nav>
+    <div class="stepbody" id="stepBody"></div>
+    <p class="err" id="stepErr" hidden></p>
+    <div class="stepfoot">
+      <button type="button" id="stepPrev">Précédent</button>
+      <button type="button" class="primary" id="stepNext">Suivant</button>
+    </div>
+  </section>
+
+  <!-- Récit -->
+  <section id="scr-story" hidden>
+    <div class="story">
+      <div class="reader panel">
+        <div class="chap"><div><div class="eyebrow" id="chapNo"></div><h2 id="chapTitle"></h2></div><span class="eyebrow" id="eraTag"></span></div>
+        <div class="feed" id="feed" aria-live="polite"></div>
+        <div class="act" id="actZone"></div>
+      </div>
+      <aside class="panel sheet" id="sheet"></aside>
+    </div>
+  </section>
+</div>
+
+<!--ENGINES-->
+
+<script>
+/*ENGINE_JS*/
+</script>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const clone=o=>JSON.parse(JSON.stringify(o));
+const rint=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+
+/* ================= Données de règles ================= */
+const ERAS=[
+  {k:'oldrep',l:'Ancienne République',y:'≈ 3 950 av. BY',d:'Guerres mandaloriennes, Revan, la Guerre civile Jedi.'},
+  {k:'ruusan',l:'Nouvel Empire Sith',y:'≈ 1 000 av. BY',d:'Fin de l’Armée de Lumière contre la Confrérie des Ténèbres.'},
+  {k:'clone',l:'Guerre des Clones',y:'22 – 19 av. BY',d:'La République et les Séparatistes s’affrontent sur mille fronts.'},
+  {k:'dark',l:'Âge sombre de l’Empire',y:'19 av. BY – 0',d:'Les Jedi traqués, l’Empire étend son emprise.'},
+  {k:'gcw',l:'Guerre civile galactique',y:'0 – 4 ABY',d:'L’Alliance rebelle contre l’Empire.'},
+  {k:'newrep',l:'Nouvelle République',y:'5 – 25 ABY',d:'Vestiges impériaux, seigneurs de guerre, nouvel Ordre Jedi.'},
+  {k:'vong',l:'Invasion Yuuzhan Vong',y:'25 – 30 ABY',d:'Une galaxie au bord de l’effondrement.'},
+  {k:'legacy',l:'Ère Legacy',y:'≈ 130 ABY',d:'Le Nouvel Empire et l’Ordre Sith de Darth Krayt.'}
+];
+const SKILLS=[['sabre','Sabre / mêlée'],['tir','Tir'],['pilotage','Pilotage'],['commandement','Commandement'],['discretion','Discrétion'],['persuasion','Persuasion'],['intimidation','Intimidation'],['technique','Technique'],['perception','Perception'],['athletisme','Athlétisme'],['force','Force']];
+const SKL=Object.fromEntries(SKILLS);
+const POOL=26,BASE=8,MAXSK=16;
+const SHIP_T={cruiser:'Croiseur',frigate:'Frégate',fighters:'Escadron de chasseurs'};
+const TROOP_T={inf:'Escouade d’assaut',tank:'Char lourd',art:'Artillerie',speed:'Éclaireurs motorisés'};
+const FORMS={none:'Aucune',shiicho:'Shii-Cho',makashi:'Makashi',soresu:'Soresu',ataru:'Ataru',shien:'Djem So / Shien',niman:'Niman',juyo:'Juyo / Vaapad'};
+const TECHS={trakata:'Trakata',jarkai:'Jar’Kai',cortosis:'Gantelets de cortosis',rapid:'Tir rapide',grenades:'Grenades'};
+const WEAPONS={saber:'Sabre laser',dual:'Deux sabres',double:'Sabre double',pistol:'Pistolet blaster',rifle:'Fusil blaster'};
+
+/* Modèles d'apparence et d'adversaires (utilisés par le MJ et la création) */
+const LOOKS={
+  sithLord:{label:'Seigneur Sith',kind:'sith',weapon:'saber',blade1:'#ff2b2b',form:'juyo',pv:40,sabre:15,tir:9,force:15,fp:4,ref:13,look:{h:1.06,build:1.08,outfit:'robe',cloak:'tattered',head:'hood',skin:'#b08a74',hair:'#111',cloth:'#141114',cloth2:'#0f0d10',legs:'#0f0d10',cloakC:'#0b090c',glove:'#1d1a1e',bare:false,tattoo:false}},
+  sithWarrior:{label:'Guerrier Sith masqué',kind:'sith',weapon:'dual',blade1:'#ff2b2b',blade2:'#ff2b2b',form:'none',tech:['trakata','jarkai','cortosis'],pv:42,sabre:15,tir:10,force:14,fp:4,ref:13,look:{h:1.08,build:1.15,outfit:'robe',cloak:'tattered',head:'helm',skin:'#6b4636',hair:'#2a1a12',cloth:'#161113',cloth2:'#141012',legs:'#141012',cloakC:'#0c090b',glove:'#2a2421',bare:true,tattoo:true}},
+  sithAcolyte:{label:'Acolyte Sith',kind:'sith',weapon:'saber',blade1:'#ff3a3a',form:'ataru',pv:26,sabre:12,tir:9,force:11,fp:2,ref:13,look:{h:.97,build:.92,outfit:'robe',cloak:'none',head:'bald',skin:'#c89c84',hair:'#111',cloth:'#2a1d24',cloth2:'#1a1418',legs:'#1a1418',cloakC:'#1a1418',glove:'#1a1418',bare:false,tattoo:false}},
+  inquisitor:{label:'Inquisiteur',kind:'sith',weapon:'double',blade1:'#ff3030',form:'juyo',pv:34,sabre:14,tir:10,force:13,fp:3,ref:14,look:{h:1.0,build:.95,outfit:'armor',cloak:'none',head:'horns',skin:'#8a8fa8',hair:'#1a1a1f',cloth:'#2a2d33',cloth2:'#15161a',legs:'#1b1c21',cloakC:'#111111',glove:'#1c1d22',bare:false,tattoo:false}},
+  jediMaster:{label:'Maître Jedi',kind:'jedi',weapon:'saber',blade1:'#3fa8ff',form:'soresu',pv:40,sabre:15,tir:9,force:15,fp:4,ref:12,look:{h:1.03,build:1.05,outfit:'robe',cloak:'long',head:'beard',skin:'#c9a184',hair:'#8d8a84',cloth:'#a88c63',cloth2:'#4a3a2a',legs:'#4a3a2a',cloakC:'#3b2a1d',glove:'#5a4433',bare:false,tattoo:false}},
+  jediKnight:{label:'Chevalier Jedi',kind:'jedi',weapon:'saber',blade1:'#46ff70',form:'shien',pv:34,sabre:14,tir:9,force:13,fp:3,ref:13,look:{h:1.0,build:1.0,outfit:'robe',cloak:'long',head:'hair',skin:'#b98a6a',hair:'#2b1d14',cloth:'#9c8460',cloth2:'#3e3024',legs:'#3e3024',cloakC:'#3a2a1c',glove:'#4a3a2c',bare:false,tattoo:false}},
+  jediWarrior:{label:'Jedi combattante',kind:'jedi',weapon:'saber',blade1:'#46ff70',form:'ataru',pv:32,sabre:14,tir:9,force:13,fp:3,ref:14,look:{h:.96,build:.92,outfit:'robe',cloak:'none',head:'hairlong',skin:'#d4ab8e',hair:'#4a2f1f',cloth:'#c2aa80',cloth2:'#5a4632',legs:'#5a4632',cloakC:'#4a3626',glove:'#5a4433',bare:false,tattoo:false}},
+  smuggler:{label:'Contrebandier',kind:'none',weapon:'pistol',bolt:'#ff4a3a',tech:['rapid'],pv:28,sabre:9,tir:15,force:8,fp:0,ref:15,look:{h:1.0,build:1.0,outfit:'jacket',cloak:'none',head:'hair',skin:'#c49a7c',hair:'#2a1c12',cloth:'#6a4429',cloth2:'#d8d2c4',legs:'#2a2a33',cloakC:'#222222',glove:'#3a2a20',bare:false,tattoo:false}},
+  bountyHunter:{label:'Chasseur de primes',kind:'none',weapon:'rifle',bolt:'#ff8a3a',tech:['grenades'],pv:30,sabre:10,tir:14,force:8,fp:0,ref:13,look:{h:.98,build:1.0,outfit:'armor',cloak:'long',head:'trooper',skin:'#8a5a3c',hair:'#111',cloth:'#5c6150',cloth2:'#2a2c26',legs:'#33362e',cloakC:'#4a3b2c',glove:'#2a2622',bare:false,tattoo:false}},
+  trooper:{label:'Soldat impérial',kind:'none',weapon:'rifle',bolt:'#ff3030',pv:14,sabre:7,tir:10,force:6,fp:0,ref:10,look:{h:1.0,build:1.0,outfit:'trooper',cloak:'none',head:'trooper',skin:'#c9a184',hair:'#222',cloth:'#d9dcdf',cloth2:'#1c1e22',legs:'#d9dcdf',cloakC:'#222222',glove:'#1c1e22',bare:false,tattoo:false}},
+  officer:{label:'Officier',kind:'none',weapon:'pistol',bolt:'#ff3030',pv:18,sabre:8,tir:12,force:7,fp:0,ref:11,look:{h:1.0,build:.95,outfit:'uniform',cloak:'none',head:'hair',skin:'#e0bfa4',hair:'#4a3626',cloth:'#4a4f45',cloth2:'#2a2d27',legs:'#2a2d27',cloakC:'#222222',glove:'#151515',bare:false,tattoo:false}},
+  thug:{label:'Homme de main',kind:'none',weapon:'pistol',bolt:'#ff5a3a',pv:16,sabre:10,tir:11,force:6,fp:0,ref:11,look:{h:1.04,build:1.15,outfit:'jacket',cloak:'none',head:'horns',skin:'#7a6a9a',hair:'#222',cloth:'#3a3030',cloth2:'#5a4a40',legs:'#262222',cloakC:'#222222',glove:'#222222',bare:true,tattoo:false}},
+  guard:{label:'Garde en armure',kind:'none',weapon:'rifle',bolt:'#ff5a3a',pv:20,sabre:10,tir:11,force:6,fp:0,ref:10,look:{h:1.05,build:1.1,outfit:'armor',cloak:'none',head:'trooper',skin:'#a07a60',hair:'#222',cloth:'#6a2f2a',cloth2:'#221a18',legs:'#2a2220',cloakC:'#222222',glove:'#1a1514',bare:false,tattoo:false}},
+  assassin:{label:'Assassin',kind:'none',weapon:'pistol',bolt:'#c84aff',tech:['rapid'],pv:22,sabre:12,tir:14,force:7,fp:0,ref:16,look:{h:.98,build:.88,outfit:'armor',cloak:'long',head:'hood',skin:'#9a7a68',hair:'#111',cloth:'#1c1c22',cloth2:'#121216',legs:'#141418',cloakC:'#101014',glove:'#121216',bare:false,tattoo:false}}
+};
+const LOOK_KEYS=Object.keys(LOOKS);
+
+const PATHS={
+  sith:{l:'Seigneur Sith',d:'Adepte du côté obscur. Combats en duel, peu de moyens au départ.',force:true,kind:'sith',look:'sithLord',weapon:'saber',blade:'#ff2b2b',form:'juyo',tech:[],
+    sk:{sabre:14,force:14,intimidation:12,perception:11,athletisme:11},res:{credits:2000,ship:'Vaisseau personnel',fleet:[],troops:[],companions:[]}},
+  jedi:{l:'Chevalier Jedi',d:'Gardien de la paix. Duels, diplomatie, la Force.',force:true,kind:'jedi',look:'jediKnight',weapon:'saber',blade:'#46ff70',form:'shien',tech:[],
+    sk:{sabre:14,force:14,persuasion:12,perception:12,athletisme:11},res:{credits:500,ship:'Navette de l’Ordre',fleet:[],troops:[],companions:[]}},
+  moff:{l:'Officier impérial / Moff',d:'Tu commandes une flotte et des troupes. Batailles spatiales et terrestres.',force:false,kind:'none',look:'officer',weapon:'pistol',blade:'#ff2b2b',form:'none',tech:[],
+    sk:{commandement:15,tir:12,persuasion:12,intimidation:12,perception:11},res:{credits:20000,ship:'',companions:[{name:'Capitaine Rhal',preset:'officer',note:'Ton second, loyal et ambitieux'}],
+      fleet:[{type:'cruiser',name:'Inexorable',flag:true},{type:'cruiser',name:'Vigilance'},{type:'frigate',name:'Lame d’Acier'},{type:'frigate',name:'Sentence'},{type:'fighters',name:'Escadron Noir'},{type:'fighters',name:'Escadron Cendre'}],
+      troops:[{type:'inf',name:'Escouade Aurek'},{type:'inf',name:'Escouade Besh'},{type:'tank',name:'Char Marteau'},{type:'art',name:'Batterie Orage'},{type:'speed',name:'Éclaireurs Cresh'}]}},
+  crime:{l:'Chef criminel',d:'Un territoire, des hommes de main, des dettes et des ennemis.',force:false,kind:'none',look:'thug',weapon:'pistol',blade:'#ff2b2b',form:'none',tech:['rapid'],
+    sk:{intimidation:14,persuasion:13,tir:12,commandement:12,perception:11},res:{credits:15000,ship:'Cargo modifié',fleet:[],companions:[{name:'Grosk',preset:'thug',note:'Garde du corps'},{name:'Vessa',preset:'assassin',note:'Lieutenante discrète'}],
+      troops:[{type:'inf',name:'Hommes de main'},{type:'inf',name:'Gâchettes du quartier'},{type:'speed',name:'Motards du gang'}]}},
+  smuggler:{l:'Contrebandier',d:'Un cargo, un copilote, des cargaisons douteuses.',force:false,kind:'none',look:'smuggler',weapon:'pistol',blade:'#ff2b2b',form:'none',tech:['rapid'],
+    sk:{tir:14,pilotage:15,persuasion:12,technique:11,perception:12},res:{credits:3000,ship:'Cargo léger',fleet:[],troops:[],companions:[{name:'Ivo',preset:'smuggler',note:'Copilote et mécanicien'}]}},
+  hunter:{l:'Chasseur de primes',d:'Des contrats, des cibles, une réputation à bâtir.',force:false,kind:'none',look:'bountyHunter',weapon:'rifle',blade:'#ff2b2b',form:'none',tech:['grenades'],
+    sk:{tir:15,perception:13,discretion:12,athletisme:12,intimidation:11},res:{credits:4000,ship:'Intercepteur modifié',fleet:[],troops:[],companions:[]}},
+  rebel:{l:'Commandant rebelle',d:'Une petite cellule, quelques vaisseaux, beaucoup d’espoir.',force:false,kind:'none',look:'smuggler',weapon:'pistol',blade:'#ff2b2b',form:'none',tech:[],
+    sk:{commandement:14,tir:13,pilotage:12,persuasion:12,technique:11},res:{credits:5000,ship:'Corvette usée',companions:[{name:'Sergente Tamm',preset:'bountyHunter',note:'Vétérane des commandos'}],
+      fleet:[{type:'frigate',name:'Espoir de Dantar',flag:true},{type:'frigate',name:'Vent du Sud'},{type:'fighters',name:'Escadron Rouge-Feu'},{type:'fighters',name:'Escadron Lune'}],
+      troops:[{type:'inf',name:'Cellule Aurore'},{type:'inf',name:'Cellule Braise'},{type:'speed',name:'Éclaireurs'}]}},
+  free:{l:'Autre (libre)',d:'Tu définis tout toi-même.',force:false,kind:'none',look:'smuggler',weapon:'pistol',blade:'#ff2b2b',form:'none',tech:[],
+    sk:{tir:12,persuasion:12,perception:12,athletisme:12},res:{credits:1000,ship:'',fleet:[],troops:[],companions:[]}}
+};
+const THEMES=['Pègre et empire criminel','Guerre et rébellion','Intrigues politiques','Quête de la Force','Vengeance','Survie','Exploration et mystères','Romance et liens','Chasse à l’homme','Conquête et pouvoir'];
+const TONES=[['aventure','Aventure'],['sombre','Sombre'],['adulte','Adulte et brutal']];
+const CANON=[['oui','Croiser des personnages connus'],['discret','Quelques apparitions'],['non','Coins inédits de la galaxie']];
+
+/* ================= Sauvegarde ================= */
+let db=null,uid=null,storeReady=false;
+const LS='chroniques-galactiques-v1';
+async function initStore(){
+  try{const c=window.claude;if(c&&c.use){const u=await c.use('user');const d=await c.use('db');if(u&&d){uid=await u.id();if(uid)db=d;}}}catch(e){db=null;}
+  storeReady=true;
+}
+async function loadCampaign(){
+  if(db){try{const s=await db.doc('data/users/'+uid+'/campaign').get();if(s.exists){const d=s.data();if(d&&d.json)return JSON.parse(d.json);}}catch(e){}}
+  try{const r=localStorage.getItem(LS);if(r)return JSON.parse(r);}catch(e){}
+  return null;
+}
+let saveTimer=null;
+function saveCampaign(){
+  if(!S)return;clearTimeout(saveTimer);
+  saveTimer=setTimeout(async()=>{
+    const json=JSON.stringify(trimState(S));
+    let ok=false;
+    if(db){try{await db.doc('data/users/'+uid+'/campaign').set({json,updated:Date.now()});ok=true;}catch(e){ok=false;}}
+    try{localStorage.setItem(LS,json);ok=true;}catch(e){}
+    $('saveState').textContent=ok?(db?'Campagne sauvegardée':'Sauvegardée dans ce navigateur'):'Sauvegarde impossible';
+  },400);
+}
+function trimState(s){const c=clone(s);if(c.feed.length>140)c.feed=c.feed.slice(-140);let j=JSON.stringify(c);while(j.length>200000&&c.feed.length>20){c.feed=c.feed.slice(20);j=JSON.stringify(c);}return c;}
+
+/* ================= État ================= */
+let S=null,draft=null,step=0,busyMJ=false,abortCtl=null;
+function newDraft(){
+  const d={era:'dark',year:'',path:null,hero:{name:'',species:'Humain',age:'',origin:'',trait:'',flaw:'',secret:'',force:false,side:'sith',skills:{},rolled:false,lookKey:'smuggler',weapon:'pistol',blade1:'#ff2b2b',blade2:'#ff2b2b',bolt:'#ff4a3a',form:'none',tech:[],look:null},
+    res:{credits:0,ship:'',fleet:[],troops:[],companions:[]},zero:{themes:[],ambition:'',tone:'sombre',dosage:50,canon:'discret',free:''}};
+  SKILLS.forEach(([k])=>d.hero.skills[k]=BASE);
+  return d;
+}
+function applyPath(key){
+  const P=PATHS[key];draft.path=key;
+  const h=draft.hero;h.force=P.force;h.side=P.kind==='none'?h.side:P.kind;
+  SKILLS.forEach(([k])=>h.skills[k]=BASE);Object.assign(h.skills,P.sk);if(!h.force)h.skills.force=BASE;h.rolled=false;
+  applyLook(P.look);h.weapon=P.weapon;h.blade1=P.blade;h.blade2=P.blade;h.form=P.form;h.tech=[...P.tech];
+  draft.res=clone(P.res);
+}
+function applyLook(key){const L=LOOKS[key];draft.hero.lookKey=key;draft.hero.look=clone(L.look);if(L.bolt)draft.hero.bolt=L.bolt;}
+const spent=h=>SKILLS.reduce((a,[k])=>a+((k==='force'&&!h.force)?0:Math.max(0,h.skills[k]-BASE)),0);
+function derived(h){
+  const ath=h.skills.athletisme,per=h.skills.perception;
+  return{pv:22+(ath-BASE)*2,fp:h.force?2+Math.max(0,Math.floor((h.skills.force-BASE)/2)):0,ref:Math.round((ath+per)/2)};
+}
+
+/* ================= Création ================= */
+const STEPS=['Époque','Voie','Identité','Compétences','Apparence & armes','Ressources','Session zéro'];
+function showScreen(id){for(const s of['scr-title','scr-create','scr-story'])$(s).hidden=s!==id;$('menuNew').hidden=id==='scr-title';window.scrollTo(0,0);}
+function startCreation(){draft=newDraft();step=0;showScreen('scr-create');renderStep();}
+function renderSteps(){$('steps').innerHTML=STEPS.map((s,i)=>`<button type="button" data-step="${i}" class="${i===step?'on':i<step?'done':''}" ${i>step?'disabled':''}>${i+1} · ${s}</button>`).join('');}
+function renderStep(){
+  renderSteps();$('stepErr').hidden=true;
+  $('stepPrev').disabled=step===0;$('stepNext').textContent=step===STEPS.length-1?'Lancer la campagne':'Suivant';
+  const B=$('stepBody'),h=draft.hero;
+  if(step===0){
+    B.innerHTML=`<h3>Choisis ton époque</h3><p class="intro">Le MJ construira l’histoire dans le contexte de cette période de l’univers Legends.</p>
+      <div class="cards">${ERAS.map(e=>`<button type="button" class="opt ${draft.era===e.k?'on':''}" data-era="${e.k}"><b>${e.l}</b><span>${e.y}</span><span>${e.d}</span></button>`).join('')}</div>
+      <label class="fld" style="max-width:360px"><span>Année précise (facultatif)</span><input type="text" id="cYear" value="${esc(draft.year)}" placeholder="Ex. 7 ABY"></label>`;
+  }else if(step===1){
+    B.innerHTML=`<h3>Choisis ta voie</h3><p class="intro">Ta voie donne tes compétences conseillées, ton arme et tes ressources de départ. Tout reste modifiable ensuite.</p>
+      <div class="cards">${Object.entries(PATHS).map(([k,p])=>`<button type="button" class="opt ${draft.path===k?'on':''}" data-path="${k}"><b>${p.l}</b><span>${p.d}</span></button>`).join('')}</div>
+      ${draft.path&&!PATHS[draft.path].force?`<div class="checks"><label><input type="checkbox" id="cForce" ${h.force?'checked':''}> Sensible à la Force malgré tout</label></div>`:''}
+      ${h.force&&draft.path&&PATHS[draft.path].kind==='none'?`<label class="fld" style="max-width:300px"><span>Penchant dans la Force</span><select id="cSide"><option value="jedi" ${h.side==='jedi'?'selected':''}>Côté lumineux</option><option value="sith" ${h.side==='sith'?'selected':''}>Côté obscur</option></select></label>`:''}`;
+  }else if(step===2){
+    B.innerHTML=`<h3>Qui es-tu ?</h3><p class="intro">L’atout, la faiblesse et le secret sont précieux : le MJ s’en servira pour tisser l’histoire.</p>
+      <div class="grid2">
+        <label class="fld"><span>Nom</span><input type="text" id="cName" maxlength="40" value="${esc(h.name)}" placeholder="Ex. Darth Savage"></label>
+        <label class="fld"><span>Espèce</span><input type="text" id="cSpecies" maxlength="30" value="${esc(h.species)}"></label>
+        <label class="fld"><span>Âge</span><input type="text" id="cAge" maxlength="12" value="${esc(h.age)}"></label>
+      </div>
+      <label class="fld"><span>Origine et passé</span><textarea id="cOrigin" rows="3" maxlength="900" placeholder="D’où vient ton personnage, ce qui l’a forgé…">${esc(h.origin)}</textarea></label>
+      <div class="grid2">
+        <label class="fld"><span>Atout</span><textarea id="cTrait" rows="2" maxlength="300">${esc(h.trait)}</textarea></label>
+        <label class="fld"><span>Faiblesse</span><textarea id="cFlaw" rows="2" maxlength="300">${esc(h.flaw)}</textarea></label>
+        <label class="fld"><span>Secret</span><textarea id="cSecret" rows="2" maxlength="400">${esc(h.secret)}</textarea></label>
+      </div>`;
+  }else if(step===3){
+    const left=POOL-spent(h),D=derived(h);
+    B.innerHTML=`<h3>Compétences</h3><p class="intro">Chaque compétence part de ${BASE}. Pendant le jeu, tu lances 3d6 et tu dois faire inférieur ou égal à ton score (avec les modificateurs). 3 ou 4 : réussite critique. 17 ou 18 : échec critique.</p>
+      <div class="pool"><span class="label">Points restants</span><b>${h.rolled?'—':left}</b><button type="button" id="cAdvice">Répartition conseillée</button><button type="button" id="cRoll">Tirer aux dés (3d6)</button>${h.rolled?'<span class="muted">Scores tirés aux dés : la réserve de points ne s’applique plus.</span>':''}</div>
+      <div class="skills">${SKILLS.filter(([k])=>k!=='force'||h.force).map(([k,l])=>`<div class="sk"><span>${l}</span><button type="button" data-sk="${k}" data-d="-1" aria-label="Baisser ${l}">−</button><div style="display:grid;gap:4px"><span class="v">${h.skills[k]}</span><span class="bar"><i style="width:${(h.skills[k]-6)/(18-6)*100}%"></i></span></div><button type="button" data-sk="${k}" data-d="1" aria-label="Monter ${l}">+</button></div>`).join('')}</div>
+      <div class="derived"><span>PV <b>${D.pv}</b></span><span>Réflexes <b>${D.ref}</b></span>${h.force?`<span>Réserve de Force <b>${D.fp}</b></span>`:''}<span class="muted">PV et réflexes viennent de l’Athlétisme et de la Perception.</span></div>`;
+  }else if(step===4){
+    const isR=h.weapon==='pistol'||h.weapon==='rifle';
+    B.innerHTML=`<h3>Apparence et armes</h3><p class="intro">C’est ainsi que ton personnage apparaîtra dans les combats.</p>
+      <div class="pvwrap"><canvas id="cPrev" width="520" height="598" aria-label="Aperçu du personnage"></canvas>
+      <div style="display:grid;gap:12px;align-content:start">
+        <div class="grid2">
+          <label class="fld"><span>Modèle de départ</span><select id="cLook">${LOOK_KEYS.map(k=>`<option value="${k}" ${h.lookKey===k?'selected':''}>${LOOKS[k].label}</option>`).join('')}</select></label>
+          <label class="fld"><span>Arme</span><select id="cWeapon">${Object.entries(WEAPONS).map(([k,l])=>`<option value="${k}" ${h.weapon===k?'selected':''}>${l}</option>`).join('')}</select></label>
+          ${isR?'':`<label class="fld"><span>Forme de combat</span><select id="cForm">${Object.entries(FORMS).map(([k,l])=>`<option value="${k}" ${h.form===k?'selected':''}>${l}</option>`).join('')}</select></label>`}
+        </div>
+        <div class="colors">
+          ${isR?`<label><input type="color" id="cBolt" value="${h.bolt}">Tirs</label>`:`<label><input type="color" id="cBlade1" value="${h.blade1}">Lame</label>${h.weapon==='dual'?`<label><input type="color" id="cBlade2" value="${h.blade2}">2e lame</label>`:''}`}
+        </div>
+        <div class="checks">${Object.entries(TECHS).filter(([k])=>isR?(k==='rapid'||k==='grenades'):(k!=='rapid'&&k!=='grenades')).map(([k,l])=>`<label><input type="checkbox" data-tech="${k}" ${h.tech.includes(k)?'checked':''} ${k==='jarkai'&&h.weapon!=='dual'?'disabled':''}> ${l}</label>`).join('')}</div>
+        <div class="grid2">
+          <label class="fld"><span>Tenue</span><select id="cOutfit">${[['robe','Robe'],['armor','Armure'],['jacket','Veste'],['uniform','Uniforme'],['trooper','Armure de soldat']].map(([k,l])=>`<option value="${k}" ${h.look.outfit===k?'selected':''}>${l}</option>`).join('')}</select></label>
+          <label class="fld"><span>Cape</span><select id="cCloak">${[['none','Aucune'],['long','Longue'],['tattered','En lambeaux']].map(([k,l])=>`<option value="${k}" ${h.look.cloak===k?'selected':''}>${l}</option>`).join('')}</select></label>
+          <label class="fld"><span>Tête</span><select id="cHead">${[['hair','Cheveux courts'],['hairlong','Cheveux attachés'],['beard','Cheveux et barbe'],['bald','Crâne rasé'],['horns','Cornes'],['hood','Capuche'],['helm','Casque anguleux'],['trooper','Casque intégral']].map(([k,l])=>`<option value="${k}" ${h.look.head===k?'selected':''}>${l}</option>`).join('')}</select></label>
+        </div>
+        <div class="colors">${[['skin','Peau'],['hair','Cheveux'],['cloth','Tenue'],['cloth2','Dessous'],['legs','Jambes'],['cloakC','Cape'],['glove','Gants']].map(([k,l])=>`<label><input type="color" data-lk="${k}" value="${h.look[k]}">${l}</label>`).join('')}</div>
+        <div class="checks"><label><input type="checkbox" id="cBare" ${h.look.bare?'checked':''}> Bras nus</label><label><input type="checkbox" id="cTattoo" ${h.look.tattoo?'checked':''}> Tatouages</label></div>
+      </div></div>`;
+    startPreview();
+  }else if(step===5){
+    const r=draft.res;
+    B.innerHTML=`<h3>Ressources de départ</h3><p class="intro">Une flotte permet les batailles spatiales, des troupes permettent les batailles terrestres, et tes compagnons combattent à tes côtés dans les duels et fusillades.</p>
+      <div class="grid2"><label class="fld"><span>Crédits</span><input type="number" id="rCredits" min="0" step="100" value="${r.credits}"></label><label class="fld"><span>Vaisseau personnel</span><input type="text" id="rShip" maxlength="40" value="${esc(r.ship)}"></label></div>
+      <div class="fld"><span>Flotte (vaisseau amiral en premier)</span><div class="listed">${r.fleet.map((s,i)=>`<div class="lrow"><select data-fl="${i}" data-f="type">${Object.entries(SHIP_T).map(([k,l])=>`<option value="${k}" ${s.type===k?'selected':''}>${l}</option>`).join('')}</select><input type="text" data-fl="${i}" data-f="name" value="${esc(s.name)}" maxlength="30"><button type="button" class="small" data-del="fleet:${i}">Retirer</button></div>`).join('')||'<span class="muted">Aucune flotte.</span>'}</div><div><button type="button" class="small" data-addres="fleet" ${r.fleet.length>=8?'disabled':''}>Ajouter un vaisseau</button></div></div>
+      <div class="fld"><span>Troupes au sol (ton escouade de commandement est ajoutée automatiquement)</span><div class="listed">${r.troops.map((s,i)=>`<div class="lrow"><select data-tr="${i}" data-f="type">${Object.entries(TROOP_T).map(([k,l])=>`<option value="${k}" ${s.type===k?'selected':''}>${l}</option>`).join('')}</select><input type="text" data-tr="${i}" data-f="name" value="${esc(s.name)}" maxlength="30"><button type="button" class="small" data-del="troops:${i}">Retirer</button></div>`).join('')||'<span class="muted">Aucune troupe.</span>'}</div><div><button type="button" class="small" data-addres="troops" ${r.troops.length>=7?'disabled':''}>Ajouter une unité</button></div></div>
+      <div class="fld"><span>Compagnons (3 au plus combattent avec toi)</span><div class="listed">${r.companions.map((c,i)=>`<div class="lrow c3"><input type="text" data-co="${i}" data-f="name" value="${esc(c.name)}" maxlength="30" aria-label="Nom du compagnon"><select data-co="${i}" data-f="preset">${LOOK_KEYS.map(k=>`<option value="${k}" ${c.preset===k?'selected':''}>${LOOKS[k].label}</option>`).join('')}</select><button type="button" class="small" data-del="companions:${i}">Retirer</button></div>`).join('')||'<span class="muted">Aucun compagnon.</span>'}</div><div><button type="button" class="small" data-addres="companions" ${r.companions.length>=6?'disabled':''}>Ajouter un compagnon</button></div></div>`;
+  }else if(step===6){
+    const z=draft.zero;
+    B.innerHTML=`<h3>Session zéro</h3><p class="intro">Comme un MJ avant une campagne : dis-moi ce que tu veux vivre. Le MJ en tirera un carnet secret (intrigue, antagonistes, factions) qu’il gardera pour lui.</p>
+      <div class="fld"><span>Ce que tu veux vivre</span><div class="chipset">${THEMES.map(t=>`<button type="button" data-theme="${esc(t)}" class="${z.themes.includes(t)?'on':''}">${t}</button>`).join('')}</div></div>
+      <label class="fld"><span>L’ambition de ton personnage</span><input type="text" id="zAmb" maxlength="200" value="${esc(z.ambition)}" placeholder="Ex. devenir le maître de la pègre de Nar Shaddaa"></label>
+      <div class="grid2">
+        <div class="fld"><span>Ton</span><div class="chipset">${TONES.map(([k,l])=>`<button type="button" data-tone="${k}" class="${z.tone===k?'on':''}">${l}</button>`).join('')}</div></div>
+        <div class="fld"><span>Le canon</span><div class="chipset">${CANON.map(([k,l])=>`<button type="button" data-canon="${k}" class="${z.canon===k?'on':''}">${l}</button>`).join('')}</div></div>
+      </div>
+      <label class="fld"><span>Dosage : <b id="zDoseL">${doseLabel(z.dosage)}</b></span><input type="range" id="zDose" min="0" max="100" step="10" value="${z.dosage}" style="accent-color:var(--amber)"></label>
+      <label class="fld"><span>Raconte en quelques lignes ce que tu imagines (facultatif)</span><textarea id="zFree" rows="3" maxlength="1200">${esc(z.free)}</textarea></label>`;
+  }
+}
+function doseLabel(v){return v<=20?'presque que des dialogues':v<=40?'plutôt des dialogues':v<=60?'équilibré':v<=80?'plutôt des combats':'presque que des combats';}
+let previewOn=false;
+function startPreview(){
+  const c=$('cPrev');if(!c||!window.ENGINES||!window.ENGINES.duel)return;
+  window.ENGINES.duel.preview(c,()=>heroFiche(draft));
+}
+function readStep(){
+  const h=draft.hero,v=id=>$(id)?$(id).value:null;
+  if(step===0){if($('cYear'))draft.year=v('cYear').trim();}
+  if(step===1){if($('cForce'))h.force=$('cForce').checked;if($('cSide'))h.side=v('cSide');}
+  if(step===2){h.name=v('cName').trim();h.species=v('cSpecies').trim();h.age=v('cAge').trim();h.origin=v('cOrigin').trim();h.trait=v('cTrait').trim();h.flaw=v('cFlaw').trim();h.secret=v('cSecret').trim();}
+  if(step===4){
+    h.weapon=v('cWeapon');if($('cForm'))h.form=v('cForm');if($('cBolt'))h.bolt=v('cBolt');if($('cBlade1'))h.blade1=v('cBlade1');if($('cBlade2'))h.blade2=v('cBlade2');
+    h.tech=[...document.querySelectorAll('#stepBody [data-tech]:checked')].map(i=>i.dataset.tech);
+    h.look.outfit=v('cOutfit');h.look.cloak=v('cCloak');h.look.head=v('cHead');
+    document.querySelectorAll('#stepBody [data-lk]').forEach(i=>{h.look[i.dataset.lk]=i.value;});
+    h.look.bare=$('cBare').checked;h.look.tattoo=$('cTattoo').checked;
+    if(h.weapon!=='dual')h.tech=h.tech.filter(t=>t!=='jarkai');
+  }
+  if(step===5){
+    const r=draft.res;r.credits=Math.max(0,+v('rCredits')||0);r.ship=v('rShip').trim();
+    document.querySelectorAll('#stepBody [data-fl]').forEach(i=>{r.fleet[+i.dataset.fl][i.dataset.f]=i.value;});
+    document.querySelectorAll('#stepBody [data-tr]').forEach(i=>{r.troops[+i.dataset.tr][i.dataset.f]=i.value;});
+    document.querySelectorAll('#stepBody [data-co]').forEach(i=>{r.companions[+i.dataset.co][i.dataset.f]=i.value;});
+    r.fleet.forEach((s,i)=>s.flag=i===0);
+  }
+  if(step===6){const z=draft.zero;z.ambition=v('zAmb').trim();z.free=v('zFree').trim();z.dosage=+v('zDose');}
+}
+function validate(){
+  const h=draft.hero;
+  if(step===1&&!draft.path)return'Choisis une voie.';
+  if(step===2&&!h.name)return'Donne un nom à ton personnage.';
+  if(step===3&&!h.rolled&&spent(h)>POOL)return'Tu as dépensé plus de points que disponible.';
+  if(step===6&&!draft.zero.themes.length)return'Choisis au moins un thème.';
+  return null;
+}
+$('stepBody').addEventListener('click',e=>{
+  const t=e.target.closest('button');if(!t)return;const h=draft.hero;
+  if(t.dataset.era){readStep();draft.era=t.dataset.era;renderStep();}
+  else if(t.dataset.path){readStep();applyPath(t.dataset.path);renderStep();}
+  else if(t.dataset.sk){const k=t.dataset.sk,d=+t.dataset.d;const nv=h.skills[k]+d;if(nv<6||nv>MAXSK+(h.rolled?2:0))return;if(!h.rolled&&d>0&&spent(h)>=POOL)return;if(!h.rolled&&nv<BASE)return;h.skills[k]=nv;renderStep();}
+  else if(t.id==='cAdvice'){const P=PATHS[draft.path||'free'];SKILLS.forEach(([k])=>h.skills[k]=BASE);Object.assign(h.skills,P.sk);if(!h.force)h.skills.force=BASE;else if(h.skills.force<12)h.skills.force=12;h.rolled=false;renderStep();}
+  else if(t.id==='cRoll'){SKILLS.forEach(([k])=>{const r=rint(1,6)+rint(1,6)+rint(1,6);h.skills[k]=Math.max(6,Math.min(18,r));});if(!h.force)h.skills.force=BASE;h.rolled=true;renderStep();}
+  else if(t.dataset.addres){readStep();const r=draft.res,k=t.dataset.addres;
+    if(k==='fleet')r.fleet.push({type:'frigate',name:'Nouveau vaisseau'});if(k==='troops')r.troops.push({type:'inf',name:'Nouvelle unité'});if(k==='companions')r.companions.push({name:'Nouveau compagnon',preset:'smuggler',note:''});renderStep();}
+  else if(t.dataset.del){readStep();const [k,i]=t.dataset.del.split(':');draft.res[k].splice(+i,1);renderStep();}
+  else if(t.dataset.theme){readStep();const z=draft.zero;const th=t.dataset.theme;z.themes=z.themes.includes(th)?z.themes.filter(x=>x!==th):[...z.themes,th];renderStep();}
+  else if(t.dataset.tone){readStep();draft.zero.tone=t.dataset.tone;renderStep();}
+  else if(t.dataset.canon){readStep();draft.zero.canon=t.dataset.canon;renderStep();}
+});
+$('stepBody').addEventListener('change',e=>{
+  if(step===1&&(e.target.id==='cForce'||e.target.id==='cSide')){readStep();renderStep();}
+  if(step===4){if(e.target.id==='cLook'){readStep();const L=LOOKS[e.target.value];applyLook(e.target.value);const h=draft.hero;h.weapon=L.weapon;h.blade1=L.blade1||h.blade1;h.blade2=L.blade2||L.blade1||h.blade2;if(L.form)h.form=L.form;h.tech=[...(L.tech||[])];renderStep();}
+    else if(e.target.id==='cWeapon'){readStep();renderStep();}else readStep();}
+});
+$('stepBody').addEventListener('input',e=>{if(step===4)readStep();if(e.target.id==='zDose')$('zDoseL').textContent=doseLabel(+e.target.value);});
+$('steps').addEventListener('click',e=>{const b=e.target.closest('[data-step]');if(!b||b.disabled)return;readStep();step=+b.dataset.step;renderStep();});
+$('stepPrev').addEventListener('click',()=>{readStep();if(step>0){step--;renderStep();}});
+$('stepNext').addEventListener('click',()=>{
+  readStep();const err=validate();if(err){$('stepErr').textContent=err;$('stepErr').hidden=false;return;}
+  if(step<STEPS.length-1){step++;renderStep();}else beginCampaign();
+});
+
+/* ================= Fiches de combat ================= */
+function heroFiche(src){
+  const h=(src||S).hero,D=derived(h);
+  const kind=h.force?(PATHS[(src||S).path]?.kind!=='none'?PATHS[(src||S).path].kind:h.side):'none';
+  return{name:h.name||'Ton personnage',side:'p',kind,weapon:h.weapon,blade1:h.blade1,blade2:h.blade2,bolt:h.bolt,form:h.form,tech:h.tech,pv:D.pv,sabre:h.skills.sabre,tir:h.skills.tir,force:h.skills.force,fp:D.fp,ref:D.ref,look:h.look,hero:true};
+}
+function presetFiche(key,name,side,ov){
+  const L=LOOKS[key]||LOOKS.thug;
+  const f={name:name||L.label,side,kind:L.kind,weapon:L.weapon,blade1:L.blade1||'#ff2b2b',blade2:L.blade2||L.blade1||'#ff2b2b',bolt:L.bolt||'#ff3b3b',form:L.form||'none',tech:[...(L.tech||[])],pv:L.pv,sabre:L.sabre,tir:L.tir,force:L.force,fp:L.fp,ref:L.ref,look:clone(L.look)};
+  if(ov){if(/^#[0-9a-f]{6}$/i.test(ov.blade||'')){f.blade1=ov.blade;f.blade2=ov.blade;}if(ov.form&&FORMS[ov.form])f.form=ov.form;
+    if(Number.isFinite(+ov.pv)&&ov.pv)f.pv=Math.max(8,Math.min(60,Math.round(+ov.pv)));
+    if(Number.isFinite(+ov.sabre)&&ov.sabre)f.sabre=Math.max(6,Math.min(18,Math.round(+ov.sabre)));
+    if(Number.isFinite(+ov.tir)&&ov.tir)f.tir=Math.max(6,Math.min(18,Math.round(+ov.tir)));}
+  return f;
+}
+
+/* ================= Le MJ ================= */
+let sample=null,sampleChecked=false;
+async function getSample(){
+  if(sampleChecked)return sample;
+  try{const c=window.claude;if(c&&c.use)sample=await c.use('sample');}catch(e){sample=null;}
+  sampleChecked=true;return sample;
+}
+function heroBlock(){
+  const h=S.hero,D=derived(h),era=ERAS.find(e=>e.k===S.era);
+  return[`Nom : ${h.name} · Espèce : ${h.species||'?'} · Âge : ${h.age||'?'}`,
+    `Voie : ${PATHS[S.path].l}${h.force?` · Sensible à la Force (${(PATHS[S.path].kind!=='none'?PATHS[S.path].kind:h.side)==='sith'?'côté obscur':'côté lumineux'})`:' · Non sensible à la Force'}`,
+    `Origine : ${h.origin||'—'}`,`Atout : ${h.trait||'—'}`,`Faiblesse : ${h.flaw||'—'}`,`Secret : ${h.secret||'—'}`,
+    `Compétences (3d6 sous le score) : ${SKILLS.filter(([k])=>k!=='force'||h.force).map(([k,l])=>`${k}=${h.skills[k]}`).join(', ')}`,
+    `PV ${D.pv} · Arme : ${WEAPONS[h.weapon]}${h.weapon.match(/saber|dual|double/)?` (forme ${FORMS[h.form]})`:''}${h.tech.length?' · Techniques : '+h.tech.map(t=>TECHS[t]).join(', '):''}`,
+    `Expérience : ${S.xp||0} points`].join('\n');
+}
+function resBlock(){
+  const r=S.res;
+  return[`Crédits : ${r.credits}`,`Vaisseau personnel : ${r.ship||'aucun'}`,
+    `Flotte : ${r.fleet.length?r.fleet.map(s=>`${s.name} (${s.type})`).join(', '):'aucune (pas de bataille spatiale possible)'}`,
+    `Troupes : ${r.troops.length?r.troops.map(s=>`${s.name} (${s.type})`).join(', '):'aucune (pas de bataille terrestre possible)'}`,
+    `Compagnons : ${r.companions.length?r.companions.map(c=>`${c.name} [modèle ${c.preset}]${c.note?' — '+c.note:''}`).join(' ; '):'aucun'}`,
+    `Notes : ${(r.notes||[]).slice(-12).join(' | ')||'—'}`].join('\n');
+}
+function zeroBlock(){const z=S.zero;return[`Thèmes voulus : ${z.themes.join(', ')}`,`Ambition : ${z.ambition||'—'}`,`Ton : ${TONES.find(t=>t[0]===z.tone)[1]}`,`Dosage : ${doseLabel(z.dosage)}`,`Canon : ${CANON.find(c=>c[0]===z.canon)[1]}`,`Ce que le joueur imagine : ${z.free||'—'}`].join('\n');}
+function recentBlock(){
+  const out=[];let n=0;
+  for(let i=S.feed.length-1;i>=0&&n<9;i--){const e=S.feed[i];
+    if(e.k==='mj'){out.unshift('MJ : '+e.text.slice(0,1800));n++;}
+    else if(e.k==='me'){out.unshift('JOUEUR : '+e.text);n++;}
+    else if(e.k==='test'){out.unshift(`JET : ${SKL[e.data.skill]} — ${e.data.sum}/${e.data.score} → ${e.data.resLabel}`);n++;}
+    else if(e.k==='combat'){out.unshift('COMBAT JOUÉ : '+e.text.slice(0,900));n++;}}
+  return out.join('\n\n');
+}
+const RULES=`Tu es le Maître du Jeu d’un jeu de rôle Star Wars (univers Legends), en français. Le joueur incarne le personnage décrit plus bas. Tu racontes, tu fais vivre les PNJ et le monde ; le joueur décide de ce que fait son personnage.
+Principes :
+- Respecte l’époque, la fiche, les ressources et la session zéro. Suis le carnet secret pour garder un cap, mais adapte-le aux choix du joueur : ses actes comptent plus que le plan.
+- Les PNJ ont leurs propres buts et réagissent de façon crédible. Le monde ne tourne pas qu’autour du joueur.
+- Ne décide jamais à la place du joueur de ses actions ou de ses paroles importantes. Termine chaque réponse sur une situation ouverte.
+- Dialogues vivants et incarnés (le joueur les adore), descriptions sensorielles courtes. Ton et dosage selon la session zéro.
+- Jets : système 3d6 sous la compétence. Modificateurs : facile +2, normal 0, difficile −2, très difficile −4, presque impossible −6. Ne demande un jet que si l’issue est incertaine ET qu’elle compte.
+- Combats : ne déclenche un combat jouable que si l’histoire y mène vraiment et que l’affrontement mérite d’être joué. Choisis le type selon la situation et les ressources : "duel" pour tout combat à échelle humaine (sabres et/ou blasters), "space" seulement si le joueur a une flotte, "ground" seulement s’il a des troupes. Équilibre la difficulté avec la puissance du joueur et ses compagnons.
+- Après un rapport de combat ou un résultat de jet, raconte les conséquences en restant exactement fidèle au résultat.
+- Ne révèle jamais le carnet secret au joueur.`;
+const FORMAT=`FORMAT DE RÉPONSE OBLIGATOIRE :
+1) La narration, en français, 3 à 6 paragraphes courts, à la deuxième personne du singulier. Les répliques commencent par « — ». Pas de titre, pas de liste, pas de méta-commentaire.
+2) Puis une ligne contenant uniquement : @@DONNEES
+3) Puis un objet JSON valide, sans bloc de code, avec exactement ces clés :
+{"choices":["…","…","…"],"test":null,"combat":null,"updates":null,"chronicle":"…","chapter":null,"secret":null}
+- choices : 3 actions courtes (moins de 12 mots) que le joueur pourrait tenter maintenant.
+- test : si l’action est risquée et incertaine : {"skill":"<clé>","mod":<entier de -6 à 2>,"why":"<raison courte>"}. Clés : sabre, tir, pilotage, commandement, discretion, persuasion, intimidation, technique, perception, athletisme, force (force seulement si le personnage est sensible à la Force). Dans ce cas, arrête la narration juste avant l’issue, ne la raconte pas, et mets "choices":[].
+- combat : si un affrontement doit être joué : {"type":"duel"|"space"|"ground","title":"<titre court>","briefing":"<2 phrases>","allies":[…],"enemies":[…]}. Arrête la narration au moment où le combat éclate et mets "choices":[].
+  · duel : "allies" = noms de compagnons existants (3 au plus, présents dans la scène). "enemies" = 1 à 4 objets {"name":"…","preset":"<modèle>","blade":"#rrggbb (facultatif)","form":"<forme facultative>","pv":<facultatif 10-60>}. Modèles : sithLord, sithWarrior, sithAcolyte, inquisitor, jediMaster, jediKnight, jediWarrior, smuggler, bountyHunter, trooper, officer, thug, guard, assassin. Formes : shiicho, makashi, soresu, ataru, shien, niman, juyo.
+  · space : "enemies" = 2 à 7 objets {"type":"cruiser"|"frigate"|"fighters","name":"…"}.
+  · ground : "enemies" = 2 à 6 objets {"type":"einf"|"eat"|"eltank"|"eturret","name":"…"} (fantassins, équipe antichar, char léger, tourelle).
+- updates : changements concrets, sinon null : {"credits":<±entier>,"addCompanions":[{"name":"…","preset":"<modèle>","note":"…"}],"removeCompanions":["nom"],"addFleet":[{"type":"cruiser|frigate|fighters","name":"…"}],"addTroops":[{"type":"inf|tank|art|speed","name":"…"}],"notes":["fait durable à retenir"],"xp":<0 à 3>}.
+- chronicle : 1 ou 2 phrases factuelles résumant ce qui vient de se passer (c’est ta mémoire).
+- chapter : {"title":"…"} uniquement quand un nouveau chapitre commence, sinon null.
+- secret : le carnet secret complet mis à jour, uniquement s’il change vraiment, sinon null.`;
+function buildPrompt(entry,opening){
+  const era=ERAS.find(e=>e.k===S.era);
+  return[RULES,'',`## Époque\n${era.l} (${S.year||era.y}) — ${era.d}`,`## Personnage\n${heroBlock()}`,`## Ressources\n${resBlock()}`,`## Session zéro\n${zeroBlock()}`,
+    `## Carnet secret du MJ (ne jamais le révéler)\n${S.secret?JSON.stringify(S.secret):'(à créer)'}`,
+    `## Chronique de la campagne\n${S.chronicle.slice(-40).map(c=>`[Ch. ${c.ch}] ${c.t}`).join('\n')||'(début)'}`,
+    `## Chapitre en cours\n${S.chapter.n} — ${S.chapter.title||'(sans titre)'}`,
+    `## Dernières scènes\n${recentBlock()||'(aucune)'}`,
+    `## Nouvelle entrée\n${entry}`,'',
+    opening?`C’est le DÉBUT DE LA CAMPAGNE. Crée le carnet secret dans "secret" : {"arc":"…","actes":["Acte I : …","Acte II : …","Acte III : …"],"antagonistes":[{"nom":"…","but":"…","methode":"…"}],"factions":[{"nom":"…","veut":"…"}],"fils":["fils narratifs tirés de la fiche (secret, faiblesse, liens)"],"prochaine_etape":"…"}. Donne aussi "chapter":{"title":"…"}. Puis écris une scène d’ouverture forte qui plonge directement le personnage dans l’action ou une tension.`:'',
+    FORMAT].join('\n\n');
+}
+function parseMJ(text){
+  const i=text.indexOf('@@DONNEES');
+  const narr=(i>=0?text.slice(0,i):text).trim();
+  let data={};
+  if(i>=0){let raw=text.slice(i+9).trim().replace(/^```(json)?/i,'').replace(/```$/,'').trim();const a=raw.indexOf('{'),b=raw.lastIndexOf('}');if(a>=0&&b>a){try{data=JSON.parse(raw.slice(a,b+1));}catch(e){data={};}}}
+  return{narr,data};
+}
+function fmtNarr(t){
+  return t.split(/\n{1,}/).map(p=>p.trim()).filter(Boolean).map(p=>{
+    let h=esc(p).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>');
+    return /^(—|–|-)\s/.test(p)?`<p class="dlg">${h}</p>`:`<p>${h}</p>`;}).join('');
+}
+async function askMJ(entry,opening=false){
+  const sm=await getSample();
+  if(!sm){addFeed({k:'sys',text:'Le MJ intégré n’est pas disponible dans cette vue. Ouvre le jeu depuis claude.ai, connecté à ton compte, pour jouer.'});renderStory();return;}
+  busyMJ=true;S.pending=null;S.choices=[];renderAct();
+  const live={k:'mj',text:'',live:true};S.feed.push(live);renderFeed();
+  const node=$('feed').lastElementChild;
+  abortCtl=new AbortController();
+  let full='';
+  try{
+    const res=await sm(buildPrompt(entry,opening),{cache:false,signal:abortCtl.signal,modelTier:'default',onText:({text})=>{full=text;const n=text.split('@@DONNEES')[0];node.innerHTML=fmtNarr(n)||'<span class="typing">Le MJ réfléchit…</span>';scrollFeed();}});
+    full=res.text;
+  }catch(e){
+    S.feed.pop();busyMJ=false;
+    const msg=e&&e.code==='rate_limited'?'Le MJ est sollicité trop souvent ou ta limite d’utilisation est atteinte. Réessaie dans un moment.':e&&e.code==='not_granted'?'Le MJ n’a pas l’autorisation d’être appelé. Autorise-le depuis le menu des permissions de la page, puis réessaie.':e&&e.code==='cancelled'?'Réponse du MJ annulée.':'Le MJ n’a pas pu répondre. Réessaie.';
+    addFeed({k:'sys',text:msg,retry:{entry,opening}});renderStory();return;
+  }
+  busyMJ=false;
+  const {narr,data}=parseMJ(full);
+  live.text=narr;delete live.live;
+  applyData(data);
+  saveCampaign();renderStory();
+}
+function applyData(d){
+  if(d.secret&&typeof d.secret==='object')S.secret=d.secret;
+  if(d.chapter&&d.chapter.title){if(S.chapter.title){S.chapter.n++;}S.chapter.title=String(d.chapter.title).slice(0,80);addFeed({k:'sys',chapter:true,text:`Chapitre ${S.chapter.n} — ${S.chapter.title}`},true);
+    const last=S.feed.pop(),mj=S.feed.pop();S.feed.push(last,mj);}
+  if(d.chronicle)S.chronicle.push({ch:S.chapter.n,t:String(d.chronicle).slice(0,400)});
+  const u=d.updates;
+  if(u&&typeof u==='object'){
+    const r=S.res;
+    if(Number.isFinite(+u.credits)&&+u.credits)r.credits=Math.max(0,r.credits+Math.round(+u.credits));
+    (u.addCompanions||[]).forEach(c=>{if(c&&c.name&&r.companions.length<8)r.companions.push({name:String(c.name).slice(0,30),preset:LOOKS[c.preset]?c.preset:'thug',note:String(c.note||'').slice(0,120)});});
+    (u.removeCompanions||[]).forEach(n=>{r.companions=r.companions.filter(c=>c.name!==n);});
+    (u.addFleet||[]).forEach(s=>{if(s&&SHIP_T[s.type]&&r.fleet.length<8)r.fleet.push({type:s.type,name:String(s.name||'Nouveau vaisseau').slice(0,30),flag:!r.fleet.length});});
+    (u.addTroops||[]).forEach(s=>{if(s&&TROOP_T[s.type]&&r.troops.length<7)r.troops.push({type:s.type,name:String(s.name||'Nouvelle unité').slice(0,30)});});
+    (u.notes||[]).forEach(n=>{r.notes=r.notes||[];r.notes.push(String(n).slice(0,200));if(r.notes.length>30)r.notes.shift();});
+    if(Number.isFinite(+u.xp))S.xp=(S.xp||0)+Math.max(0,Math.min(3,Math.round(+u.xp)));
+  }
+  S.choices=Array.isArray(d.choices)?d.choices.slice(0,4).map(c=>String(c).slice(0,120)):[];
+  if(d.test&&SKL[d.test.skill]&&(d.test.skill!=='force'||S.hero.force)){
+    S.pending={kind:'test',skill:d.test.skill,mod:Math.max(-6,Math.min(4,Math.round(+d.test.mod||0))),why:String(d.test.why||'').slice(0,160)};
+  }else if(d.combat&&['duel','space','ground'].includes(d.combat.type)){
+    const c=d.combat;
+    if(c.type==='space'&&!S.res.fleet.length)c.type='duel';
+    if(c.type==='ground'&&!S.res.troops.length)c.type='duel';
+    if(c.type==='duel'&&(!Array.isArray(c.enemies)||!c.enemies.length))c.enemies=[{name:'Adversaire',preset:'thug'}];
+    S.pending={kind:'combat',combat:{type:c.type,title:String(c.title||'Affrontement').slice(0,60),briefing:String(c.briefing||'').slice(0,400),allies:(c.allies||[]).slice(0,3),enemies:(c.enemies||[]).slice(0,c.type==='space'?7:c.type==='ground'?6:4)}};
+  }
+  if(!S.pending&&!S.choices.length)S.choices=['Observer les alentours','Continuer'];
+}
+function addFeed(e,silent){S.feed.push(e);if(!silent)renderFeed();}
+
+/* ================= Écran de récit ================= */
+function scrollFeed(){const f=$('feed');f.scrollTop=f.scrollHeight;}
+function feedHTML(e,i){
+  if(e.k==='mj')return`<div class="e-mj">${e.text?fmtNarr(e.text):'<span class="typing">Le MJ réfléchit…</span>'}</div>`;
+  if(e.k==='me')return`<div class="e-me"><small>${esc(S.hero.name)}</small>${esc(e.text)}</div>`;
+  if(e.k==='sys')return`<div class="e-sys ${e.chapter?'chapter':''}">${esc(e.text)}${e.retry&&i===S.feed.length-1?` <button type="button" class="small" data-retry>Réessayer</button>`:''}</div>`;
+  if(e.k==='test'){const d=e.data;return`<div class="dicecard"><span class="t">Test de ${esc(SKL[d.skill])} ${d.mod?`(${d.mod>0?'+':''}${d.mod})`:''}</span><span class="dd"><i>${d.d[0]}</i><i>${d.d[1]}</i><i>${d.d[2]}</i> = ${d.sum} / ${d.score} <span class="${d.ok?'res-ok':'res-ko'}">${esc(d.resLabel)}</span></span></div>`;}
+  if(e.k==='combat')return`<div class="combatcard"><span class="kind">Rapport de combat</span><pre style="margin:0;white-space:pre-wrap;font-family:var(--f-mono);font-size:12px;color:var(--steel)">${esc(e.text)}</pre></div>`;
+  return'';
+}
+function renderFeed(){$('feed').innerHTML=S.feed.map(feedHTML).join('');scrollFeed();}
+function renderAct(){
+  const A=$('actZone');
+  if(busyMJ){A.innerHTML=`<div class="typing">Le MJ écrit la suite…</div><div><button type="button" class="small" id="stopMJ">Interrompre</button></div>`;return;}
+  if(S.pending&&S.pending.kind==='test'){
+    const p=S.pending,score=S.hero.skills[p.skill]+p.mod;
+    A.innerHTML=`<div class="dicecard"><span class="t">Test de ${esc(SKL[p.skill])} ${p.mod?`(${p.mod>0?'+':''}${p.mod})`:''}</span><span class="why">${esc(p.why)}</span><span class="dd">Il faut faire <b style="color:var(--steel)">${score}</b> ou moins sur 3d6 (compétence ${S.hero.skills[p.skill]}${p.mod?`, ${p.mod>0?'+':''}${p.mod}`:''}).</span><div class="dd" id="rollDice"><i>?</i><i>?</i><i>?</i></div><div><button type="button" class="primary" id="rollBtn">Lancer les dés</button></div></div>`;
+    return;
+  }
+  if(S.pending&&S.pending.kind==='combat'){
+    const c=S.pending.combat;const kind={duel:'Combat rapproché',space:'Bataille spatiale',ground:'Bataille terrestre'}[c.type];
+    const foes=c.type==='duel'?c.enemies.map(e=>esc(e.name||'?')):c.enemies.map(e=>esc(e.name||e.type));
+    const mine=c.type==='duel'?[esc(S.hero.name),...(c.allies||[]).map(n=>esc(typeof n==='string'?n:n.name))]:c.type==='space'?S.res.fleet.map(s=>esc(s.name)):[esc(S.hero.name)+' (commandement)',...S.res.troops.map(s=>esc(s.name))];
+    A.innerHTML=`<div class="combatcard"><span class="kind">${kind}</span><span class="t">${esc(c.title)}</span><span>${esc(c.briefing)}</span><ul><li>Ton camp : ${mine.join(', ')}</li><li>En face : ${foes.join(', ')}</li></ul><div><button type="button" class="primary" id="fightBtn">Engager le combat</button></div></div>`;
+    return;
+  }
+  A.innerHTML=`<div class="choices">${(S.choices||[]).map((c,i)=>`<button type="button" data-choice="${i}">${esc(c)}</button>`).join('')}</div>
+    <div class="say"><textarea id="sayBox" rows="2" maxlength="1200" placeholder="Ou écris ce que fait ou dit ${esc(S.hero.name)}…"></textarea><button type="button" class="primary" id="sayBtn">Agir</button></div>`;
+}
+function renderSheet(){
+  const h=S.hero,D=derived(h),r=S.res,era=ERAS.find(e=>e.k===S.era);
+  $('sheet').innerHTML=`<div><div class="nm">${esc(h.name)}</div><div class="sub">${esc(h.species)}${h.age?' · '+esc(h.age)+' ans':''} · ${PATHS[S.path].l}</div><div class="sub">${era.l} · ${esc(S.year||era.y)}</div></div>
+    <section><span class="label">Compétences · 3d6 sous le score</span><div class="sklist">${SKILLS.filter(([k])=>k!=='force'||h.force).map(([k,l])=>`<div><span>${l}</span><b>${h.skills[k]}</b></div>`).join('')}</div>
+      <div class="sub">PV ${D.pv} · Réflexes ${D.ref}${h.force?' · Réserve de Force '+D.fp:''} · XP ${S.xp||0}</div>
+      <div class="sub">${WEAPONS[h.weapon]}${/saber|dual|double/.test(h.weapon)?' · '+FORMS[h.form]:''}${h.tech.length?' · '+h.tech.map(t=>TECHS[t]).join(', '):''}</div></section>
+    <section><span class="label">Ressources</span><div class="reslist">
+      <div><span>Crédits</span><span>${r.credits.toLocaleString('fr-FR')}</span></div>
+      ${r.ship?`<div><span>Vaisseau</span><span>${esc(r.ship)}</span></div>`:''}
+      ${r.fleet.length?`<div><span>Flotte</span><span>${r.fleet.map(s=>esc(s.name)).join(', ')}</span></div>`:''}
+      ${r.troops.length?`<div><span>Troupes</span><span>${r.troops.map(s=>esc(s.name)).join(', ')}</span></div>`:''}
+      ${r.companions.length?`<div><span>Compagnons</span><span>${r.companions.map(c=>esc(c.name)).join(', ')}</span></div>`:''}
+    </div></section>
+    ${(r.notes||[]).length?`<section><span class="label">À retenir</span><div class="chron">${r.notes.slice(-8).map(n=>`<div>${esc(n)}</div>`).join('')}</div></section>`:''}
+    <section><span class="label">Chronique</span><div class="chron">${S.chronicle.slice(-14).map(c=>`<div><b>Ch. ${c.ch}</b> · ${esc(c.t)}</div>`).join('')||'<div>L’histoire commence.</div>'}</div></section>
+    <section><span class="label">Sauvegarde</span><div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="small" id="expBtn">Copier la sauvegarde</button><button type="button" class="small" id="impBtn">Importer</button></div><textarea id="saveBox" rows="3" hidden placeholder="Colle ici une sauvegarde puis clique Importer"></textarea></section>`;
+}
+function renderStory(){
+  const era=ERAS.find(e=>e.k===S.era);
+  $('chapNo').textContent=`Chapitre ${S.chapter.n}`;$('chapTitle').textContent=S.chapter.title||'Prologue';$('eraTag').textContent=era.l;
+  renderFeed();renderAct();renderSheet();
+}
+function playerAct(text){
+  text=String(text||'').trim();if(!text||busyMJ)return;
+  addFeed({k:'me',text});askMJ(`Le joueur agit : ${text}`);
+}
+$('actZone').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.choice!=null)playerAct(S.choices[+b.dataset.choice]);
+  else if(b.id==='sayBtn')playerAct($('sayBox').value);
+  else if(b.id==='rollBtn')doRoll();
+  else if(b.id==='fightBtn')launchCombat();
+  else if(b.id==='stopMJ'&&abortCtl)abortCtl.abort();
+});
+$('actZone').addEventListener('keydown',e=>{if(e.target.id==='sayBox'&&e.key==='Enter'&&!e.shiftKey){e.preventDefault();playerAct(e.target.value);}});
+$('feed').addEventListener('click',e=>{const b=e.target.closest('[data-retry]');if(!b)return;const last=S.feed[S.feed.length-1];if(last&&last.retry){const r=last.retry;S.feed.pop();askMJ(r.entry,r.opening);}});
+$('sheet').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.id==='expBtn'){const box=$('saveBox');box.hidden=false;box.value=JSON.stringify(trimState(S));box.select();try{navigator.clipboard.writeText(box.value).then(()=>{b.textContent='Copiée';},()=>{});}catch(err){}}
+  if(b.id==='impBtn'){const box=$('saveBox');if(box.hidden){box.hidden=false;box.value='';box.focus();return;}try{const s=JSON.parse(box.value);if(s&&s.hero&&s.feed){S=s;saveCampaign();renderStory();}else throw 0;}catch(err){box.value='';box.placeholder='Sauvegarde illisible. Colle le texte complet copié depuis « Copier la sauvegarde ».';}}
+});
+async function doRoll(){
+  const p=S.pending;if(!p||p.kind!=='test')return;
+  const btn=$('rollBtn');btn.disabled=true;
+  const box=$('rollDice');box.querySelectorAll('i').forEach(i=>i.classList.add('rolling'));
+  const iv=setInterval(()=>box.querySelectorAll('i').forEach(i=>i.textContent=rint(1,6)),70);
+  await wait(800);clearInterval(iv);
+  const d=[rint(1,6),rint(1,6),rint(1,6)],sum=d[0]+d[1]+d[2],score=S.hero.skills[p.skill]+p.mod;
+  const crit=sum<=4,fumble=sum>=17,ok=crit||(!fumble&&sum<=score),margin=score-sum;
+  const resLabel=crit?'Réussite critique':fumble?'Échec critique':ok?`Réussite (marge ${margin})`:`Échec (de ${-margin})`;
+  S.pending=null;
+  addFeed({k:'test',data:{skill:p.skill,mod:p.mod,d,sum,score,ok,resLabel}});
+  askMJ(`Résultat du jet de ${SKL[p.skill]} demandé (${p.why}) : 3d6 = ${d.join('+')} = ${sum} contre ${score}. ${resLabel}. Raconte l’issue en conséquence.`);
+}
+
+/* ================= Combats ================= */
+let combatCtx=null;
+function showEngine(name){
+  $('shell').hidden=true;['space','ground','duel'].forEach(n=>{$('eng-'+n).hidden=n!==name;});
+  window.__ENG=name;window.scrollTo(0,0);
+}
+function hideEngines(){['space','ground','duel'].forEach(n=>{$('eng-'+n).hidden=true;});window.__ENG=null;$('shell').hidden=false;}
+function launchCombat(){
+  const c=S.pending&&S.pending.combat;if(!c)return;
+  combatCtx={combat:c};
+  window.__CFG={};
+  if(c.type==='duel'){
+    const p=[heroFiche()];
+    for(const a of (c.allies||[])){const n=typeof a==='string'?a:a&&a.name;const comp=S.res.companions.find(x=>x.name===n);if(comp&&p.length<4)p.push(presetFiche(comp.preset,comp.name,'p'));}
+    const e=c.enemies.slice(0,4).map(x=>presetFiche(LOOKS[x.preset]?x.preset:'thug',String(x.name||'Adversaire').slice(0,30),'e',x));
+    window.__CFG.duel={title:c.title,p,e};
+  }else if(c.type==='space'){
+    const fleet=S.res.fleet.slice(0,8);
+    window.__CFG.space={title:c.title,player:fleet.map((s,i)=>({type:s.type,name:s.name,flag:i===0})),enemy:c.enemies.filter(x=>SHIP_T[x.type]).map(x=>({type:x.type,name:String(x.name||'Vaisseau ennemi').slice(0,30)}))};
+    if(!window.__CFG.space.enemy.length)window.__CFG.space.enemy=[{type:'frigate',name:'Frégate ennemie'},{type:'fighters',name:'Chasseurs ennemis'}];
+  }else{
+    const ok=['einf','eat','eltank','eturret'];
+    window.__CFG.ground={title:c.title,commander:S.hero.name,player:S.res.troops.slice(0,7).map(s=>({type:s.type,name:s.name})),
+      enemy:c.enemies.filter(x=>ok.includes(x.type)&&x.type!=='eturret').map(x=>({type:x.type,name:String(x.name||'Ennemis').slice(0,30)})),
+      turrets:Math.min(2,c.enemies.filter(x=>x.type==='eturret').length),orbital:S.res.fleet.some(s=>s.type==='cruiser')};
+    if(!window.__CFG.ground.enemy.length)window.__CFG.ground.enemy=[{type:'einf',name:'Fantassins'},{type:'einf',name:'Tireurs'}];
+  }
+  showEngine(c.type);
+  window.ENGINES[c.type].start();
+}
+window.__engineEnd=(engine,res)=>{if(combatCtx)combatCtx.result={engine,...res};};
+document.addEventListener('click',e=>{
+  if(!e.target.closest('[data-return]'))return;
+  if(!combatCtx||!combatCtx.result)return;
+  const R=combatCtx.result;hideEngines();
+  // Pertes réelles
+  if(R.engine==='space')S.res.fleet=S.res.fleet.filter(s=>!(R.lost||[]).includes(s.name));
+  if(R.engine==='ground')S.res.troops=S.res.troops.filter(s=>!(R.lost||[]).includes(s.name));
+  if(S.res.fleet.length&&!S.res.fleet.some(s=>s.flag))S.res.fleet[0].flag=true;
+  S.pending=null;
+  addFeed({k:'combat',text:R.report});
+  combatCtx=null;renderStory();
+  askMJ(`[RAPPORT DE COMBAT — ${R.win?'VICTOIRE':'DÉFAITE'} du joueur]\n${R.report}\nRaconte l’issue et ses conséquences immédiates, fidèlement à ce rapport.${R.engine==='duel'&&!R.win?' Le personnage a perdu : il est vaincu, blessé, capturé ou forcé de fuir selon ce qui est le plus intéressant, mais la campagne continue.':''}`);
+});
+
+/* ================= Lancement ================= */
+function beginCampaign(){
+  const d=draft;
+  S={v:1,era:d.era,year:d.year,path:d.path,hero:d.hero,res:{...d.res,notes:[]},zero:d.zero,secret:null,chronicle:[],chapter:{n:1,title:''},feed:[],pending:null,choices:[],xp:0,created:Date.now()};
+  if(S.res.fleet.length)S.res.fleet.forEach((s,i)=>s.flag=i===0);
+  showScreen('scr-story');renderStory();saveCampaign();
+  askMJ('[DÉBUT DE CAMPAGNE] Le joueur vient de créer son personnage.',true);
+}
+$('btnNew').addEventListener('click',startCreation);
+$('menuNew').addEventListener('click',()=>{if(S&&!confirmNew())return;S=null;startCreation();});
+let newArmed=false;
+function confirmNew(){if(newArmed){newArmed=false;$('menuNew').textContent='Nouvelle campagne';return true;}newArmed=true;$('menuNew').textContent='Confirmer : tout recommencer';setTimeout(()=>{newArmed=false;$('menuNew').textContent='Nouvelle campagne';},4000);return false;}
+$('btnContinue').addEventListener('click',()=>{if(S){showScreen('scr-story');renderStory();if(S.feed.length&&S.feed[S.feed.length-1].live){S.feed.pop();}}});
+
+/* Fond animé de l'écran titre */
+(function heroBg(){
+  const c=$('heroCv'),g=c.getContext('2d');let stars=[];
+  function size(){const r=c.getBoundingClientRect();const dpr=Math.min(2,window.devicePixelRatio||1);c.width=Math.max(1,r.width*dpr);c.height=Math.max(1,r.height*dpr);stars=Array.from({length:220},()=>({x:Math.random(),y:Math.random(),z:Math.random()}));}
+  new ResizeObserver(size).observe(c);size();
+  function f(t){
+    if(!$('scr-title').hidden&&!$('shell').hidden){
+      const W=c.width,H=c.height;const gr=g.createLinearGradient(0,0,W,H);gr.addColorStop(0,'#07050a');gr.addColorStop(.6,'#160a14');gr.addColorStop(1,'#2a0d18');g.fillStyle=gr;g.fillRect(0,0,W,H);
+      const neb=g.createRadialGradient(W*.75,H*.35,0,W*.75,H*.35,W*.5);neb.addColorStop(0,'rgba(232,171,82,.18)');neb.addColorStop(1,'rgba(232,171,82,0)');g.fillStyle=neb;g.fillRect(0,0,W,H);
+      for(const s of stars){s.x-=.00006*(1+s.z*3);if(s.x<0)s.x=1;g.fillStyle=`rgba(240,230,240,${.25+s.z*.6})`;const r=s.z*1.6+.4;g.fillRect(s.x*W,s.y*H,r,r);}
+      const pr=W*.22,px=W*.82,py=H*1.05;const pg=g.createRadialGradient(px-pr*.4,py-pr*.6,pr*.1,px,py,pr);pg.addColorStop(0,'#c98a52');pg.addColorStop(.6,'#5a2a1a');pg.addColorStop(1,'#140808');g.fillStyle=pg;g.beginPath();g.arc(px,py,pr,0,7);g.fill();
+      g.strokeStyle='rgba(232,171,82,.35)';g.lineWidth=2;g.beginPath();g.arc(px,py,pr+2,Math.PI*1.05,Math.PI*1.75);g.stroke();
+      const v=g.createLinearGradient(0,0,0,H);v.addColorStop(.35,'rgba(8,7,10,0)');v.addColorStop(1,'rgba(8,7,10,.85)');g.fillStyle=v;g.fillRect(0,0,W,H);
+    }
+    requestAnimationFrame(f);
+  }
+  requestAnimationFrame(f);
+})();
+
+(async()=>{
+  $('saveState').textContent='';
+  await initStore();
+  const s=await loadCampaign();
+  if(s&&s.hero&&s.feed){S=s;S.feed=S.feed.filter(e=>!e.live);$('btnContinue').hidden=false;$('btnContinue').textContent=`Reprendre : ${s.hero.name}`;}
+  const sm=await getSample();
+  if(!sm){$('mjWarn').hidden=false;$('mjWarn').textContent='Le MJ intégré n’est pas disponible dans cette vue : ouvre le jeu depuis claude.ai, connecté à ton compte. La création de personnage reste accessible.';}
+})();
+})();
+</script>

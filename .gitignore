@@ -1,1 +1,4 @@
 dist/
+node_modules/
+chroniques-galactiques/t/p4.txt
+chroniques-galactiques/t/package*.json

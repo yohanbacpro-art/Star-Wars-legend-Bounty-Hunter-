@@ -1,0 +1,792 @@
+<title>Bataille de Kessaria</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout : poste de commandement — carte tactique à gauche, console du Moff à droite (empilée sur mobile). Monde sombre unique, assumé. */
+:root{
+  --void:#05070c;
+  --deck:#0b1018;
+  --deck2:#111823;
+  --line:#212b3a;
+  --steel:#d4dbe4;
+  --dim:#8794a6;
+  --amber:#e8ab52;
+  --imp:#8dffad;
+  --foe:#ff6a55;
+  --shield:#78c8ff;
+  --f-display:'Chakra Petch','Bahnschrift','Arial Narrow',sans-serif;
+  --f-body:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,'SFMono-Regular',Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--void);color:var(--steel);font-family:var(--f-body);font-size:14px;line-height:1.45;padding-inline:16px;padding-block:14px 28px}
+.wrap{max-width:1480px;margin:0 auto;display:grid;gap:12px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 24px}
+.eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+h1{font-family:var(--f-display);font-weight:700;font-size:clamp(22px,3vw,32px);letter-spacing:.04em;text-transform:uppercase;margin:2px 0 0;text-wrap:balance}
+h1 span{color:var(--amber)}
+.turnbox{display:flex;align-items:center;gap:14px}
+.turn{font-family:var(--f-display);font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.turn b{font-family:var(--f-mono);font-size:26px;color:var(--steel);font-weight:500;margin-left:6px;font-variant-numeric:tabular-nums}
+.phase{font-family:var(--f-display);font-weight:600;font-size:12px;letter-spacing:.12em;text-transform:uppercase;padding:6px 10px;border:1px solid var(--amber);color:var(--amber);border-radius:3px}
+.phase.enemy{border-color:var(--foe);color:var(--foe)}
+.stage{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:12px;align-items:start}
+@media (max-width:960px){.stage{grid-template-columns:minmax(0,1fr)}}
+.map{position:relative;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:#000;min-width:0}
+canvas{display:block;width:100%;aspect-ratio:16/10;max-width:100%;cursor:crosshair;touch-action:manipulation}
+.console{background:var(--deck);border:1px solid var(--line);border-radius:4px;padding:14px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.sect{display:grid;gap:8px}
+.label{font-family:var(--f-display);font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.brief{color:var(--dim);font-size:13px;margin:0}
+.brief strong{color:var(--steel);font-weight:600}
+.card{background:var(--deck2);border:1px solid var(--line);border-radius:3px;padding:12px;display:grid;gap:10px}
+.card .nm{font-family:var(--f-display);font-weight:700;font-size:18px;letter-spacing:.05em;text-transform:uppercase;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.flagtag{font-size:10px;letter-spacing:.14em;color:var(--void);background:var(--amber);padding:2px 6px;border-radius:2px}
+.card .ty{color:var(--dim);font-size:12px;margin-top:-6px}
+.bar{display:grid;grid-template-columns:62px 1fr 64px;align-items:center;gap:8px;font-size:12px}
+.bar .k{color:var(--dim)}
+.bar .v{font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+.track{height:6px;background:#1b2330;border-radius:1px;overflow:hidden}
+.fill{height:100%}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.stat{border-top:1px solid var(--line);padding-top:6px}
+.stat .k{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.stat .v{font-family:var(--f-mono);font-size:14px;font-variant-numeric:tabular-nums}
+.orders{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-family:var(--f-mono);font-size:11px;padding:3px 7px;border-radius:2px;border:1px solid var(--line);color:var(--dim)}
+.chip.ok{border-color:rgba(141,255,173,.45);color:var(--imp)}
+.hint{font-size:13px;color:var(--steel);margin:0;min-height:2.9em}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+button{font-family:var(--f-display);font-weight:600;font-size:13px;letter-spacing:.08em;text-transform:uppercase;padding:10px 12px;border-radius:3px;border:1px solid var(--line);background:var(--deck2);color:var(--steel);cursor:pointer}
+button:hover:not(:disabled){border-color:var(--dim)}
+button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.primary{background:var(--amber);border-color:var(--amber);color:#1a1206}
+button.primary:hover:not(:disabled){filter:brightness(1.08)}
+button.pulse{animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 4px rgba(232,171,82,.25)}}
+@media (prefers-reduced-motion:reduce){button.pulse{animation:none}}
+.fleet{display:grid;gap:4px}
+.row{display:grid;grid-template-columns:8px minmax(0,1fr) 54px 64px;align-items:center;gap:8px;padding:6px 8px;border-radius:2px;cursor:pointer;border:1px solid transparent;background:none;text-align:left;font:inherit;color:inherit;letter-spacing:0;text-transform:none}
+.row:hover{background:var(--deck2)}
+.row.sel{border-color:var(--amber);background:var(--deck2)}
+.row.dead{opacity:.4;cursor:default}
+.row .dot{width:8px;height:8px;border-radius:50%}
+.row .n{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .mini{height:4px;background:#1b2330}
+.row .st{font-family:var(--f-mono);font-size:11px;color:var(--dim);text-align:right}
+.log{list-style:none;margin:0;padding:0;display:grid;gap:5px;max-height:190px;overflow:auto;font-size:12.5px}
+.log li{color:var(--dim);padding-left:10px;border-left:2px solid var(--line)}
+.log li.p{border-color:var(--imp);color:var(--steel)}
+.log li.e{border-color:var(--foe);color:var(--steel)}
+.log li.kill{color:var(--amber);border-color:var(--amber)}
+.over{position:absolute;inset:0;display:grid;place-items:center;background:rgba(3,5,9,.72);padding:16px}
+.report{width:min(520px,100%);background:var(--deck);border:1px solid var(--line);border-radius:4px;padding:20px;display:grid;gap:12px;max-height:100%;overflow:auto}
+.report h2{font-family:var(--f-display);font-size:28px;letter-spacing:.06em;text-transform:uppercase;margin:0}
+.report h2.win{color:var(--amber)}
+.report h2.lose{color:var(--foe)}
+.report p{margin:0;color:var(--dim)}
+.report textarea{width:100%;min-height:150px;resize:vertical;background:var(--void);color:var(--steel);border:1px solid var(--line);border-radius:3px;padding:10px;font-family:var(--f-mono);font-size:12px;line-height:1.5}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--dim)}
+.legend i{display:inline-block;width:14px;height:0;border-top:2px dashed;vertical-align:middle;margin-right:5px}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Secteur Ombra · Orbite haute de Kessaria IV</div>
+      <h1>Bataille de <span>Kessaria</span></h1>
+    </div>
+    <div class="turnbox">
+      <div class="turn">Tour<b id="turnNo">01</b></div>
+      <div class="phase" id="phase">Vos ordres</div>
+    </div>
+  </header>
+
+  <div class="stage">
+    <div class="map">
+      <canvas id="cv" aria-label="Carte tactique de la bataille"></canvas>
+      <div class="over" id="over" hidden>
+        <div class="report">
+          <h2 id="rTitle">Victoire</h2>
+          <p id="rText"></p>
+          <label class="label" for="rBox">Rapport à recopier dans le JDR</label>
+          <textarea id="rBox" readonly></textarea>
+          <div class="btns">
+            <button id="copyBtn" type="button">Copier le rapport</button>
+            <button id="againBtn" class="primary" type="button">Nouvelle bataille</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="console">
+      <div class="sect">
+        <div class="label">Ordres du Moff</div>
+        <p class="brief">Un raid insurgé frappe l’orbite de Kessaria IV. Détruisez-le ou forcez-le à fuir. <strong>Si l’Inexorable tombe, la bataille est perdue.</strong></p>
+        <div class="legend"><span><i style="color:var(--amber)"></i>Déplacement</span><span><i style="color:var(--imp)"></i>Portée de tir</span><span><i style="color:#c9a86a"></i>Astéroïdes : −30 % dégâts</span></div>
+      </div>
+
+      <div class="sect">
+        <div class="label">Vaisseau sélectionné</div>
+        <div id="card" class="card"></div>
+        <p class="hint" id="hint"></p>
+        <div class="btns">
+          <button id="specBtn" type="button">Boucliers</button>
+          <button id="endBtn" class="primary" type="button">Fin du tour</button>
+        </div>
+      </div>
+
+      <div class="sect">
+        <div class="label">Flotte du secteur</div>
+        <div class="fleet" id="fleet"></div>
+      </div>
+
+      <div class="sect">
+        <div class="label">Journal de bataille</div>
+        <ul class="log" id="log"></ul>
+      </div>
+
+      <button id="newBtn" type="button">Nouvelle bataille</button>
+    </aside>
+  </div>
+</div>
+
+<script>
+(()=>{
+const W=1600,H=1000;
+const PLANET={x:980,y:2400,r:1620};
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+let scale=1;
+function resize(){
+  const r=cv.getBoundingClientRect();
+  const dpr=Math.min(2,window.devicePixelRatio||1);
+  cv.width=Math.max(1,Math.round(r.width*dpr));
+  cv.height=Math.max(1,Math.round(r.width*H/W*dpr));
+  scale=cv.width/W;
+}
+new ResizeObserver(resize).observe(cv);resize();
+
+const TYPES={
+  cruiser:{label:'Croiseur de ligne',elabel:'Croiseur insurgé',hull:140,sh:70,move:110,range:300,dmg:[20,28],r:52,bolts:3,cost:4},
+  frigate:{label:'Frégate d’escorte',elabel:'Frégate marteau',hull:70,sh:35,move:170,range:250,dmg:[12,17],r:34,bolts:2,cost:2},
+  fighters:{label:'Escadron de chasseurs',elabel:'Chasseurs insurgés',hull:36,sh:0,move:260,range:130,dmg:[9,13],r:28,bolts:4,cost:1}
+};
+const MULT={cruiser:{cruiser:1,frigate:1.3,fighters:1},frigate:{cruiser:.9,frigate:1,fighters:1.8},fighters:{cruiser:1.5,frigate:1.1,fighters:1}};
+const CH={cruiser:{cruiser:.9,frigate:.88,fighters:.5},frigate:{cruiser:.9,frigate:.88,fighters:.85},fighters:{cruiser:.85,frigate:.82,fighters:.75}};
+
+let ships=[],fields=[],bg=null,sel=null,hover=null,turn=1,phase='player',busy=false,over=false,acting=null,logs=[],fx=[],floats=[],anims=[],initEnemyHull=1;
+
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const rint=(a,b)=>Math.floor(rnd(a,b+1));
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+const pick=arr=>arr.splice(Math.floor(Math.random()*arr.length),1)[0];
+
+function clampPos(x,y){
+  x=Math.max(50,Math.min(W-50,x));y=Math.max(50,Math.min(H-40,y));
+  const d=Math.hypot(x-PLANET.x,y-PLANET.y),m=PLANET.r+50;
+  if(d<m){x=PLANET.x+(x-PLANET.x)/d*m;y=PLANET.y+(y-PLANET.y)/d*m;}
+  return{x,y};
+}
+function settle(s,x,y){
+  let p=clampPos(x,y);
+  for(let k=0;k<6;k++){
+    for(const o of ships){
+      if(o===s||!o.alive)continue;
+      const d=Math.hypot(p.x-o.x,p.y-o.y),m=s.r+o.r-8;
+      if(d<m){if(d<0.01){p.x+=m;}else{p.x=o.x+(p.x-o.x)/d*m;p.y=o.y+(p.y-o.y)/d*m;}}
+    }
+    p=clampPos(p.x,p.y);
+  }
+  return p;
+}
+const inField=(x,y)=>fields.some(f=>Math.hypot(x-f.x,y-f.y)<f.r);
+
+function mkShip(side,type,name,x,y,flag=false){
+  const T=TYPES[type];
+  return{side,type,name,x,y,a:side==='p'?0:Math.PI,hull:T.hull,hullMax:T.hull,sh:T.sh,shMax:T.sh,move:T.move,range:T.range,r:T.r,
+    moved:false,acted:false,evade:false,alive:true,flag,
+    dmgPts:[0,1,2].map(()=>({x:rnd(-T.r*.5,T.r*.4),y:rnd(-T.r*.3,T.r*.3),p:rnd(0,6)}))};
+}
+
+/* ---------- Génération de la bataille ---------- */
+function newBattle(){
+  ships=[];fields=[];fx=[];floats=[];anims=[];logs=[];
+  turn=1;phase='player';busy=false;over=false;acting=null;
+  // Champs d'astéroïdes
+  const nf=rint(2,3);
+  for(let i=0;i<40&&fields.length<nf;i++){
+    const f={x:rnd(560,1080),y:rnd(140,660),r:rnd(85,125)};
+    if(fields.every(o=>Math.hypot(o.x-f.x,o.y-f.y)>o.r+f.r+60)){
+      f.rocks=Array.from({length:Math.round(f.r/3.6)},()=>{const a=rnd(0,7),d=Math.sqrt(Math.random())*f.r*.92;
+        return{x:f.x+Math.cos(a)*d,y:f.y+Math.sin(a)*d,s:rnd(3,15),rot:rnd(0,7),pts:Array.from({length:rint(6,9)},()=>rnd(.65,1.1)),tone:rint(0,2)}});
+      fields.push(f);
+    }
+  }
+  // Flotte impériale du Moff
+  ships.push(mkShip('p','cruiser','Inexorable',250,430,true));
+  ships.push(mkShip('p','cruiser','Vigilance',210,650));
+  ships.push(mkShip('p','frigate','Lame d’Acier',330,230));
+  ships.push(mkShip('p','frigate','Sentence',380,560));
+  ships.push(mkShip('p','fighters','Escadron Noir',420,330));
+  ships.push(mkShip('p','fighters','Escadron Cendre',440,460));
+  // Raid insurgé, composition aléatoire
+  const pools={cruiser:['Liberté d’Arvan','Espoir Tenace'],frigate:['Brise-Chaînes','Aube Rouge','Vagabond','Serment d’Ilo'],fighters:['Escadron Sirocco','Escadron Lance','Escadron Faucon','Escadron Braise']};
+  const comp=[];let budget=13;
+  const nc=Math.random()<.45?2:1;
+  for(let i=0;i<nc;i++){comp.push('cruiser');budget-=4;}
+  while(budget>=2&&comp.filter(c=>c==='frigate').length<3){
+    if(Math.random()<.55){comp.push('frigate');budget-=2;}
+    else if(comp.filter(c=>c==='fighters').length<4){comp.push('fighters');budget-=1;}
+    else break;
+  }
+  while(budget>0&&comp.filter(c=>c==='fighters').length<4){comp.push('fighters');budget--;}
+  const order=[...comp].sort((a,b)=>(a==='cruiser')-(b==='cruiser'));
+  // Croiseurs au centre de la formation
+  const slots=order.length;
+  const ys=Array.from({length:slots},(_,i)=>140+i*(560/Math.max(1,slots-1)));
+  const centerFirst=ys.map((y,i)=>({y,k:Math.abs(i-(slots-1)/2)})).sort((a,b)=>a.k-b.k).map(o=>o.y);
+  const byPriority=[...comp].sort((a,b)=>TYPES[b].cost-TYPES[a].cost);
+  byPriority.forEach((t,i)=>{
+    const x=(t==='cruiser'?1400:t==='frigate'?1320:1240)+rnd(-30,30);
+    const s=mkShip('e',t,pick(pools[t]),x,centerFirst[i]+rnd(-20,20));
+    const p=settle(s,s.x,s.y);s.x=p.x;s.y=p.y;ships.push(s);
+  });
+  initEnemyHull=ships.filter(s=>s.side==='e').reduce((a,s)=>a+s.hullMax+s.shMax,0);
+  renderBG();
+  sel=ships[0];
+  log(`Contact ! ${comp.length} vaisseaux insurgés sortent de l’hyperespace au-dessus de Kessaria IV.`,'kill');
+  document.getElementById('over').hidden=true;
+  renderUI();
+}
+
+/* ---------- Décor : espace, nébuleuse, planète, astéroïdes ---------- */
+function renderBG(){
+  bg=document.createElement('canvas');bg.width=W;bg.height=H;
+  const g=bg.getContext('2d');
+  g.fillStyle='#03050a';g.fillRect(0,0,W,H);
+  const neb=[[300,220,520,'70,60,140',.16],[1250,180,460,'40,110,140',.13],[800,520,600,'120,50,90',.08]];
+  for(const [x,y,r,c,a] of neb){const gr=g.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,`rgba(${c},${a})`);gr.addColorStop(1,`rgba(${c},0)`);g.fillStyle=gr;g.fillRect(0,0,W,H);}
+  for(let i=0;i<1100;i++){
+    const x=Math.random()*W,y=Math.random()*H,b=Math.random();
+    g.fillStyle=`rgba(${b>.9?'255,230,200':b>.8?'200,220,255':'230,235,245'},${.15+Math.random()*.7})`;
+    const s=b>.985?1.8:b>.9?1.2:.7;g.fillRect(x,y,s,s);
+  }
+  for(let i=0;i<14;i++){const x=Math.random()*W,y=Math.random()*700;const gr=g.createRadialGradient(x,y,0,x,y,5);gr.addColorStop(0,'rgba(255,255,255,.9)');gr.addColorStop(1,'rgba(180,210,255,0)');g.fillStyle=gr;g.fillRect(x-5,y-5,10,10);}
+  // Lune
+  const M={x:1460,y:110,r:38};
+  let mg=g.createRadialGradient(M.x-14,M.y-14,4,M.x,M.y,M.r);mg.addColorStop(0,'#b9b4ab');mg.addColorStop(.7,'#6c675f');mg.addColorStop(1,'#2a2824');
+  g.fillStyle=mg;g.beginPath();g.arc(M.x,M.y,M.r,0,7);g.fill();
+  g.save();g.beginPath();g.arc(M.x,M.y,M.r,0,7);g.clip();
+  for(let i=0;i<9;i++){g.fillStyle='rgba(40,38,34,.35)';g.beginPath();g.arc(M.x+rnd(-28,28),M.y+rnd(-28,28),rnd(3,8),0,7);g.fill();}
+  const ms=g.createLinearGradient(M.x-M.r,0,M.x+M.r,0);ms.addColorStop(0,'rgba(0,0,0,0)');ms.addColorStop(.6,'rgba(0,0,0,.15)');ms.addColorStop(1,'rgba(0,0,0,.8)');g.fillStyle=ms;g.fillRect(M.x-M.r,M.y-M.r,M.r*2,M.r*2);
+  g.restore();
+  // Planète
+  const P=PLANET;
+  const halo=g.createRadialGradient(P.x,P.y,P.r-10,P.x,P.y,P.r+90);halo.addColorStop(0,'rgba(110,190,255,.35)');halo.addColorStop(1,'rgba(110,190,255,0)');
+  g.fillStyle=halo;g.beginPath();g.arc(P.x,P.y,P.r+90,0,7);g.fill();
+  g.save();g.beginPath();g.arc(P.x,P.y,P.r,0,7);g.clip();
+  const base=g.createLinearGradient(0,P.y-P.r,0,P.y-P.r+260);base.addColorStop(0,'#2d7591');base.addColorStop(1,'#123247');
+  g.fillStyle=base;g.fillRect(0,0,W,H);
+  const A0=-Math.PI/2-.75,A1=-Math.PI/2+.58;
+  for(let i=0;i<170;i++){
+    const a=rnd(A0,A1),d=rnd(P.r-250,P.r-4);const x=P.x+Math.cos(a)*d,y=P.y+Math.sin(a)*d;
+    const land=Math.random();
+    g.fillStyle=land<.5?`rgba(${rint(70,100)},${rint(110,135)},${rint(60,80)},${rnd(.25,.5)})`:land<.8?`rgba(${rint(150,175)},${rint(125,145)},${rint(85,100)},${rnd(.2,.4)})`:'rgba(220,230,235,.18)';
+    g.beginPath();g.ellipse(x,y,rnd(18,110),rnd(10,45),a+Math.PI/2+rnd(-.5,.5),0,7);g.fill();
+  }
+  for(let i=0;i<110;i++){
+    const a=rnd(A0,A1),d=rnd(P.r-240,P.r-2);const x=P.x+Math.cos(a)*d,y=P.y+Math.sin(a)*d;
+    g.fillStyle=`rgba(240,246,250,${rnd(.06,.22)})`;
+    g.beginPath();g.ellipse(x,y,rnd(60,240),rnd(3,11),a+Math.PI/2,0,7);g.fill();
+  }
+  const night=g.createLinearGradient(P.x-1000,0,P.x+800,0);
+  night.addColorStop(0,'rgba(2,4,10,0)');night.addColorStop(.5,'rgba(2,4,10,.15)');night.addColorStop(.85,'rgba(2,4,10,.72)');night.addColorStop(1,'rgba(2,4,10,.9)');
+  g.fillStyle=night;g.fillRect(0,0,W,H);
+  for(let i=0;i<260;i++){
+    const a=rnd(-Math.PI/2+.12,A1),d=rnd(P.r-230,P.r-6);const x=P.x+Math.cos(a)*d,y=P.y+Math.sin(a)*d;
+    const c=Math.random()<.2;g.fillStyle=`rgba(255,${c?190:215},${c?110:150},${rnd(.25,.75)})`;
+    const n=c?rint(4,9):1;for(let k=0;k<n;k++)g.fillRect(x+rnd(-8,8),y+rnd(-4,4),1.4,1.4);
+  }
+  const limb=g.createRadialGradient(P.x,P.y,P.r-70,P.x,P.y,P.r);limb.addColorStop(0,'rgba(0,0,0,0)');limb.addColorStop(1,'rgba(0,0,0,.45)');
+  g.fillStyle=limb;g.fillRect(0,0,W,H);
+  g.restore();
+  g.save();g.strokeStyle='rgba(150,215,255,.55)';g.lineWidth=3;g.shadowColor='rgba(120,200,255,1)';g.shadowBlur=24;
+  g.beginPath();g.arc(P.x,P.y,P.r+1,-Math.PI/2-.8,-Math.PI/2+.25);g.stroke();g.restore();
+  // Astéroïdes
+  for(const f of fields){
+    const dg=g.createRadialGradient(f.x,f.y,0,f.x,f.y,f.r*1.1);dg.addColorStop(0,'rgba(170,140,100,.10)');dg.addColorStop(1,'rgba(170,140,100,0)');
+    g.fillStyle=dg;g.beginPath();g.arc(f.x,f.y,f.r*1.1,0,7);g.fill();
+    for(const r of f.rocks){
+      g.save();g.translate(r.x,r.y);g.rotate(r.rot);
+      g.beginPath();r.pts.forEach((k,i)=>{const a=i/r.pts.length*Math.PI*2;const px=Math.cos(a)*r.s*k,py=Math.sin(a)*r.s*k;i?g.lineTo(px,py):g.moveTo(px,py);});g.closePath();
+      const tones=[['#8a7a66','#3b322a'],['#77716a','#2e2b28'],['#9a8468','#41352a']][r.tone];
+      const rg=g.createLinearGradient(-r.s,-r.s,r.s,r.s);rg.addColorStop(0,tones[0]);rg.addColorStop(1,tones[1]);
+      g.fillStyle=rg;g.fill();g.strokeStyle='rgba(0,0,0,.4)';g.lineWidth=1;g.stroke();
+      g.restore();
+    }
+  }
+}
+
+/* ---------- Dessin des vaisseaux (designs originaux) ---------- */
+function engines(g,x,ys,now,rgb,r){
+  for(const y of ys){
+    const f=.85+.15*Math.sin(now/60+y*3);const R=r*2.3*f;
+    const gr=g.createRadialGradient(x,y,0,x,y,R);gr.addColorStop(0,'rgba(255,255,255,.95)');gr.addColorStop(.25,`rgba(${rgb},.8)`);gr.addColorStop(1,`rgba(${rgb},0)`);
+    g.fillStyle=gr;g.beginPath();g.arc(x,y,R,0,7);g.fill();
+  }
+}
+function hullGrad(g,w,c){const gr=g.createLinearGradient(0,-w,0,w);gr.addColorStop(0,c[0]);gr.addColorStop(.48,c[1]);gr.addColorStop(.52,c[2]);gr.addColorStop(1,c[3]);return gr;}
+const STEEL=['#e1e6eb','#a7afb8','#7d8690','#4a525b'];
+const SAND=['#e3d6bf','#b9a98f','#93836c','#5a4e40'];
+
+function drawPCruiser(g,now){
+  const n=62,b=-52,w=36;
+  g.fillStyle='rgba(0,0,0,.35)';g.beginPath();g.moveTo(n+5,7);g.lineTo(b+5,-w+7);g.lineTo(b+5,w+7);g.closePath();g.fill();
+  g.fillStyle=hullGrad(g,w,STEEL);
+  g.beginPath();g.moveTo(n,0);g.lineTo(b,-w);g.lineTo(b-7,-w*.7);g.lineTo(b-7,w*.7);g.lineTo(b,w);g.closePath();g.fill();
+  g.strokeStyle='rgba(12,15,20,.9)';g.lineWidth=1.2;g.stroke();
+  g.strokeStyle='rgba(25,30,38,.5)';g.lineWidth=1;
+  g.beginPath();g.moveTo(n-10,-2.5);g.lineTo(b+6,-w+5);g.moveTo(n-10,2.5);g.lineTo(b+6,w-5);
+  for(let i=1;i<6;i++){const x=n-i*18,ww=w*(n-x)/(n-b);g.moveTo(x,-ww+3);g.lineTo(x,-ww*.3);g.moveTo(x,ww*.3);g.lineTo(x,ww-3);}
+  g.stroke();
+  g.fillStyle='rgba(240,244,248,.35)';g.beginPath();g.moveTo(n-6,0);g.lineTo(b+14,-6);g.lineTo(b+14,6);g.closePath();g.fill();
+  g.fillStyle='#868e97';g.fillRect(b+5,-12,32,24);
+  g.fillStyle='#b5bcc4';g.fillRect(b+9,-8,22,16);
+  g.fillStyle='#dbe0e5';g.fillRect(b+14,-4.5,11,9);
+  g.strokeStyle='rgba(12,15,20,.8)';g.strokeRect(b+5,-12,32,24);
+  g.fillStyle='#a4acb5';for(const y of[-9.5,9.5]){g.beginPath();g.arc(b+22,y,3.2,0,7);g.fill();}
+  engines(g,b-7,[-w*.45,0,w*.45],now,'120,185,255',7);
+  g.fillStyle=Math.sin(now/400)>0?'rgba(255,90,80,.9)':'rgba(255,90,80,.25)';g.fillRect(n-4,-1,2,2);
+}
+function drawPFrigate(g,now){
+  g.fillStyle='rgba(0,0,0,.3)';g.fillRect(-34,-8,74,22);
+  g.fillStyle=hullGrad(g,14,STEEL);
+  g.beginPath();g.moveTo(-30,-13);g.lineTo(-44,-24);g.lineTo(-36,-24);g.lineTo(-18,-13);g.closePath();g.fill();
+  g.beginPath();g.moveTo(-30,13);g.lineTo(-44,24);g.lineTo(-36,24);g.lineTo(-18,13);g.closePath();g.fill();
+  g.fillRect(-38,-14,24,28);
+  g.fillRect(-16,-4.5,42,9);
+  g.beginPath();g.moveTo(24,-8);g.lineTo(42,-3);g.lineTo(42,3);g.lineTo(24,8);g.closePath();g.fill();
+  g.strokeStyle='rgba(12,15,20,.85)';g.lineWidth=1;g.strokeRect(-38,-14,24,28);g.strokeRect(-16,-4.5,42,9);
+  g.fillStyle='#d8dde2';g.fillRect(-32,-5,10,10);
+  g.strokeStyle='rgba(25,30,38,.5)';g.beginPath();for(let x=-12;x<24;x+=7){g.moveTo(x,-4.5);g.lineTo(x,4.5);}g.stroke();
+  engines(g,-39,[-7,7],now,'120,185,255',5);
+}
+function drawPFighters(g,now){
+  for(const [ox,oy] of [[12,0],[-4,-15],[-4,15],[-20,0]]){
+    g.save();g.translate(ox,oy);
+    g.fillStyle='#2f353d';
+    g.beginPath();g.moveTo(-6,-8.5);g.lineTo(6,-8.5);g.lineTo(4,-6);g.lineTo(-4,-6);g.closePath();g.fill();
+    g.beginPath();g.moveTo(-6,8.5);g.lineTo(6,8.5);g.lineTo(4,6);g.lineTo(-4,6);g.closePath();g.fill();
+    g.fillStyle='#6e7781';g.fillRect(-.9,-6.5,1.8,13);
+    g.fillStyle='#aeb6bf';g.beginPath();g.arc(0,0,3.1,0,7);g.fill();
+    engines(g,-3.5,[0],now,'120,185,255',1.6);
+    g.restore();
+  }
+}
+function drawECruiser(g,now){
+  const L=66;
+  g.fillStyle='rgba(0,0,0,.35)';g.beginPath();g.ellipse(4,7,L,26,0,0,7);g.fill();
+  for(const [x,y] of [[-32,-23],[-8,-25],[18,-20],[-32,23],[-8,25],[18,20]]){
+    g.fillStyle='#8e7f69';g.beginPath();g.ellipse(x,y,9,5.5,0,0,7);g.fill();g.strokeStyle='rgba(20,15,10,.6)';g.stroke();
+  }
+  g.fillStyle=hullGrad(g,28,SAND);
+  g.beginPath();g.moveTo(L,0);g.bezierCurveTo(L-8,-24,-18,-30,-L+8,-21);g.bezierCurveTo(-L-6,-10,-L-6,10,-L+8,21);g.bezierCurveTo(-18,30,L-8,24,L,0);g.closePath();g.fill();
+  g.strokeStyle='rgba(25,18,12,.85)';g.lineWidth=1.2;g.stroke();
+  g.fillStyle='rgba(255,245,225,.35)';g.beginPath();g.ellipse(-4,-4,44,7,0,0,7);g.fill();
+  g.strokeStyle='rgba(60,45,30,.4)';g.lineWidth=1;g.beginPath();for(let x=-40;x<50;x+=13){g.moveTo(x,-18+Math.abs(x)*.05);g.quadraticCurveTo(x+4,0,x,18-Math.abs(x)*.05);}g.stroke();
+  g.fillStyle='rgba(255,215,140,.75)';for(let x=-34;x<40;x+=6){g.fillRect(x,-12,1.6,1.6);g.fillRect(x+3,11,1.6,1.6);}
+  engines(g,-L+3,[-11,11],now,'255,135,80',8);
+}
+function drawEFrigate(g,now){
+  g.fillStyle='rgba(0,0,0,.3)';g.fillRect(-30,0,70,14);
+  g.fillStyle=hullGrad(g,14,SAND);
+  g.beginPath();g.ellipse(-24,0,15,12,0,0,7);g.fill();g.strokeStyle='rgba(25,18,12,.85)';g.stroke();
+  g.fillRect(-12,-3,36,6);
+  g.beginPath();g.moveTo(22,-24);g.lineTo(32,-21);g.lineTo(35,0);g.lineTo(32,21);g.lineTo(22,24);g.lineTo(26,0);g.closePath();g.fill();g.stroke();
+  g.fillStyle='rgba(255,215,140,.8)';for(const y of[-15,-7,7,15])g.fillRect(29,y,2,2);
+  engines(g,-38,[-5,5],now,'255,135,80',5);
+}
+function drawEFighters(g,now){
+  for(const [ox,oy] of [[12,0],[-4,-15],[-4,15],[-20,0]]){
+    g.save();g.translate(ox,oy);
+    g.strokeStyle='#c7b49a';g.lineWidth=2;g.lineCap='round';
+    g.beginPath();g.moveTo(-5,-7);g.lineTo(2,0);g.lineTo(-5,7);g.stroke();
+    g.fillStyle='#e3d6bf';g.beginPath();g.moveTo(8,0);g.lineTo(-5,-2);g.lineTo(-5,2);g.closePath();g.fill();
+    g.fillStyle='rgba(255,90,70,.9)';g.fillRect(-6,-7.5,1.6,1.6);g.fillRect(-6,6,1.6,1.6);
+    engines(g,-6,[0],now,'255,135,80',1.6);
+    g.restore();
+  }
+}
+const ART={pcruiser:drawPCruiser,pfrigate:drawPFrigate,pfighters:drawPFighters,ecruiser:drawECruiser,efrigate:drawEFrigate,efighters:drawEFighters};
+
+function drawShip(s,now){
+  const g=ctx;
+  g.save();g.translate(s.x,s.y);
+  const team=s.side==='p'?'120,200,255':'255,106,85';
+  g.lineWidth=2;g.strokeStyle=`rgba(${team},.45)`;
+  for(let i=0;i<4;i++){g.beginPath();g.arc(0,0,s.r+6,i*Math.PI/2+.25,i*Math.PI/2+Math.PI/2-.25);g.stroke();}
+  if(s===sel||s===acting){
+    g.strokeStyle=s===acting?'rgba(255,106,85,.95)':'rgba(232,171,82,.95)';g.lineWidth=2.5;
+    const sp=now/900;
+    for(let i=0;i<3;i++){g.beginPath();g.arc(0,0,s.r+12,sp+i*2.094,sp+i*2.094+1.4);g.stroke();}
+  }
+  if(s.evade){g.strokeStyle='rgba(120,200,255,.35)';g.setLineDash([3,5]);g.beginPath();g.arc(0,0,s.r+2,0,7);g.stroke();g.setLineDash([]);}
+  g.rotate(s.a);
+  ART[s.side+s.type](g,now);
+  const h=s.hull/s.hullMax;
+  if(h<.55){
+    s.dmgPts.forEach((p,i)=>{if(i===2&&h>.3)return;
+      const f=.6+.4*Math.sin(now/90+p.p);
+      const gr=g.createRadialGradient(p.x,p.y,0,p.x,p.y,7*f);gr.addColorStop(0,'rgba(255,230,160,.95)');gr.addColorStop(.4,'rgba(255,120,40,.7)');gr.addColorStop(1,'rgba(255,80,20,0)');
+      g.fillStyle=gr;g.beginPath();g.arc(p.x,p.y,7*f,0,7);g.fill();});
+  }
+  g.restore();
+  // barres
+  const bw=Math.max(46,s.r*1.5),bx=s.x-bw/2,by=s.y-s.r-20;
+  g.fillStyle='rgba(5,7,12,.75)';g.fillRect(bx-2,by-2,bw+4,s.shMax?12:8);
+  g.fillStyle=h>.6?'#8dffad':h>.3?'#e8ab52':'#ff6a55';g.fillRect(bx,by,bw*h,4);
+  if(s.shMax){g.fillStyle='#78c8ff';g.fillRect(bx,by+5,bw*(s.sh/s.shMax),3);}
+  if(s.flag){g.fillStyle='#e8ab52';g.save();g.translate(bx-9,by+2);g.rotate(Math.PI/4);g.fillRect(-3.5,-3.5,7,7);g.restore();}
+  if(s===sel||(hover&&dist(hover,s)<s.r)){
+    g.font='600 15px "Chakra Petch",sans-serif';g.textAlign='center';g.fillStyle=s.side==='p'?'#d4dbe4':'#ffb3a6';
+    g.fillText(s.name.toUpperCase(),s.x,s.y+s.r+26);
+  }
+}
+
+/* ---------- Effets ---------- */
+function bolt(x1,y1,x2,y2,color,delay,dur){fx.push({k:'bolt',x1,y1,x2,y2,color,t0:performance.now()+delay,dur});}
+function floatT(x,y,txt,color){floats.push({x,y,txt,color,t0:performance.now(),dur:1300});}
+function sparks(x,y,n=14,col='255,200,120'){fx.push({k:'burst',x,y,col,t0:performance.now(),dur:550,parts:Array.from({length:n},()=>({a:rnd(0,7),v:rnd(20,70),s:rnd(1,2.5)}))});}
+function explode(s){
+  const now=performance.now();
+  fx.push({k:'flash',x:s.x,y:s.y,r:s.r*1.8,t0:now,dur:450});
+  fx.push({k:'ring',x:s.x,y:s.y,r:s.r*3,t0:now,dur:800});
+  fx.push({k:'burst',x:s.x,y:s.y,col:'255,170,80',t0:now,dur:1100,parts:Array.from({length:60},()=>({a:rnd(0,7),v:rnd(30,s.r*2.6),s:rnd(1.5,4)}))});
+  fx.push({k:'burst',x:s.x,y:s.y,col:'160,160,170',t0:now,dur:1600,parts:Array.from({length:22},()=>({a:rnd(0,7),v:rnd(20,s.r*1.5),s:rnd(2,4.5)}))});
+}
+function drawFx(now){
+  const g=ctx;
+  fx=fx.filter(e=>{
+    const t=(now-e.t0)/e.dur;if(t>1)return false;if(t<0)return true;
+    if(e.k==='bolt'){
+      const h=Math.min(1,t*1.15),tl=Math.max(0,h-.28);
+      const ax=e.x1+(e.x2-e.x1)*tl,ay=e.y1+(e.y2-e.y1)*tl,bx=e.x1+(e.x2-e.x1)*h,by=e.y1+(e.y2-e.y1)*h;
+      g.lineCap='round';g.strokeStyle=e.color;g.globalAlpha=.3;g.lineWidth=7;g.beginPath();g.moveTo(ax,ay);g.lineTo(bx,by);g.stroke();
+      g.globalAlpha=1;g.lineWidth=2.2;g.stroke();
+      g.strokeStyle='rgba(255,255,255,.85)';g.lineWidth=.8;g.stroke();
+    }else if(e.k==='shield'){
+      g.globalAlpha=1-t;g.strokeStyle='#78c8ff';g.lineWidth=3;g.beginPath();g.arc(e.x,e.y,e.r,0,7);g.stroke();
+      g.fillStyle='rgba(120,200,255,.14)';g.fill();
+    }else if(e.k==='flash'){
+      const gr=g.createRadialGradient(e.x,e.y,0,e.x,e.y,e.r*(.5+t));gr.addColorStop(0,`rgba(255,255,230,${1-t})`);gr.addColorStop(.4,`rgba(255,170,70,${.8*(1-t)})`);gr.addColorStop(1,'rgba(255,90,20,0)');
+      g.fillStyle=gr;g.beginPath();g.arc(e.x,e.y,e.r*(.5+t),0,7);g.fill();
+    }else if(e.k==='ring'){
+      g.globalAlpha=(1-t)*.7;g.strokeStyle='#ffd9a0';g.lineWidth=2;g.beginPath();g.arc(e.x,e.y,e.r*t,0,7);g.stroke();
+    }else if(e.k==='burst'){
+      const p=1-Math.pow(1-t,2);
+      g.fillStyle=`rgba(${e.col},${1-t})`;
+      for(const q of e.parts){g.fillRect(e.x+Math.cos(q.a)*q.v*p,e.y+Math.sin(q.a)*q.v*p,q.s,q.s);}
+    }
+    g.globalAlpha=1;return true;
+  });
+  floats=floats.filter(f=>{
+    const t=(now-f.t0)/f.dur;if(t>1)return false;
+    g.globalAlpha=t<.7?1:1-(t-.7)/.3;g.font='700 22px "Chakra Petch",sans-serif';g.textAlign='center';
+    g.fillStyle='rgba(0,0,0,.7)';g.fillText(f.txt,f.x+1.5,f.y-t*42+1.5);g.fillStyle=f.color;g.fillText(f.txt,f.x,f.y-t*42);
+    g.globalAlpha=1;return true;
+  });
+}
+
+/* ---------- Animations ---------- */
+function lerpAngle(a,b,t){const d=((b-a+Math.PI*3)%(Math.PI*2))-Math.PI;return a+d*t;}
+function moveShip(s,tx,ty){
+  return new Promise(res=>{
+    const x0=s.x,y0=s.y,a0=s.a,d=Math.hypot(tx-x0,ty-y0);
+    if(d<2){res();return;}
+    const a1=Math.atan2(ty-y0,tx-x0),dur=Math.max(380,d*3.4),t0=performance.now();
+    anims.push(now=>{const t=Math.min(1,(now-t0)/dur);const e=t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+      s.x=x0+(tx-x0)*e;s.y=y0+(ty-y0)*e;s.a=lerpAngle(a0,a1,Math.min(1,t*2.5));if(t>=1){res();return true;}});
+  });
+}
+function turnTo(s,ang,dur=260){
+  return new Promise(res=>{const a0=s.a,t0=performance.now();
+    anims.push(now=>{const t=Math.min(1,(now-t0)/dur);s.a=lerpAngle(a0,ang,t);if(t>=1){res();return true;}});});
+}
+
+/* ---------- Combat ---------- */
+function preview(a,t){
+  const d=dist(a,t),T=TYPES[a.type];
+  let chance=CH[a.type][t.type];
+  if(d>a.range*.75)chance-=.1;
+  if(t.evade)chance-=.25;
+  chance=Math.max(.1,Math.min(.95,chance));
+  const cover=inField(t.x,t.y)?.7:1,m=MULT[a.type][t.type]*cover;
+  return{inRange:d<=a.range,chance,min:Math.round(T.dmg[0]*m),max:Math.round(T.dmg[1]*m),bypass:a.type==='fighters',cover:cover<1};
+}
+function applyDamage(t,dmg,bypass){
+  let toSh=0;if(!bypass){toSh=Math.min(t.sh,dmg);t.sh-=toSh;}
+  t.hull-=dmg-toSh;return toSh;
+}
+async function attack(a,t){
+  a.acted=true;
+  const p=preview(a,t);
+  const ang=Math.atan2(t.y-a.y,t.x-a.x);
+  await turnTo(a,ang,a.type==='fighters'?150:280);
+  const hit=Math.random()<p.chance;
+  const col=a.side==='p'?'#8dffad':'#ff6a55';
+  const n=TYPES[a.type].bolts,dur=a.type==='fighters'?180:290;
+  const px=-Math.sin(ang),py=Math.cos(ang);
+  for(let i=0;i<n;i++){
+    const sp=(i-(n-1)/2)*(a.type==='cruiser'?15:9);
+    const ox=a.x+Math.cos(ang)*a.r*.45+px*sp,oy=a.y+Math.sin(ang)*a.r*.45+py*sp;
+    let tx=t.x+rnd(-.3,.3)*t.r,ty=t.y+rnd(-.3,.3)*t.r;
+    if(!hit){const side=Math.random()<.5?-1:1,off=t.r+rnd(18,45);tx=t.x+px*side*off+Math.cos(ang)*rnd(10,60);ty=t.y+py*side*off+Math.sin(ang)*rnd(10,60);}
+    bolt(ox,oy,tx,ty,col,i*85,dur);
+  }
+  await wait((n-1)*85+dur);
+  const who=a.side==='p'?'p':'e';
+  if(!hit){floatT(t.x,t.y-t.r,'Raté','#8794a6');log(`${a.name} manque ${t.name}.`,who);}
+  else{
+    const dmg=rint(p.min,p.max),abs=applyDamage(t,dmg,p.bypass);
+    if(abs>0)fx.push({k:'shield',x:t.x,y:t.y,r:t.r+4,t0:performance.now(),dur:420});
+    sparks(t.x+rnd(-8,8),t.y+rnd(-8,8));
+    floatT(t.x,t.y-t.r,'−'+dmg,a.side==='p'?'#8dffad':'#ff8a75');
+    log(`${a.name} touche ${t.name} : ${dmg} dégâts${abs>0?` (${abs} sur les boucliers)`:p.bypass&&t.shMax?' (boucliers contournés)':''}${p.cover?', couvert partiel':''}.`,who);
+  }
+  if(t.hull<=0){
+    t.hull=0;t.alive=false;explode(t);
+    log(`${t.name} est détruit !`,'kill');
+    if(sel===t)sel=null;
+    await wait(650);
+  }else await wait(220);
+  renderUI();
+}
+function checkEnd(){
+  if(over)return true;
+  const flag=ships.find(s=>s.flag);
+  if(!flag.alive){endBattle(false,'L’Inexorable a été détruit. Privée de son vaisseau amiral, la flotte du secteur se replie en désordre.');return true;}
+  if(!ships.some(s=>s.side==='e'&&s.alive)){endBattle(true,'La flotte insurgée a été anéantie au-dessus de Kessaria IV.');return true;}
+  if(!ships.some(s=>s.side==='p'&&s.alive&&!s.flag)&&false)return false;
+  return false;
+}
+
+/* ---------- IA ennemie ---------- */
+const PREF={cruiser:{cruiser:1,frigate:1.1,fighters:.4},frigate:{cruiser:.8,frigate:1,fighters:1.4},fighters:{cruiser:1.4,frigate:1.1,fighters:.6}};
+function score(e,t){return PREF[e.type][t.type]*100-dist(e,t)*.12-(t.hull+t.sh)*.25+(t.flag?15:0);}
+function pickTarget(e,list){let best=null,bs=-1e9;for(const t of list){const s=score(e,t);if(s>bs){bs=s;best=t;}}return best;}
+async function enemyAct(e){
+  if(!e.alive||over)return;
+  const players=ships.filter(s=>s.side==='p'&&s.alive);if(!players.length)return;
+  acting=e;
+  let t=pickTarget(e,players);
+  const d=dist(e,t);
+  let dest=null;
+  if(e.type==='cruiser'&&e.hull<e.hullMax*.3){
+    let nr=players.reduce((a,b)=>dist(e,a)<dist(e,b)?a:b);const dd=dist(e,nr)||1;
+    dest={x:e.x+(e.x-nr.x)/dd*e.move*.7,y:e.y+(e.y-nr.y)/dd*e.move*.7};
+  }else if(d>e.range*.9){
+    const step=Math.min(e.move,d-e.range*.8);
+    dest={x:e.x+(t.x-e.x)/d*step,y:e.y+(t.y-e.y)/d*step};
+    if(e.type!=='fighters'){
+      let bestF=null,bd=1e9;
+      for(const f of fields){const fd=dist(e,f);if(fd<=e.move&&dist(f,t)<=e.range*.95&&fd<bd){bd=fd;bestF=f;}}
+      if(bestF)dest={x:bestF.x+rnd(-20,20),y:bestF.y+rnd(-20,20)};
+    }
+  }
+  if(dest){const p=settle(e,dest.x,dest.y);await moveShip(e,p.x,p.y);}
+  const inR=ships.filter(s=>s.side==='p'&&s.alive&&dist(e,s)<=e.range);
+  if(inR.length){if(!inR.includes(t))t=pickTarget(e,inR);await attack(e,t);}
+  acting=null;
+}
+async function enemyPhase(){
+  phase='enemy';sel=null;busy=true;renderUI();
+  const en=ships.filter(s=>s.side==='e'&&s.alive);
+  en.forEach(s=>s.sh=Math.min(s.shMax,s.sh+Math.round(s.shMax*.12)));
+  const left=en.reduce((a,s)=>a+s.hull+s.sh,0);
+  if(turn>=2&&left<initEnemyHull*.25){
+    log('Les insurgés rompent le combat et sautent en hyperespace.','kill');
+    await wait(500);
+    endBattle(true,'Les derniers vaisseaux insurgés ont fui en hyperespace. L’orbite de Kessaria IV est à vous.');busy=false;return;
+  }
+  await wait(450);
+  const order=[...en].sort((a,b)=>TYPES[a.type].cost-TYPES[b.type].cost);
+  for(const e of order){await enemyAct(e);if(checkEnd()){busy=false;acting=null;return;}await wait(160);}
+  turn++;phase='player';busy=false;
+  ships.filter(s=>s.side==='p'&&s.alive).forEach(s=>{s.moved=false;s.acted=false;s.evade=false;s.sh=Math.min(s.shMax,s.sh+Math.round(s.shMax*.12));});
+  sel=ships.find(s=>s.side==='p'&&s.alive)||null;
+  log(`Tour ${turn} : vos ordres, Moff.`);
+  renderUI();
+}
+
+/* ---------- Fin de bataille ---------- */
+function endBattle(win,text){
+  over=true;busy=false;sel=null;
+  const pl=ships.filter(s=>s.side==='p'),en=ships.filter(s=>s.side==='e');
+  const status=s=>!s.alive?'détruit':s.hull===s.hullMax?'intact':`coque à ${Math.round(s.hull/s.hullMax*100)} %`;
+  const lines=[
+    `BATAILLE DE KESSARIA IV — ${win?'VICTOIRE':'DÉFAITE'} (tour ${turn})`,
+    text,'',
+    'Flotte du secteur :',
+    ...pl.map(s=>`- ${s.name} (${TYPES[s.type].label}) : ${status(s)}`),'',
+    `Raid insurgé : ${en.filter(s=>!s.alive).length}/${en.length} vaisseaux détruits`,
+    ...en.map(s=>`- ${s.name} (${TYPES[s.type].elabel}) : ${!s.alive?'détruit':'en fuite, '+status(s)}`)
+  ];
+  document.getElementById('rTitle').textContent=win?'Victoire':'Défaite';
+  document.getElementById('rTitle').className=win?'win':'lose';
+  document.getElementById('rText').textContent=text;
+  document.getElementById('rBox').value=lines.join('\n');
+  document.getElementById('over').hidden=false;
+  renderUI();
+}
+
+/* ---------- Interface ---------- */
+function log(txt,cls=''){logs.unshift({txt,cls});if(logs.length>40)logs.pop();}
+const pct=(a,b)=>b?Math.round(a/b*100):0;
+function renderUI(){
+  document.getElementById('turnNo').textContent=String(turn).padStart(2,'0');
+  const ph=document.getElementById('phase');
+  ph.textContent=over?'Bataille terminée':phase==='enemy'?'Tour ennemi':'Vos ordres';
+  ph.className='phase'+(phase==='enemy'&&!over?' enemy':'');
+  const card=document.getElementById('card'),hint=document.getElementById('hint');
+  if(sel){
+    const T=TYPES[sel.type],h=sel.hull/sel.hullMax;
+    card.innerHTML=`<div class="nm">${sel.name}${sel.flag?'<span class="flagtag">Amiral</span>':''}</div>
+      <div class="ty">${T.label}${inField(sel.x,sel.y)?' · à couvert dans les astéroïdes':''}</div>
+      <div class="bar"><span class="k">Coque</span><div class="track"><div class="fill" style="width:${h*100}%;background:${h>.6?'var(--imp)':h>.3?'var(--amber)':'var(--foe)'}"></div></div><span class="v">${sel.hull}/${sel.hullMax}</span></div>
+      ${sel.shMax?`<div class="bar"><span class="k">Boucliers</span><div class="track"><div class="fill" style="width:${pct(sel.sh,sel.shMax)}%;background:var(--shield)"></div></div><span class="v">${sel.sh}/${sel.shMax}</span></div>`:''}
+      <div class="stats"><div class="stat"><div class="k">Moteurs</div><div class="v">${sel.move}</div></div><div class="stat"><div class="k">Portée</div><div class="v">${sel.range}</div></div><div class="stat"><div class="k">Salve</div><div class="v">${T.dmg[0]}–${T.dmg[1]}</div></div></div>
+      <div class="orders"><span class="chip ${sel.moved?'':'ok'}">Déplacement ${sel.moved?'fait':'prêt'}</span><span class="chip ${sel.acted?'':'ok'}">Action ${sel.acted?'faite':'prête'}</span>${sel.evade?'<span class="chip">Évasion active</span>':''}</div>`;
+  }else card.innerHTML=`<div class="ty" style="margin:0">Aucun vaisseau sélectionné.</div>`;
+  if(over)hint.textContent='La bataille est terminée. Le rapport est prêt à être recopié.';
+  else if(phase==='enemy')hint.textContent='Les insurgés manœuvrent et ouvrent le feu…';
+  else if(!sel)hint.textContent='Sélectionnez un de vos vaisseaux sur la carte ou dans la liste.';
+  else if(sel.moved&&sel.acted)hint.textContent='Ordres exécutés pour ce vaisseau. Choisissez-en un autre ou terminez le tour.';
+  else hint.textContent=[!sel.moved&&'Cliquez dans la zone ambrée pour le déplacer.',!sel.acted&&'Cliquez un ennemi dans le cercle vert pour ouvrir le feu.'].filter(Boolean).join(' ');
+  const spec=document.getElementById('specBtn');
+  spec.textContent=sel&&sel.type==='fighters'?'Manœuvre évasive':'Renforcer boucliers';
+  spec.disabled=!sel||sel.acted||phase!=='player'||busy||over;
+  const end=document.getElementById('endBtn');
+  end.disabled=phase!=='player'||busy||over;
+  const allDone=ships.filter(s=>s.side==='p'&&s.alive).every(s=>s.acted&&s.moved);
+  end.classList.toggle('pulse',allDone&&!end.disabled);
+  const fl=document.getElementById('fleet');
+  fl.innerHTML=ships.filter(s=>s.side==='p').map((s,i)=>{const h=s.hull/s.hullMax;
+    const st=!s.alive?'Détruit':s.acted&&s.moved?'Terminé':s.acted||s.moved?'En cours':'Prêt';
+    return `<button type="button" class="row ${s===sel?'sel':''} ${s.alive?'':'dead'}" data-i="${ships.indexOf(s)}" ${s.alive?'':'disabled'}>
+      <span class="dot" style="background:${s.flag?'var(--amber)':'var(--shield)'}"></span>
+      <span class="n">${s.name}</span>
+      <span class="mini"><span style="display:block;height:100%;width:${h*100}%;background:${h>.6?'var(--imp)':h>.3?'var(--amber)':'var(--foe)'}"></span></span>
+      <span class="st">${st}</span></button>`;}).join('');
+  document.getElementById('log').innerHTML=logs.map(l=>`<li class="${l.cls}">${l.txt}</li>`).join('');
+}
+document.getElementById('fleet').addEventListener('click',e=>{
+  const b=e.target.closest('.row');if(!b||busy||over||phase!=='player')return;
+  const s=ships[+b.dataset.i];if(s&&s.alive){sel=s;renderUI();}
+});
+document.getElementById('specBtn').addEventListener('click',()=>{
+  if(!sel||sel.acted||busy||over)return;
+  sel.acted=true;
+  if(sel.type==='fighters'){sel.evade=true;log(`${sel.name} passe en manœuvre évasive.`,'p');}
+  else{const g=Math.round(sel.shMax*.4);sel.sh=Math.min(sel.shMax,sel.sh+g);fx.push({k:'shield',x:sel.x,y:sel.y,r:sel.r+6,t0:performance.now(),dur:600});log(`${sel.name} redirige l’énergie vers ses boucliers.`,'p');}
+  nextReady();renderUI();
+});
+document.getElementById('endBtn').addEventListener('click',()=>{if(phase==='player'&&!busy&&!over)enemyPhase();});
+document.getElementById('newBtn').addEventListener('click',()=>{if(!busy)newBattle();});
+document.getElementById('againBtn').addEventListener('click',newBattle);
+document.getElementById('copyBtn').addEventListener('click',()=>{
+  const box=document.getElementById('rBox'),btn=document.getElementById('copyBtn');
+  const done=()=>{btn.textContent='Rapport copié';setTimeout(()=>btn.textContent='Copier le rapport',1800);};
+  try{navigator.clipboard.writeText(box.value).then(done,()=>{box.select();btn.textContent='Texte sélectionné';});}
+  catch(err){box.select();btn.textContent='Texte sélectionné';}
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!busy){sel=null;renderUI();}});
+
+function nextReady(){
+  if(sel&&!(sel.moved&&sel.acted))return;
+  const n=ships.find(s=>s.side==='p'&&s.alive&&!(s.moved&&s.acted));
+  if(n)sel=n;
+}
+function worldPt(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H};}
+function shipAt(p){let best=null,bd=1e9;for(const s of ships){if(!s.alive)continue;const d=dist(p,s);if(d<s.r+6&&d<bd){bd=d;best=s;}}return best;}
+function moveDest(s,p){
+  let dx=p.x-s.x,dy=p.y-s.y,d=Math.hypot(dx,dy);
+  if(d>s.move){dx=dx/d*s.move;dy=dy/d*s.move;}
+  return settle(s,s.x+dx,s.y+dy);
+}
+cv.addEventListener('pointermove',e=>{hover=worldPt(e);});
+cv.addEventListener('pointerleave',()=>{hover=null;});
+cv.addEventListener('pointerdown',async e=>{
+  if(busy||over||phase!=='player')return;
+  const p=worldPt(e);hover=p;
+  const s=shipAt(p);
+  if(s&&s.side==='p'){sel=s;renderUI();return;}
+  if(!sel)return;
+  if(s&&s.side==='e'){
+    if(sel.acted){log(`${sel.name} a déjà agi ce tour.`);renderUI();return;}
+    if(dist(sel,s)>sel.range){log(`${s.name} est hors de portée de ${sel.name}.`);renderUI();return;}
+    busy=true;renderUI();
+    const a=sel;await attack(a,s);busy=false;
+    if(checkEnd())return;
+    sel=a.alive?a:null;nextReady();renderUI();return;
+  }
+  if(!sel.moved){
+    const d=moveDest(sel,p);busy=true;renderUI();
+    const a=sel;await moveShip(a,d.x,d.y);a.moved=true;busy=false;nextReady();renderUI();
+  }
+});
+
+/* ---------- Boucle de rendu ---------- */
+function drawOverlays(now){
+  const g=ctx;
+  for(const f of fields){
+    g.strokeStyle='rgba(201,168,106,.28)';g.lineWidth=1.5;g.setLineDash([6,8]);g.beginPath();g.arc(f.x,f.y,f.r,0,7);g.stroke();g.setLineDash([]);
+    g.font='500 12px "IBM Plex Mono",monospace';g.textAlign='center';g.fillStyle='rgba(201,168,106,.6)';g.fillText('COUVERT',f.x,f.y-f.r-8);
+  }
+  if(!sel||over||phase!=='player'||!sel.alive)return;
+  if(!sel.moved){
+    g.fillStyle='rgba(232,171,82,.06)';g.strokeStyle='rgba(232,171,82,.6)';g.lineWidth=1.5;g.setLineDash([8,6]);
+    g.beginPath();g.arc(sel.x,sel.y,sel.move,0,7);g.fill();g.stroke();g.setLineDash([]);
+  }
+  if(!sel.acted){
+    g.strokeStyle='rgba(141,255,173,.4)';g.lineWidth=1.2;g.setLineDash([3,7]);g.beginPath();g.arc(sel.x,sel.y,sel.range,0,7);g.stroke();g.setLineDash([]);
+  }
+}
+function drawHover(){
+  if(!hover||!sel||busy||over||phase!=='player')return;
+  const g=ctx,s=shipAt(hover);
+  if(s&&s.side==='e'){
+    const p=preview(sel,s);
+    const txt=sel.acted?'Déjà tiré ce tour':!p.inRange?'Hors de portée':`Tir ${Math.round(p.chance*100)} % · ${p.min}–${p.max} dégâts${p.cover?' · couvert':''}`;
+    g.font='600 15px "Chakra Petch",sans-serif';const w=g.measureText(txt).width+20;
+    let x=s.x-w/2,y=s.y+s.r+36;x=Math.max(8,Math.min(W-w-8,x));if(y>H-40)y=s.y-s.r-60;
+    g.fillStyle='rgba(8,12,18,.9)';g.fillRect(x,y,w,28);g.strokeStyle=p.inRange&&!sel.acted?'#8dffad':'#4a5566';g.lineWidth=1;g.strokeRect(x+.5,y+.5,w-1,27);
+    g.fillStyle=p.inRange&&!sel.acted?'#d4dbe4':'#8794a6';g.textAlign='left';g.fillText(txt,x+10,y+19);
+    if(p.inRange&&!sel.acted){g.strokeStyle='rgba(141,255,173,.5)';g.setLineDash([4,6]);g.beginPath();g.moveTo(sel.x,sel.y);g.lineTo(s.x,s.y);g.stroke();g.setLineDash([]);}
+    return;
+  }
+  if(!s&&!sel.moved){
+    const d=moveDest(sel,hover);
+    g.strokeStyle='rgba(232,171,82,.7)';g.setLineDash([4,6]);g.lineWidth=1.5;g.beginPath();g.moveTo(sel.x,sel.y);g.lineTo(d.x,d.y);g.stroke();g.setLineDash([]);
+    g.strokeStyle='rgba(232,171,82,.9)';g.beginPath();g.arc(d.x,d.y,sel.r*.7,0,7);g.stroke();
+    if(inField(d.x,d.y)){g.font='600 13px "Chakra Petch",sans-serif';g.textAlign='center';g.fillStyle='#e8ab52';g.fillText('À COUVERT',d.x,d.y+sel.r*.7+18);}
+  }
+}
+function frame(now){
+  anims=anims.filter(f=>!f(now));
+  ctx.setTransform(scale,0,0,scale,0,0);
+  ctx.clearRect(0,0,W,H);
+  if(bg)ctx.drawImage(bg,0,0,W,H);
+  drawOverlays(now);
+  for(const s of ships)if(s.alive)drawShip(s,now);
+  drawFx(now);
+  drawHover();
+  requestAnimationFrame(frame);
+}
+newBattle();
+requestAnimationFrame(frame);
+})();
+</script>
