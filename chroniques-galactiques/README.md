@@ -10,7 +10,7 @@ Jeu de rôle Star Wars avec MJ intégré, en HTML/CSS/JS sans dépendance.
 - `kessaria.html` — moteur de bataille spatiale (jouable seul).
 - `assaut-kessaria.html` — moteur de bataille terrestre (jouable seul).
 - `arene.html` — moteur de combat rapproché (sabres + blasters, éditeur de combattants, jouable seul).
-- `t/e2e.js` — test de bout en bout avec un faux MJ (`cd t && npm i jsdom@24 && node e2e.js`).
+- `t/e2e.js` — test de bout en bout avec un faux MJ (`cd t && npm i jsdom@24 && node e2e.js`) : création, jets et Destin, les trois combats, blessures, carnet, progression, intendance, régénérer/annuler, hors-jeu, export, multi-campagnes, reprise d’une ancienne sauvegarde.
 
 ## Comment ça s'assemble
 
@@ -23,5 +23,6 @@ Après toute modification d'un moteur ou de la coquille : relancer `python3 buil
 
 ## À savoir
 
-- Le MJ intégré utilise la capacité `sample` des artifacts claude.ai (`window.claude.use("sample")`), et la sauvegarde utilise `db` et `user`. **Ouvert en local dans un navigateur, le MJ ne répond pas** : le jeu doit être republié en artifact avec les capacités `{"sample": {}, "db": {}, "user": {}}` pour fonctionner.
+- Le MJ intégré utilise la capacité `sample` des artifacts claude.ai (`window.claude.use("sample")`), la sauvegarde utilise `db` et `user`, et l’export (livre de campagne, fichier de sauvegarde) utilise `downloads`. **Ouvert en local dans un navigateur, le MJ ne répond pas** : le jeu doit être republié en artifact avec les capacités `{"sample": {}, "db": {}, "user": {}, "downloads": true}` pour fonctionner.
+- Sauvegarde : un index (`data/users/<id>/index`), une fiche par campagne (`camp_<id>`) et le livre découpé en parties de 200 Ko (`book_<id>_<n>`). L’ancienne sauvegarde unique (`campaign`) est reprise automatiquement dans la liste.
 - Pour mettre à jour l'artifact existant (et garder le même lien), republier `chroniques.html` en donnant l'URL de l'artifact.

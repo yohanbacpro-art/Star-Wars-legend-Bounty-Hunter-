@@ -3,7 +3,7 @@ const fs=require('fs');
 const html=fs.readFileSync(__dirname+'/../chroniques.html','utf8');
 const page='<!doctype html><html><head><meta charset="utf-8"></head><body>'+html+'</body></html>';
 const fake=()=>new Proxy(function(){},{get:(t,k)=>k==='measureText'?()=>({width:50}):k==='canvas'?{width:100,height:100}:fake(),set:()=>true,apply:()=>fake()});
-const prompts=[];
+const prompts=[],saved=[];
 const R=(narr,data)=>narr+'\n@@DONNEES\n'+JSON.stringify(data);
 const answers=[
   R('— Bienvenue, Moff. La station tremble.\nLes sirènes hurlent.',{choices:[],test:{skill:'perception',mod:-2,why:'Repérer le saboteur'},combat:null,updates:null,chronicle:'Ouverture sur la station.',chapter:{title:'L’ombre sur Kessaria'},codex:{pnj:[{nom:'Varek',role:'gouverneur',relation:'méfiant',note:'Sourit trop'}],quetes:[{titre:'Démasquer le saboteur',etat:'en cours'}],lieux:[{nom:'Station Kessaria',note:'Orbite basse'}]},secret:{arc:'Trahison',actes:['I','II','III'],antagonistes:[{nom:'Varek',but:'pouvoir',methode:'complot'}],factions:[],fils:[],prochaine_etape:'duel'}}),
@@ -20,8 +20,13 @@ const dom=new JSDOM(page,{runScripts:'dangerously',pretendToBeVisual:true,url:'h
     w.claude={use:async n=>{
       if(n==='sample'){const f=async(input,opts)=>{prompts.push(input);const a=answers.shift()||R('Fin.',{choices:['Continuer']});if(opts&&opts.onText)opts.onText({text:a.slice(0,20),delta:''});await new Promise(r=>setTimeout(r,20));return{text:a,truncated:false};};return f;}
       if(n==='user')return{id:async()=>'u1'};
-      if(n==='db'){const store={};return{doc:p=>({get:async()=>({exists:!!store[p],data:()=>store[p]}),set:async d=>{store[p]=d;}})};}
+      if(n==='db'){const store=w.__store||(w.__store={});return{doc:p=>({get:async()=>({exists:!!store[p],data:()=>store[p]}),set:async d=>{store[p]=d;},delete:async()=>{delete store[p];}})};}
+      if(n==='downloads')return{save:async r=>{saved.push(r);return{};}};
       return null;}};
+    const sk={sabre:9,tir:15,pilotage:10,commandement:8,discretion:12,persuasion:8,intimidation:11,technique:8,perception:13,athletisme:12,force:8};
+    const old={v:1,era:'gcw',year:'',path:'hunter',hero:{name:'Ancienne Kira',species:'Humaine',age:'',origin:'',trait:'',flaw:'',secret:'',force:false,side:'sith',skills:sk,weapon:'rifle',blade1:'#f00',blade2:'#f00',bolt:'#f80',form:'none',tech:['grenades'],look:{}},
+      res:{credits:900,ship:'Intercepteur',fleet:[],troops:[],companions:[],notes:[]},zero:{themes:['Survie'],ambition:'',tone:'sombre',dosage:50,canon:'discret',free:''},secret:null,chronicle:[{ch:3,t:'Kira a fui.'}],chapter:{n:3,title:'Vieux contrat'},feed:[{k:'mj',text:'Ancien récit.'}],pending:null,choices:['Partir'],xp:2,created:1};
+    w.__store={'data/users/u1/campaign':{json:JSON.stringify(old)}};
     w.addEventListener('error',e=>{console.log('PAGE ERROR',e.message);});
   }});
 const w=dom.window,d=w.document;
@@ -48,6 +53,9 @@ async function finishEngine(name){
 }
 (async()=>{
   await sleep(300);
+  const ok=(c,m)=>{if(!c)throw new Error('ÉCHEC : '+m);console.log('ok -',m);};
+  await waitFor(()=>$('campZone').textContent.includes('Ancienne Kira'),3000,'old save');
+  ok($('campZone').textContent.includes('Chapitre 3 — Vieux contrat'),'ancienne sauvegarde unique reprise dans la liste des campagnes');
   click($('btnNew'));
   click(d.querySelector('[data-era="dark"]'));click($('stepNext'));
   click(d.querySelector('[data-path="moff"]'));click($('stepNext'));
@@ -59,8 +67,15 @@ async function finishEngine(name){
   click($('stepNext'));
   await waitFor(()=>$('rollBtn'),5000,'roll button');
   console.log('chapter:',$('chapTitle').textContent);
+  const rnd=w.Math.random;w.Math.random=()=>0.99;   // 6+6+6 : échec critique
   click($('rollBtn'));
+  await waitFor(()=>$('rerollBtn'),5000,'destiny offer');
+  ok($('rerollBtn').textContent.includes('(3)'),'jet raté : relance proposée avec 3 points de Destin');
+  w.Math.random=()=>0;click($('rerollBtn'));        // 1+1+1 : réussite critique
+  await waitFor(()=>prompts.length===2,5000,'after reroll');w.Math.random=rnd;
+  ok(prompts[1].includes('Réussite critique (après relance grâce à un point de Destin)'),'relance transmise au MJ');
   await waitFor(()=>$('fightBtn'),5000,'fight duel');
+  ok(d.querySelector('.destiny').textContent.includes('●●○○○'),'un point de Destin dépensé');
   click($('fightBtn'));await finishEngine('duel');
   await waitFor(()=>$('fightBtn'),8000,'fight space');
   click($('fightBtn'));await finishEngine('space');
@@ -72,7 +87,6 @@ async function finishEngine(name){
   console.log('feed entries:',$('feed').children.length,'prompts:',prompts.length,'last prompt has report:',prompts[3].includes('RAPPORT DE COMBAT'));
   console.log('chapter now:',$('chapNo').textContent,$('chapTitle').textContent);
   // Étape 1 : blessures et dégâts transmis au MJ
-  const ok=(c,m)=>{if(!c)throw new Error('ÉCHEC : '+m);console.log('ok -',m);};
   ok(/PV 1\/\d+ \(gravement blessé\)/.test(prompts[2]),'héros vaincu en duel : 1 PV dans le prompt suivant');
   ok(/coque \d+ %/.test(prompts[3]),'état de coque de la flotte transmis');
   ok(/effectifs \d+ %/.test(prompts[4]),'effectifs des troupes transmis');
@@ -98,5 +112,31 @@ async function finishEngine(name){
   await waitFor(()=>prompts.length===6,5000,'free act');
   ok(prompts[5].includes('PROGRESSION : Perception passe à 12'),'progression signalée au MJ');
   ok(prompts[5].includes('INTENDANCE : Recrutement'),'intendance signalée au MJ');
+  // Étape 3 : confort solo
+  const nFeed=$('feed').children.length;
+  click(d.querySelector('[data-tool="regen"]'));
+  await waitFor(()=>prompts.length===7,5000,'regen');await sleep(100);
+  ok(prompts[6]===prompts[5],'régénérer renvoie exactement la même demande');
+  ok($('feed').children.length===nFeed,'régénérer remplace la réponse sans dupliquer le fil');
+  click(d.querySelector('[data-tool="undo"]'));
+  ok($('sayBox').value==='Interroger le prisonnier','annuler remet l’action dans la zone de saisie');
+  ok(!$('feed').textContent.includes('Interroger le prisonnier'),'annuler retire l’action du fil');
+  click(d.querySelector('[data-tool="ooc"]'));$('oocBox').value='Qui est Varek ?';click($('oocBtn'));
+  await waitFor(()=>prompts.length===8&&!d.querySelector('#stopMJ'),5000,'ooc');
+  ok(prompts[7].includes('Question hors-jeu du joueur\nQui est Varek ?')&&!prompts[7].includes('Trahison'),'question hors-jeu sans le carnet secret');
+  ok(d.querySelector('.e-ooc'),'réponse hors-jeu affichée');
+  click(d.querySelector('[data-tab="fiche"]'));click($('bookBtn'));
+  await waitFor(()=>saved.length,3000,'book');
+  ok(/livre\.html$/.test(saved[0].filename)&&saved[0].data.includes('Chapitre 2 — Chapitre deux')&&saved[0].data.includes('Tu repères une silhouette'),'livre de campagne exporté avec tout le récit');
+  await sleep(600);
+  click($('menuNew'));
+  ok($('campZone').textContent.includes('Moff Tarkis'),'campagne listée sur l’écran titre');
+  click(d.querySelector('[data-open]'));
+  await waitFor(()=>!$('scr-story').hidden,3000,'reopen');
+  ok($('sheet').textContent.includes('Moff Tarkis'),'campagne rouverte');
+  click($('menuNew'));
+  [...d.querySelectorAll('[data-open]')].find(b=>b.closest('.camp').textContent.includes('Ancienne Kira')).click();
+  await waitFor(()=>$('sheet').textContent.includes('Ancienne Kira'),3000,'old open');
+  ok($('feed').textContent.includes('Ancien récit.')&&$('sheet').textContent.includes('Kira a fui.'),'ancienne campagne jouable');
   console.log('prompt bytes',Buffer.byteLength(prompts[4]));fs.writeFileSync('p4.txt',prompts[4]);console.log('E2E OK');process.exit(0);
 })().catch(e=>{console.log('FAIL',e.message);process.exit(1);});
