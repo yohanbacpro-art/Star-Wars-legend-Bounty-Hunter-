@@ -840,7 +840,7 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
           <label class="fld"><span>Tradition</span><select id="ar-fKind"><option value="sith">Sith / Côté obscur</option><option value="jedi">Jedi / Côté lumineux</option><option value="none">Non sensible à la Force</option></select></label>
         </fieldset>
         <fieldset><legend>Armement</legend>
-          <label class="fld"><span>Arme</span><select id="ar-fWeapon"><option value="saber">Sabre laser</option><option value="dual">Deux sabres</option><option value="double">Sabre double</option><option value="pistol">Pistolet blaster</option><option value="rifle">Fusil blaster</option></select></label>
+          <label class="fld"><span>Arme</span><select id="ar-fWeapon"><option value="saber">Sabre laser</option><option value="dual">Deux sabres</option><option value="double">Sabre double</option><option value="pistol">Pistolet blaster</option><option value="rifle">Fusil blaster</option><option value="staff">Électrobâton / bâton</option><option value="vibro">Vibrolame</option></select></label>
           <div class="colors">
             <label id="ar-cB1"><input type="color" id="ar-fBlade1">Lame</label>
             <label id="ar-cB2"><input type="color" id="ar-fBlade2">2e lame</label>
@@ -861,9 +861,9 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
         <fieldset><legend>Apparence</legend>
           <div class="fld"><span>Taille</span><div class="rng"><input type="range" id="ar-fH" min="0.88" max="1.12" step="0.01"><output id="ar-oH"></output></div></div>
           <div class="fld"><span>Carrure</span><div class="rng"><input type="range" id="ar-fBuild" min="0.85" max="1.2" step="0.01"><output id="ar-oBuild"></output></div></div>
-          <label class="fld"><span>Tenue</span><select id="ar-fOutfit"><option value="robe">Robe</option><option value="armor">Armure</option><option value="jacket">Veste de contrebandier</option><option value="uniform">Uniforme</option><option value="trooper">Armure de soldat</option></select></label>
+          <label class="fld"><span>Tenue</span><select id="ar-fOutfit"><option value="robe">Robe</option><option value="armor">Armure</option><option value="jacket">Veste de contrebandier</option><option value="uniform">Uniforme</option><option value="trooper">Armure de soldat</option><option value="beskar">Armure mandalorienne</option><option value="fur">Fourrure (wookiee)</option><option value="droid">Châssis de droïde</option><option value="b2">Droïde lourd</option><option value="vong">Armure vivante (vong)</option></select></label>
           <label class="fld"><span>Cape</span><select id="ar-fCloak"><option value="none">Aucune</option><option value="long">Longue</option><option value="tattered">En lambeaux</option></select></label>
-          <label class="fld"><span>Tête</span><select id="ar-fHead"><option value="hair">Cheveux courts</option><option value="hairlong">Cheveux attachés</option><option value="beard">Cheveux et barbe</option><option value="bald">Crâne rasé</option><option value="horns">Cornes</option><option value="hood">Capuche</option><option value="helm">Casque anguleux</option><option value="trooper">Casque de soldat</option></select></label>
+          <label class="fld"><span>Tête</span><select id="ar-fHead"><option value="hair">Cheveux courts</option><option value="hairlong">Cheveux attachés</option><option value="beard">Cheveux et barbe</option><option value="bald">Crâne rasé</option><option value="horns">Cornes</option><option value="hood">Capuche</option><option value="helm">Casque anguleux</option><option value="trooper">Casque de soldat</option><option value="mando">Casque mandalorien</option><option value="clone">Casque de clone</option><option value="scout">Casque d’éclaireur</option><option value="royal">Casque de garde royal</option><option value="droid">Tête de droïde B1</option><option value="b2">Tête de droïde lourd</option><option value="hk">Tête de droïde assassin</option><option value="wookiee">Wookiee</option><option value="lekku">Twi’lek</option><option value="montrals">Togruta</option><option value="rodian">Rodien</option><option value="reptile">Trandoshan</option><option value="vong">Yuuzhan Vong</option><option value="mask">Masque respiratoire</option></select></label>
           <div class="colors">
             <label><input type="color" id="ar-fSkin">Peau</label>
             <label><input type="color" id="ar-fHair">Cheveux</label>
@@ -2325,11 +2325,16 @@ const FORMS={
   juyo:{label:'Juyo / Vaapad',d:'+1 aux frappes et +2 dégâts, mais −1 aux parades.'}
 };
 const TECH={
-  trakata:{label:'Trakata',d:'Feinte : lame coupée puis rallumée, dégâts ×2 contre une parade.',melee:true},
+  trakata:{label:'Trakata',d:'Feinte : lame coupée puis rallumée, dégâts ×2 contre une parade.',melee:true,saber:true},
   jarkai:{label:'Jar’Kai',d:'Tourbillon : une frappe sur chaque ennemi. Demande deux sabres.',melee:true,needs:'dual'},
   cortosis:{label:'Gantelets de cortosis',d:'Une parade réussie peut court-circuiter la lame adverse.',melee:true},
   rapid:{label:'Tir rapide',d:'Deux tirs à −2 en une seule action.',ranged:true},
-  grenades:{label:'Grenades (2)',d:'Explosion sur la cible et ses voisins, ignore le couvert.',ranged:true}
+  grenades:{label:'Grenades (2)',d:'Explosion sur la cible et ses voisins, ignore le couvert.',ranged:true},
+  beskar:{label:'Armure en beskar',d:'Les sabres font 40 % de dégâts en moins, les tirs −2.',melee:true,ranged:true},
+  jetpack:{label:'Jetpack',d:'Assaut aérien : +2, ignore le couvert, gêne les parades.',melee:true,ranged:true},
+  flamer:{label:'Lance-flammes (2)',d:'Gerbe de feu : impossible à dévier, peut toucher un voisin.',melee:true,ranged:true},
+  brute:{label:'Force brute',d:'+2 dégâts au corps à corps.',melee:true},
+  vong:{label:'Hors de la Force',d:'Invisible dans la Force : poussées et éclairs n’ont aucune prise.',melee:true,ranged:true}
 };
 const ACTIONS={
   attack:{label:'Frappe',cost:1,target:true,cls:'melee',d:'Bat la feinte. Bloquée par une parade réussie.'},
@@ -2345,6 +2350,8 @@ const ACTIONS={
   push:{label:'Poussée de Force',cost:0,fp:1,target:true,d:'Renverse la cible : elle perd son action si elle n’a pas encore agi.'},
   lightning:{label:'Éclairs de Force',cost:0,fp:1,target:true,kind:'sith',d:'Dégâts directs. Une parade en absorbe la moitié.'},
   meditate:{label:'Méditation de bataille',cost:0,fp:1,kind:'jedi',d:'+2 à tous les jets alliés au prochain échange.'},
+  jet:{label:'Assaut au jetpack',cost:2,target:true,d:'Bondit dans les airs : +2 au jet, ignore le couvert, parade adverse −2.'},
+  flame:{label:'Lance-flammes',cost:1,target:true,d:'Gerbe de feu : impossible à dévier, peut toucher un voisin.'},
   recover:{label:'Reprendre son souffle',cost:0,d:'+3 endurance. Les attaques contre vous gagnent +2.'}
 };
 
@@ -2373,12 +2380,20 @@ const PRESETS={
   thug:{name:'Homme de main',kind:'none',weapon:'pistol',blade1:'#ff2b2b',blade2:'#ff2b2b',bolt:'#ff5a3a',form:'none',tech:[],pv:16,sabre:10,tir:11,force:6,fp:0,ref:11,
     look:{h:1.04,build:1.15,outfit:'jacket',cloak:'none',head:'horns',skin:'#7a6a9a',hair:'#222',cloth:'#3a3030',cloth2:'#5a4a40',legs:'#262222',cloakC:'#222',glove:'#222',bare:true,tattoo:false}}
 };
-const PRESET_ORDER=['savage','nyx','vaal','moro','guardian','inquis','smuggler','hunter','trooper','officer','thug'];
+PRESETS.mando={name:'Guerrier mandalorien',kind:'none',weapon:'pistol',blade1:'#ff2b2b',blade2:'#ff2b2b',bolt:'#ff6a3a',form:'none',tech:['beskar','jetpack','rapid'],pv:32,sabre:12,tir:15,force:6,fp:0,ref:14,
+  look:{h:1.0,build:1.05,outfit:'beskar',cloak:'none',head:'mando',skin:'#b98a6a',hair:'#222',cloth:'#5d7a8c',cloth2:'#2b2f33',legs:'#2b2f33',cloakC:'#222',glove:'#3a3d40',bare:false,tattoo:false,stripe:'#c9a227'}};
+PRESETS.clone={name:'Soldat clone',kind:'none',weapon:'rifle',blade1:'#ff2b2b',blade2:'#ff2b2b',bolt:'#4aa8ff',form:'none',tech:['grenades'],pv:18,sabre:9,tir:12,force:6,fp:0,ref:12,
+  look:{h:1.0,build:1.0,outfit:'trooper',cloak:'none',head:'clone',skin:'#a87c5c',hair:'#111',cloth:'#eef0f2',cloth2:'#1c1e22',legs:'#eef0f2',cloakC:'#222',glove:'#1c1e22',bare:false,tattoo:false,stripe:'#2f6fd6'}};
+PRESETS.b1={name:'Droïde B1',kind:'none',weapon:'rifle',blade1:'#ff2b2b',blade2:'#ff2b2b',bolt:'#ff3030',form:'none',tech:[],pv:10,sabre:6,tir:9,force:6,fp:0,ref:9,
+  look:{h:1.04,build:1.0,outfit:'droid',cloak:'none',head:'droid',skin:'#c9b48a',hair:'#111',cloth:'#c9b48a',cloth2:'#8a7a5c',legs:'#c9b48a',cloakC:'#222',glove:'#c9b48a',bare:false,tattoo:false}};
+const PRESET_ORDER=['savage','nyx','vaal','moro','guardian','inquis','smuggler','hunter','mando','clone','b1','trooper','officer','thug'];
 const SCENARIOS=[
   {label:'Savage contre un maître Jedi',p:['savage'],e:['vaal']},
   {label:'Savage et Nyx contre deux Jedi',p:['savage','nyx'],e:['vaal','moro']},
   {label:'Contrebandiers contre 4 soldats',p:['smuggler','hunter'],e:['trooper','trooper','trooper','trooper']},
-  {label:'Un Jedi contre une escouade',p:['guardian'],e:['officer','trooper','trooper','trooper']}
+  {label:'Un Jedi contre une escouade',p:['guardian'],e:['officer','trooper','trooper','trooper']},
+  {label:'Mandalorien contre des droïdes',p:['mando'],e:['b1','b1','b1','b1']},
+  {label:'Clones contre un Sith',p:['clone','clone','clone'],e:['nyx']}
 ];
 function fromPreset(key,side){
   const f=clone(PRESETS[key]);f.side=side;f.uid=Math.random().toString(36).slice(2,9);return f;
@@ -2396,14 +2411,16 @@ function load(){try{const r=JSON.parse(localStorage.getItem('arene-roster-v1')||
 
 /* ---------- Combattants ---------- */
 const isRanged=w=>w==='pistol'||w==='rifle';
+const isSaber=w=>w==='saber'||w==='dual'||w==='double';
 function mkFighter(fc){
   const f=clone(fc);
   f.name=fc.display||fc.name;
   f.ranged=isRanged(f.weapon);
-  f.techs=new Set((f.tech||[]).filter(t=>TECH[t]&&(f.ranged?TECH[t].ranged:TECH[t].melee)&&(!TECH[t].needs||f.weapon===TECH[t].needs)));
-  f.blades=f.weapon==='dual'?[f.blade1,f.blade2]:f.weapon==='double'?[f.blade1,f.blade1]:f.ranged?[]:[f.blade1];
+  f.saberW=isSaber(f.weapon);
+  f.techs=new Set((f.tech||[]).filter(t=>TECH[t]&&(f.ranged?TECH[t].ranged:TECH[t].melee)&&(!TECH[t].needs||f.weapon===TECH[t].needs)&&(!TECH[t].saber||f.saberW)));
+  f.blades=f.weapon==='dual'?[f.blade1,f.blade2]:f.weapon==='double'?[f.blade1,f.blade1]:f.saberW?[f.blade1]:[];f.air=0;f.airT=null;
   f.bladeOn=f.blades.map(()=>1);f.btw=[];
-  f.pvMax=Math.max(f.pv,fc.pvMax||0);f.endMax=f.pvMax<20?4:6;f.end=f.endMax;f.fpMax=f.fp;f.grenades=f.techs.has('grenades')?2:0;
+  f.pvMax=Math.max(f.pv,fc.pvMax||0);f.endMax=f.pvMax<20?4:6;f.end=f.endMax;f.fpMax=f.fp;f.grenades=f.techs.has('grenades')?2:0;f.fuel=f.techs.has('flamer')?2:0;
   f.dir=f.side==='p'?1:-1;f.cur={...POSES[G(f)]};f.tw=null;f.xtw=null;
   f.act=null;f.target=null;f.alive=true;f.cancelled=false;f.acted=false;f.med=0;f.medNext=0;f.offBal=false;f.offBalNext=false;f.disarmed=false;f.disarmT=0;f.parryBroken=false;f.tag=null;f.seed=Math.random()*10;
   return f;
@@ -2446,6 +2463,7 @@ function updateAnim(list,now){
   for(const f of list){
     if(f.tw){const t=clamp((now-f.tw.t0)/f.tw.dur,0,1),e=1-Math.pow(1-t,3);for(const k of KEYS)f.cur[k]=f.tw.from[k]+(f.tw.to[k]-f.tw.from[k])*e;if(t>=1)f.tw=null;}
     if(f.xtw){const t=clamp((now-f.xtw.t0)/f.xtw.dur,0,1),e=t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;f.x=f.xtw.from+(f.xtw.to-f.xtw.from)*e;if(t>=1)f.xtw=null;}
+    if(f.airT){const t=clamp((now-f.airT.t0)/f.airT.dur,0,1),e=1-Math.pow(1-t,2);f.air=f.airT.from+(f.airT.to-f.airT.from)*e;if(t>=1)f.airT=null;}
     f.btw.forEach((b,i)=>{if(!b)return;const t=clamp((now-b.t0)/b.dur,0,1);f.bladeOn[i]=b.from+(b.to-b.from)*t;if(t>=1)f.btw[i]=null;});
   }
 }
@@ -2473,7 +2491,8 @@ function solve(f,now){
   J.p=p;J.d=d;return J;
 }
 const sizeOf=f=>(f.look.h||1)*(f.depth||1);
-function toWorld(f,pt){const s=sizeOf(f);return{x:f.x+pt.x*f.dir*s,y:FLOOR-(f.zOff||0)+pt.y*s};}
+function toWorld(f,pt){const s=sizeOf(f);return{x:f.x+pt.x*f.dir*s,y:FLOOR-(f.zOff||0)-(f.air||0)+pt.y*s};}
+function liftTo(f,v,dur){f.airT={from:f.air||0,to:v,t0:performance.now(),dur};}
 
 /* ---------- Dessin paramétrique ---------- */
 const RIM={p:'rgba(255,70,110,.55)',e:'rgba(110,180,255,.5)'};
@@ -2484,16 +2503,18 @@ function limb(g,a,b,c,w1,w2,col,rim){
   g.strokeStyle=col;g.lineWidth=w1;g.beginPath();g.moveTo(a.x+1.2,a.y);g.lineTo(b.x+1.2,b.y);g.stroke();
   if(c){g.lineWidth=w2;g.beginPath();g.moveTo(b.x+1.2,b.y);g.lineTo(c.x+1.2,c.y);g.stroke();}
 }
+const limbF=L=>L.outfit==='droid'?.45:L.outfit==='b2'?1.2:L.outfit==='fur'?1.15:1;
+function hexA(hex,a){const n=parseInt(String(hex||'#ffffff').slice(1),16)||0;return`rgba(${n>>16},${(n>>8)&255},${n&255},${a})`;}
 function drawLeg(g,J,front,f,rim){
-  const L=f.look,b=L.build||1;
+  const L=f.look,b=(L.build||1)*limbF(L);
   const kn=front?J.knF:J.knB,ft=front?J.ftF:J.ftB;
   limb(g,J.hip,kn,ft,15*b,12*b,L.legs,rim);
   if(L.outfit==='trooper'){g.fillStyle=L.cloth2;g.beginPath();g.arc(kn.x,kn.y,4.5*b,0,7);g.fill();}
-  g.fillStyle=L.outfit==='trooper'?L.cloth:'#17120f';g.fillRect(ft.x-4,ft.y-6,17,7);
+  g.fillStyle=['trooper','droid','b2'].includes(L.outfit)?L.cloth:'#17120f';g.fillRect(ft.x-4,ft.y-6,17,7);
 }
 function drawArm(g,sh,el,ha,f,rim){
-  const L=f.look,b=L.build||1;
-  const sleeve=L.bare?L.skin:(L.outfit==='armor'?L.cloth2:L.cloth);
+  const L=f.look,b=(L.build||1)*limbF(L);
+  const sleeve=L.bare?L.skin:L.outfit==='fur'?L.hair:(L.outfit==='armor'||L.outfit==='beskar'?L.cloth2:L.cloth);
   limb(g,sh,el,null,11*b,0,sleeve,rim);
   const mid={x:el.x+(ha.x-el.x)*(L.bare?.4:.55),y:el.y+(ha.y-el.y)*(L.bare?.4:.55)};
   limb(g,el,mid,null,10*b,0,L.bare?L.skin:(L.outfit==='armor'?L.cloth:sleeve),rim);
@@ -2523,9 +2544,10 @@ function drawSkirt(g,J,f,rim){
 }
 function drawTorso(g,J,f,rim){
   const L=f.look,b=L.build||1,d=J.d,perp={x:-d.y,y:d.x};
-  const q=[{x:J.hip.x+perp.x*13*b,y:J.hip.y+perp.y*13*b},{x:J.hip.x-perp.x*13*b,y:J.hip.y-perp.y*13*b},{x:J.neck.x-perp.x*17*b,y:J.neck.y-perp.y*17*b},{x:J.neck.x+perp.x*16*b,y:J.neck.y+perp.y*16*b}];
+  const wb=L.outfit==='droid'?6:L.outfit==='b2'?12:13,wt=L.outfit==='droid'?8:L.outfit==='b2'?25:17;
+  const q=[{x:J.hip.x+perp.x*wb*b,y:J.hip.y+perp.y*wb*b},{x:J.hip.x-perp.x*wb*b,y:J.hip.y-perp.y*wb*b},{x:J.neck.x-perp.x*wt*b,y:J.neck.y-perp.y*wt*b},{x:J.neck.x+perp.x*(wt-1)*b,y:J.neck.y+perp.y*(wt-1)*b}];
   const poly=(pts,fill)=>{g.beginPath();pts.forEach((p,i)=>i?g.lineTo(p.x,p.y):g.moveTo(p.x,p.y));g.closePath();g.fillStyle=fill;g.fill();};
-  const base=L.outfit==='jacket'?L.cloth2:L.cloth;
+  const base=L.outfit==='jacket'?L.cloth2:L.outfit==='fur'?L.hair:L.outfit==='beskar'?L.cloth2:L.cloth;
   poly(q,base);g.strokeStyle=rim;g.lineWidth=2;g.stroke();
   const b0={x:J.hip.x+d.x*12,y:J.hip.y+d.y*12};
   const lerp=(a,c,t)=>({x:a.x+(c.x-a.x)*t,y:a.y+(c.y-a.y)*t});
@@ -2537,8 +2559,28 @@ function drawTorso(g,J,f,rim){
     g.strokeStyle='rgba(0,0,0,.35)';g.lineWidth=1.2;g.beginPath();for(const t of[.25,.4]){const a=lerp(q[0],q[3],t),c=lerp(q[1],q[2],t);g.moveTo(a.x,a.y);g.lineTo(c.x,c.y);}g.stroke();
     g.fillStyle=shade(L.cloth,10);g.beginPath();g.ellipse(J.shF.x+2,J.shF.y+2,12*b,8*b,J.p.lean,0,7);g.fill();g.strokeStyle='rgba(0,0,0,.4)';g.stroke();
   }else if(L.outfit==='trooper'){
+    if(L.stripe){g.fillStyle=L.stripe;poly([lerp(q[0],q[3],.7),lerp(q[1],q[2],.7),lerp(q[1],q[2],.78),lerp(q[0],q[3],.78)],L.stripe);}
     g.strokeStyle=L.cloth2;g.lineWidth=2.2;g.beginPath();for(const t of[.2,.32,.44]){const a=lerp(q[0],q[3],t),c=lerp(q[1],q[2],t);g.moveTo(a.x,a.y);g.lineTo(c.x,c.y);}g.stroke();
     poly([lerp(q[0],q[3],.55),lerp(q[1],q[2],.55),lerp(q[1],q[2],.92),lerp(q[0],q[3],.92)],shade(L.cloth,-12));
+  }else if(L.outfit==='beskar'){
+    poly([lerp(q[0],q[3],.42),lerp(q[1],q[2],.42),lerp(q[1],q[2],.95),lerp(q[0],q[3],.95)],L.cloth);
+    poly([lerp(q[0],q[3],.16),lerp(q[1],q[2],.16),lerp(q[1],q[2],.34),lerp(q[0],q[3],.34)],shade(L.cloth,-14));
+    g.strokeStyle='rgba(0,0,0,.45)';g.lineWidth=1.2;g.beginPath();{const a1=lerp(q[0],q[3],.68),c1=lerp(q[1],q[2],.68);g.moveTo(a1.x,a1.y);g.lineTo(c1.x,c1.y);}g.stroke();
+    if(L.stripe){const s1=lerp(q[0],q[3],.8);g.fillStyle=L.stripe;g.beginPath();g.arc(s1.x-perp.x*5,s1.y-perp.y*5,4,0,7);g.fill();}
+    g.fillStyle=L.cloth;g.beginPath();g.ellipse(J.shF.x+2,J.shF.y+2,12*b,8*b,J.p.lean,0,7);g.fill();g.strokeStyle='rgba(0,0,0,.45)';g.stroke();
+  }else if(L.outfit==='fur'){
+    g.strokeStyle=shade(L.hair,-35);g.lineWidth=1.2;g.beginPath();for(let i=0;i<18;i++){const t=(i*0.37)%1,u=(i*0.61)%1,a=lerp(q[0],q[3],t),c=lerp(q[1],q[2],t),m=lerp(a,c,u);g.moveTo(m.x,m.y);g.lineTo(m.x-2,m.y+7);}g.stroke();
+    g.strokeStyle=L.cloth2;g.lineWidth=5;g.lineCap='butt';g.beginPath();g.moveTo(q[3].x,q[3].y);g.lineTo(q[1].x,q[1].y);g.stroke();
+    g.fillStyle=shade(L.cloth2,30);for(let i=1;i<5;i++){const m=lerp(q[3],q[1],i/5);g.fillRect(m.x-2,m.y-2,4,4);}
+  }else if(L.outfit==='droid'){
+    g.fillStyle=shade(L.cloth,-18);const m=lerp(q[2],q[3],.5);g.fillRect(m.x-perp.x*14-6,m.y+6,10,22);
+    g.strokeStyle='rgba(0,0,0,.35)';g.lineWidth=1.2;g.beginPath();for(const t of[.3,.55,.8]){const a=lerp(q[0],q[3],t),c=lerp(q[1],q[2],t);g.moveTo(a.x,a.y);g.lineTo(c.x,c.y);}g.stroke();
+  }else if(L.outfit==='b2'){
+    poly([lerp(q[0],q[3],.55),lerp(q[1],q[2],.55),q[2],q[3]],shade(L.cloth,14));
+    g.strokeStyle='rgba(0,0,0,.4)';g.lineWidth=1.4;g.beginPath();for(const t of[.62,.75,.88]){const a=lerp(q[0],q[3],t),c=lerp(q[1],q[2],t);g.moveTo(a.x,a.y);g.lineTo(c.x,c.y);}g.stroke();
+  }else if(L.outfit==='vong'){
+    g.strokeStyle='rgba(15,4,4,.65)';g.lineWidth=2;g.beginPath();for(const t of[.25,.4,.55,.7,.85]){const a=lerp(q[0],q[3],t),c=lerp(q[1],q[2],t),m=lerp(a,c,.5);g.moveTo(a.x,a.y);g.quadraticCurveTo(m.x+d.x*6,m.y+d.y*6,c.x,c.y);}g.stroke();
+    g.fillStyle=shade(L.cloth,-25);for(const k of[0,1]){const sp=k?J.shF:J.shB;g.beginPath();g.moveTo(sp.x-6,sp.y);g.lineTo(sp.x+d.x*18-2,sp.y+d.y*18);g.lineTo(sp.x+6,sp.y);g.closePath();g.fill();}
   }else if(L.outfit==='uniform'){
     g.fillStyle='#c33';g.fillRect(J.neck.x+perp.x*6-4,J.neck.y+perp.y*6+14,8,4);g.fillStyle='#39c';g.fillRect(J.neck.x+perp.x*6-4,J.neck.y+perp.y*6+19,8,3);
   }else{
@@ -2550,7 +2592,7 @@ function drawTorso(g,J,f,rim){
 function shade(hex,amt){const n=parseInt(hex.slice(1),16);const r=clamp((n>>16)+amt,0,255),gg=clamp(((n>>8)&255)+amt,0,255),bb=clamp((n&255)+amt,0,255);return'#'+((1<<24)+(r<<16)+(gg<<8)+bb).toString(16).slice(1);}
 function drawHead(g,J,f,rim){
   const L=f.look,h=J.head,d=J.d;
-  const face=()=>{g.fillStyle=L.skin;g.beginPath();g.arc(h.x,h.y,14,0,7);g.fill();g.strokeStyle=rim;g.lineWidth=1.8;g.stroke();g.fillStyle='#1a1410';g.fillRect(h.x+8,h.y-2,2.4,2);};
+  const face=()=>{g.fillStyle=L.skin;g.beginPath();g.arc(h.x,h.y,14,0,7);g.fill();g.strokeStyle=rim;g.lineWidth=1.8;g.stroke();g.fillStyle=L.eyes||'#1a1410';g.fillRect(h.x+8,h.y-2,2.4,2);};
   switch(L.head){
     case'helm':{
       const gr=g.createRadialGradient(h.x+4,h.y-6,2,h.x,h.y,17);gr.addColorStop(0,'#6a4a3c');gr.addColorStop(.5,'#2e211c');gr.addColorStop(1,'#120c0a');
@@ -2569,6 +2611,62 @@ function drawHead(g,J,f,rim){
     case'horns':
       face();g.fillStyle=shade(L.skin,-35);
       for(const s of[-1,1]){g.beginPath();g.moveTo(h.x-2+s*3,h.y-10);g.quadraticCurveTo(h.x-6+s*4,h.y-28,h.x-14+s*3,h.y-24);g.lineTo(h.x-6+s*3,h.y-12);g.closePath();g.fill();}break;
+    case'mando':case'clone':case'scout':{
+      const col=L.head==='clone'?'#eef0f2':L.head==='scout'?'#e6e8ea':L.cloth;
+      const gr=g.createRadialGradient(h.x+4,h.y-7,2,h.x,h.y,17);gr.addColorStop(0,shade(col,40));gr.addColorStop(.6,col);gr.addColorStop(1,shade(col,-40));
+      g.fillStyle=gr;g.beginPath();g.arc(h.x,h.y-1,15.5,0,7);g.fill();g.strokeStyle=rim;g.lineWidth=1.8;g.stroke();
+      g.fillStyle=shade(col,-25);g.beginPath();g.moveTo(h.x-12,h.y+8);g.lineTo(h.x+15,h.y+6);g.lineTo(h.x+13,h.y+15);g.lineTo(h.x-6,h.y+15);g.closePath();g.fill();
+      g.fillStyle='#0d0f12';
+      if(L.head==='scout'){g.fillRect(h.x+1,h.y-5,17,5);g.fillRect(h.x+12,h.y,7,9);}
+      else{g.fillRect(h.x+1,h.y-5,16,4.5);g.fillRect(h.x+8,h.y-1,5,11);}
+      if(L.stripe){g.fillStyle=L.stripe;g.fillRect(h.x-12,h.y-13,22,3.5);}
+      if(L.head==='mando'){g.strokeStyle=shade(col,-50);g.lineWidth=1.5;g.beginPath();g.moveTo(h.x-6,h.y-13);g.lineTo(h.x-6,h.y-25);g.lineTo(h.x-2,h.y-25);g.stroke();}
+      break;}
+    case'royal':
+      g.fillStyle=L.cloth;g.beginPath();g.ellipse(h.x-1,h.y-6,16,22,0,0,7);g.fill();g.strokeStyle=rim;g.lineWidth=1.8;g.stroke();
+      g.fillStyle='#120606';g.fillRect(h.x+5,h.y-3,11,3);break;
+    case'droid':
+      g.strokeStyle=L.cloth;g.lineWidth=4;g.beginPath();g.moveTo(h.x-4,h.y+12);g.lineTo(h.x-2,h.y);g.stroke();
+      g.fillStyle=L.cloth;g.beginPath();g.ellipse(h.x+6,h.y-4,16,6,-.15,0,7);g.fill();g.strokeStyle=rim;g.lineWidth=1.5;g.stroke();
+      g.fillStyle=shade(L.cloth,-55);g.beginPath();g.arc(h.x-2,h.y-5,3,0,7);g.fill();g.beginPath();g.arc(h.x+3,h.y-5,2.4,0,7);g.fill();break;
+    case'hk':
+      g.fillStyle=L.cloth;g.beginPath();g.moveTo(h.x-10,h.y-12);g.lineTo(h.x+12,h.y-10);g.lineTo(h.x+16,h.y+2);g.lineTo(h.x+8,h.y+12);g.lineTo(h.x-10,h.y+10);g.closePath();g.fill();g.strokeStyle=rim;g.lineWidth=1.6;g.stroke();
+      g.fillStyle=L.eyes||'#ffb04a';g.fillRect(h.x+6,h.y-5,8,4);g.fillStyle='rgba(0,0,0,.4)';g.fillRect(h.x+4,h.y+3,10,2);break;
+    case'b2':
+      g.fillStyle=L.cloth;g.fillRect(h.x-4,h.y+4,14,9);g.strokeStyle=rim;g.lineWidth=1.4;g.strokeRect(h.x-4,h.y+4,14,9);g.fillStyle='#1a1a1e';g.fillRect(h.x+5,h.y+6,4,3);break;
+    case'wookiee':
+      g.fillStyle=L.hair;g.beginPath();g.ellipse(h.x-1,h.y,17,18,0,0,7);g.fill();g.strokeStyle=rim;g.lineWidth=1.8;g.stroke();
+      g.fillStyle=shade(L.hair,-35);g.beginPath();g.ellipse(h.x+8,h.y+4,8,9,0,0,7);g.fill();
+      g.fillStyle=shade(L.hair,30);g.beginPath();g.ellipse(h.x+3,h.y-7,9,4,0,0,7);g.fill();
+      g.fillStyle='#1a1410';g.fillRect(h.x+8,h.y-3,3,2.2);g.fillStyle='#2a1a14';g.beginPath();g.ellipse(h.x+13,h.y+5,3.5,2.5,0,0,7);g.fill();break;
+    case'lekku':
+      g.fillStyle=L.skin;g.strokeStyle=rim;g.lineWidth=1.6;
+      for(const [dx,len] of [[-4,46],[-11,38]]){g.beginPath();g.moveTo(h.x+dx-5,h.y-6);g.quadraticCurveTo(h.x+dx-16,h.y+18,h.x+dx-10,h.y+len);g.lineTo(h.x+dx-3,h.y+len-4);g.quadraticCurveTo(h.x+dx-6,h.y+14,h.x+dx+4,h.y-2);g.closePath();g.fill();g.stroke();}
+      face();g.fillStyle=L.hair;g.fillRect(h.x-12,h.y-9,22,3);break;
+    case'montrals':
+      g.fillStyle=L.skin;g.strokeStyle=rim;g.lineWidth=1.6;
+      g.beginPath();g.moveTo(h.x-10,h.y-2);g.quadraticCurveTo(h.x-20,h.y+16,h.x-14,h.y+30);g.lineTo(h.x-8,h.y+26);g.quadraticCurveTo(h.x-10,h.y+10,h.x-2,h.y);g.closePath();g.fill();g.stroke();
+      face();
+      for(const sg of[-1,1]){g.fillStyle=L.skin;g.beginPath();g.moveTo(h.x-3+sg*5,h.y-10);g.quadraticCurveTo(h.x-6+sg*8,h.y-30,h.x-14+sg*5,h.y-30);g.quadraticCurveTo(h.x-6+sg*3,h.y-20,h.x-6+sg*3,h.y-9);g.closePath();g.fill();g.stroke();
+        g.fillStyle=L.hair;g.beginPath();g.moveTo(h.x-7+sg*6,h.y-20);g.lineTo(h.x-11+sg*5,h.y-27);g.lineTo(h.x-6+sg*6,h.y-24);g.closePath();g.fill();}
+      g.fillStyle=L.hair;g.beginPath();g.moveTo(h.x+4,h.y-12);g.lineTo(h.x+12,h.y-4);g.lineTo(h.x+6,h.y-2);g.closePath();g.fill();break;
+    case'rodian':
+      g.fillStyle=L.skin;g.beginPath();g.ellipse(h.x,h.y-3,15,17,0,0,7);g.fill();g.strokeStyle=rim;g.lineWidth=1.8;g.stroke();
+      g.beginPath();g.moveTo(h.x+8,h.y+4);g.quadraticCurveTo(h.x+20,h.y+8,h.x+17,h.y+13);g.lineTo(h.x+8,h.y+12);g.closePath();g.fill();
+      g.fillStyle='#0a0c10';g.beginPath();g.ellipse(h.x+7,h.y-4,6,7.5,.3,0,7);g.fill();g.fillStyle='rgba(255,255,255,.35)';g.fillRect(h.x+7,h.y-8,2,2);
+      g.strokeStyle=shade(L.skin,-30);g.lineWidth=2;g.beginPath();g.moveTo(h.x-6,h.y-18);g.lineTo(h.x-9,h.y-24);g.stroke();break;
+    case'reptile':
+      g.fillStyle=L.skin;g.beginPath();g.moveTo(h.x-12,h.y-10);g.quadraticCurveTo(h.x+4,h.y-18,h.x+14,h.y-4);g.lineTo(h.x+20,h.y+6);g.lineTo(h.x+6,h.y+12);g.lineTo(h.x-10,h.y+10);g.closePath();g.fill();g.strokeStyle=rim;g.lineWidth=1.8;g.stroke();
+      g.strokeStyle=shade(L.skin,-35);g.lineWidth=1;g.beginPath();g.moveTo(h.x+4,h.y+6);g.lineTo(h.x+19,h.y+6);for(let i=0;i<5;i++){g.moveTo(h.x-8+i*4,h.y-10+i);g.lineTo(h.x-6+i*4,h.y-6+i);}g.stroke();
+      g.fillStyle=L.eyes||'#ff9a2a';g.fillRect(h.x+7,h.y-6,3,2.4);break;
+    case'vong':
+      face();g.strokeStyle='rgba(60,10,10,.85)';g.lineWidth=1.6;g.beginPath();
+      g.moveTo(h.x-4,h.y-12);g.lineTo(h.x+6,h.y+8);g.moveTo(h.x+2,h.y-13);g.lineTo(h.x+12,h.y-2);g.moveTo(h.x-10,h.y-4);g.lineTo(h.x,h.y+12);g.stroke();
+      g.fillStyle='rgba(40,8,30,.7)';g.beginPath();g.arc(h.x+4,h.y+6,2.4,0,7);g.fill();g.beginPath();g.arc(h.x-6,h.y-8,2,0,7);g.fill();
+      g.fillStyle=shade(L.skin,-40);g.beginPath();g.moveTo(h.x-12,h.y-8);g.lineTo(h.x-20,h.y-14);g.lineTo(h.x-13,h.y-2);g.fill();break;
+    case'mask':
+      face();g.fillStyle=L.cloth2||'#333';g.beginPath();g.moveTo(h.x+2,h.y+1);g.lineTo(h.x+17,h.y-1);g.lineTo(h.x+16,h.y+11);g.lineTo(h.x+2,h.y+12);g.closePath();g.fill();g.strokeStyle=rim;g.lineWidth=1.2;g.stroke();
+      g.fillStyle='rgba(255,140,60,.9)';g.fillRect(h.x+6,h.y-6,8,3);break;
     default:
       face();g.fillStyle=L.hair;g.beginPath();g.arc(h.x-3,h.y-4,13,Math.PI*.95,Math.PI*1.95);g.fill();
       if(L.head==='beard'){g.beginPath();g.ellipse(h.x+8,h.y+9,7,6,0,0,7);g.fill();}
@@ -2599,6 +2697,32 @@ function drawGun(g,ha,ang,f){
   g.strokeStyle='#1a1a1e';g.lineWidth=5;g.beginPath();g.moveTo(ha.x,ha.y);g.lineTo(ha.x+pr.x*9,ha.y+pr.y*9);g.stroke();
   if(rifle){g.strokeStyle='#2e2e33';g.lineWidth=3;g.beginPath();g.moveTo(tip.x-dv.x*16,tip.y-dv.y*16);g.lineTo(tip.x+dv.x*6,tip.y+dv.y*6);g.stroke();}
 }
+function drawJetpack(g,J,f,rim){
+  const L=f.look,d=J.d,perp={x:-d.y,y:d.x};
+  const c={x:(J.hip.x+J.neck.x)/2-perp.x*17,y:(J.hip.y+J.neck.y)/2-perp.y*17};
+  g.save();g.translate(c.x,c.y);g.rotate(J.p.lean);
+  if((f.air||0)>3){for(const ox of[-4,4]){const fl=g.createLinearGradient(0,20,0,60);fl.addColorStop(0,'rgba(255,240,200,.95)');fl.addColorStop(.4,'rgba(255,140,50,.8)');fl.addColorStop(1,'rgba(255,80,20,0)');g.fillStyle=fl;g.beginPath();g.moveTo(ox-4,20);g.lineTo(ox+4,20);g.lineTo(ox+rnd(-1,1),60+rnd(-6,6));g.closePath();g.fill();}}
+  g.fillStyle=shade(L.cloth||'#555555',-20);g.fillRect(-8,-18,16,34);g.strokeStyle=rim;g.lineWidth=1.4;g.strokeRect(-8,-18,16,34);
+  g.fillStyle=shade(L.cloth||'#555555',15);g.beginPath();g.arc(0,-18,6,Math.PI,0);g.fill();
+  g.fillStyle='#2a2a2e';g.fillRect(-7,16,6,5);g.fillRect(1,16,6,5);
+  g.restore();
+}
+function drawStaff(g,ha,ang,f){
+  const dv=V(ang,1),a={x:ha.x-dv.x*46,y:ha.y-dv.y*46},b={x:ha.x+dv.x*60,y:ha.y+dv.y*60},vong=f.techs&&f.techs.has('vong');
+  g.lineCap='round';g.strokeStyle=vong?'#3d4a24':'#2c2c32';g.lineWidth=vong?6:5;g.beginPath();g.moveTo(a.x,a.y);g.lineTo(b.x,b.y);g.stroke();
+  g.strokeStyle=vong?'#6b7a3a':'#8a8f98';g.lineWidth=1.2;g.stroke();
+  if(vong){g.fillStyle='#6b7a3a';g.beginPath();g.moveTo(b.x,b.y);g.lineTo(b.x-dv.x*12-dv.y*5,b.y-dv.y*12+dv.x*5);g.lineTo(b.x-dv.x*12+dv.y*5,b.y-dv.y*12-dv.x*5);g.closePath();g.fill();return;}
+  if(f.disarmed)return;
+  g.save();g.globalCompositeOperation='lighter';
+  for(const p of[a,b]){const gr=g.createRadialGradient(p.x,p.y,0,p.x,p.y,13);gr.addColorStop(0,'rgba(255,255,255,.9)');gr.addColorStop(.3,hexA(f.blade1,.85));gr.addColorStop(1,hexA(f.blade1,0));g.fillStyle=gr;g.beginPath();g.arc(p.x,p.y,13,0,7);g.fill();}
+  g.restore();
+}
+function drawVibro(g,ha,ang){
+  const dv=V(ang,1),pr={x:-dv.y,y:dv.x};const hb={x:ha.x-dv.x*8,y:ha.y-dv.y*8},hilt={x:ha.x+dv.x*8,y:ha.y+dv.y*8},tip={x:ha.x+dv.x*64,y:ha.y+dv.y*64};
+  g.lineCap='butt';g.strokeStyle='#2a2422';g.lineWidth=5;g.beginPath();g.moveTo(hb.x,hb.y);g.lineTo(hilt.x,hilt.y);g.stroke();
+  g.fillStyle='#c8ccd2';g.beginPath();g.moveTo(hilt.x+pr.x*4,hilt.y+pr.y*4);g.lineTo(tip.x,tip.y);g.lineTo(hilt.x-pr.x*3,hilt.y-pr.y*3);g.closePath();g.fill();
+  g.strokeStyle='rgba(160,220,255,.4)';g.lineWidth=1;g.stroke();
+}
 function drawFighter(g,f,now,ox,oy,sc){
   const J=solve(f,now),rim=RIM[f.side]||RIM.p;
   g.save();g.translate(ox,oy);g.scale(f.dir*sc,sc);
@@ -2607,13 +2731,16 @@ function drawFighter(g,f,now,ox,oy,sc){
   drawArm(g,J.shB,J.elB,J.haB,f,rim);
   drawLeg(g,J,false,f,rim);
   drawCloak(g,J,f,now,rim);
+  if((f.tech||[]).includes('jetpack'))drawJetpack(g,J,f,rim);
   drawTorso(g,J,f,rim);
   drawLeg(g,J,true,f,rim);
   drawSkirt(g,J,f,rim);
   drawHead(g,J,f,rim);
   if(f.ranged)drawGun(g,J.haF,J.p.sbF,f);
   drawArm(g,J.shF,J.elF,J.haF,f,rim);
-  if(!f.ranged)drawBlade(g,J.haF,J.p.sbF,f.blades[0],f.disarmed?0:f.bladeOn[0],f,now,f.weapon==='double');
+  if(f.weapon==='staff')drawStaff(g,J.haF,J.p.sbF,f);
+  else if(f.weapon==='vibro')drawVibro(g,J.haF,J.p.sbF);
+  else if(!f.ranged)drawBlade(g,J.haF,J.p.sbF,f.blades[0],f.disarmed?0:f.bladeOn[0],f,now,f.weapon==='double');
   g.restore();
   f._J=J;
 }
@@ -2730,6 +2857,9 @@ function drawFx(now){
     else if(e.k==='shot'){g.globalCompositeOperation='lighter';const h=Math.min(1,t*1.1),tl=Math.max(0,h-.25);const ax=e.x1+(e.x2-e.x1)*tl,ay=e.y1+(e.y2-e.y1)*tl,bx=e.x1+(e.x2-e.x1)*h,by=e.y1+(e.y2-e.y1)*h;
       g.lineCap='round';g.strokeStyle=e.col;g.globalAlpha=.35;g.lineWidth=10;g.beginPath();g.moveTo(ax,ay);g.lineTo(bx,by);g.stroke();g.globalAlpha=1;g.lineWidth=4;g.stroke();g.strokeStyle='#fff';g.lineWidth=1.5;g.stroke();}
     else if(e.k==='lob'){const x=e.x1+(e.x2-e.x1)*t,y=e.y1+(e.y2-e.y1)*t-Math.sin(t*Math.PI)*160;g.fillStyle='#2a2a2e';g.beginPath();g.arc(x,y,5,0,7);g.fill();g.fillStyle=Math.sin(now/40)>0?'#ff4a4a':'#552';g.fillRect(x-1.5,y-1.5,3,3);}
+    else if(e.k==='flame'){g.globalCompositeOperation='lighter';const reach=Math.min(1,t*1.8);
+      for(let i=0;i<34;i++){const tt=i/34*reach,j=tt*26;const x=e.x1+(e.x2-e.x1)*tt+rnd(-j,j),y=e.y1+(e.y2-e.y1)*tt+rnd(-j,j),r=4+tt*16;
+        const gr=g.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,`rgba(255,230,160,${(1-t)*.8})`);gr.addColorStop(.5,`rgba(255,120,30,${(1-t)*.5})`);gr.addColorStop(1,'rgba(255,60,10,0)');g.fillStyle=gr;g.beginPath();g.arc(x,y,r,0,7);g.fill();}}
     else if(e.k==='ring'){g.globalAlpha=(1-t)*.7;g.strokeStyle='#ffd9a0';g.lineWidth=2;g.beginPath();g.arc(e.x,e.y,e.r*t,0,7);g.stroke();}
     g.restore();return true;
   });
@@ -2751,13 +2881,15 @@ function actAvail(f,k){
   if(A.cls==='ranged'&&!f.ranged)return false;
   if(A.kind&&A.kind!==f.kind)return false;
   if((A.fp||0)>0&&(f.kind==='none'||f.fpMax<=0))return false;
-  if(k==='flurry'&&!(f.weapon==='double'||(f.weapon==='dual'&&f.techs.has('jarkai'))))return false;
+  if(k==='flurry'&&!(f.weapon==='double'||f.weapon==='staff'||(f.weapon==='dual'&&f.techs.has('jarkai'))))return false;
+  if(k==='jet'&&!f.techs.has('jetpack'))return false;
+  if(k==='flame'&&!f.techs.has('flamer'))return false;
   if(k==='rapid'&&!f.techs.has('rapid'))return false;
   if(k==='grenade'&&!f.techs.has('grenades'))return false;
   return true;
 }
-function actAfford(f,k){const A=ACTIONS[k];if((A.cost||0)>f.end||(A.fp||0)>f.fp)return false;if(A.cls==='melee'&&f.disarmed)return false;if(k==='grenade'&&f.grenades<=0)return false;return true;}
-function actLabel(f,k){if(k==='feint'&&f.techs&&f.techs.has('trakata'))return'Feinte Trakata';if(k==='flurry')return f.weapon==='double'?'Moulinet':'Tourbillon Jar’Kai';if(k==='grenade')return`Grenade (${f.grenades})`;return ACTIONS[k].label;}
+function actAfford(f,k){const A=ACTIONS[k];if((A.cost||0)>f.end||(A.fp||0)>f.fp)return false;if(A.cls==='melee'&&f.disarmed)return false;if(k==='grenade'&&f.grenades<=0)return false;if(k==='flame'&&f.fuel<=0)return false;return true;}
+function actLabel(f,k){if(k==='feint'&&f.techs&&f.techs.has('trakata'))return'Feinte Trakata';if(k==='flurry')return f.weapon==='dual'?'Tourbillon Jar’Kai':'Moulinet';if(k==='grenade')return`Grenade (${f.grenades})`;if(k==='flame')return`Lance-flammes (${f.fuel})`;return ACTIONS[k].label;}
 function actDesc(f,k){if(k==='feint'&&f.techs.has('trakata'))return TECH.trakata.d;if(k==='parry'&&f.techs.has('cortosis'))return'Bloque au cortosis : peut court-circuiter la lame adverse. Renvoie les tirs.';return ACTIONS[k].d;}
 
 function formMod(f,what){
@@ -2794,8 +2926,12 @@ function damage(t,n,src){
   if(t.pv<=0){t.pv=0;t.alive=false;setPose(t,'down',600);t.bladeOn=t.bladeOn.map(()=>0);log(`${t.name} s’effondre${src?' ('+short(src.name)+')':''}.`,'kill');}
   else{setPose(t,'hurt',120);setTimeout(()=>{if(t.alive&&!t.tw)setPose(t,restPose(t),300);},380);}
 }
-function dmgSaber(a,r){return(rint(5,8)+Math.floor(Math.max(0,r.margin)/2)+(a.form==='juyo'?2:0))*(r.crit?1.5:1);}
-async function strike(a,t,mod,bladeIdx,isFeint){
+function dmgSaber(a,r,t){
+  let n=(rint(5,8)+Math.floor(Math.max(0,r.margin)/2)+(a.saberW&&a.form==='juyo'?2:0)+(a.weapon==='vibro'?-1:0)+(a.techs.has('brute')?2:0))*(r.crit?1.5:1);
+  if(t&&a.saberW&&t.techs.has('beskar')){n*=.6;const c=chestWorld(t);floatT(c.x,c.y-60,'Beskar !','#c9d4e0',16);}
+  return n;
+}
+async function strike(a,t,mod,bladeIdx,isFeint,opts){
   const st=stanceOf(t);
   let m=mod+formMod(a,'attack');
   if(st==='recover')m+=2;
@@ -2815,8 +2951,8 @@ async function strike(a,t,mod,bladeIdx,isFeint){
     if(st==='attack'||st==='flurry'){log(`${short(t.name)} ne mord pas à la feinte de ${short(a.name)}.`,a.side);floatT(cp.x,cp.y,'Feinte vaine','#c9bcc6');await wait(350);return;}
     if(!r.ok){log(`La feinte de ${short(a.name)} échoue.`,a.side);floatT(cp.x,cp.y,'Raté','#c9bcc6');await wait(350);return;}
     burn(t);
-    if(parrying){floatT(cp.x,cp.y-30,trakata?'Lame fantôme !':'Garde trompée !','#ffd27a',20);damage(t,dmgSaber(a,r)*(trakata?2:1.5),a);log(`${short(a.name)} trompe la parade de ${short(t.name)}${trakata?' : la lame se rallume dans sa garde':''}.`,a.side);}
-    else{damage(t,dmgSaber(a,r),a);log(`${short(a.name)} touche ${short(t.name)} sur sa feinte.`,a.side);}
+    if(parrying){floatT(cp.x,cp.y-30,trakata?'Lame fantôme !':'Garde trompée !','#ffd27a',20);damage(t,dmgSaber(a,r,t)*(trakata?2:1.5),a);log(`${short(a.name)} trompe la parade de ${short(t.name)}${trakata?' : la lame se rallume dans sa garde':''}.`,a.side);}
+    else{damage(t,dmgSaber(a,r,t),a);log(`${short(a.name)} touche ${short(t.name)} sur sa feinte.`,a.side);}
     await wait(380);return;
   }
   if(!r.ok){
@@ -2827,12 +2963,12 @@ async function strike(a,t,mod,bladeIdx,isFeint){
   }
   if(parrying){
     setPose(t,'parry',80);await wait(60);
-    const pr=test(t,'Parade',t.sabre+2+formMod(t,'parry'));
+    const pr=test(t,'Parade',t.sabre+2+formMod(t,'parry')-(a.saberW&&t.weapon==='vibro'?3:0)-(opts&&opts.air?2:0));
     flash(cp.x,cp.y,90,'255,230,200');sparks(cp.x,cp.y,26);
     if(pr.ok&&!(r.crit&&!pr.crit)){
       floatT(cp.x,cp.y-30,'Parade !','#a8d8ff',20);log(`${short(t.name)} bloque la frappe de ${short(a.name)}.`,t.side);
       await wait(260);
-      if(t.techs.has('cortosis')){
+      if(t.techs.has('cortosis')&&a.saberW){
         const c=test(t,'Cortosis',11);
         if(c.ok){a.disarmed=true;a.disarmT=2;
           for(let i=0;i<a.bladeOn.length;i++){bladeTo(a,i,.2,60);setTimeout(()=>bladeTo(a,i,.8,60),70);setTimeout(()=>bladeTo(a,i,0,90),140);}
@@ -2847,24 +2983,24 @@ async function strike(a,t,mod,bladeIdx,isFeint){
     }
     log(`${short(t.name)} ne parvient pas à contenir la frappe.`,a.side);
   }
-  burn(t);damage(t,dmgSaber(a,r),a);
+  burn(t);damage(t,dmgSaber(a,r,t),a);
   if(r.crit)floatT(cp.x,cp.y-40,'Coup critique !','#ffd27a',20);
   log(`${short(a.name)} touche ${short(t.name)}.`,a.side);
   await wait(320);
 }
-async function fire(a,t,mod,dmgBonus,label){
+async function fire(a,t,mod,dmgBonus,label,opts){
   if(!t||!t.alive){const o=otherSide(a);if(!o.length)return;t=o[0];}
   setPose(a,'aim',160);await wait(170);
   const st=stanceOf(t);
   let m=mod+a.med+(a.offBal?-3:0);
-  if(st==='cover')m-=3;if(st==='dodge')m-=2;if(st==='recover')m+=2;
+  if(st==='cover'&&!(opts&&opts.air))m-=3;if(st==='dodge')m-=2;if(st==='recover')m+=2;
   const r=test(a,label,a.tir+m);
   const mz=muzzleWorld(a);flash(mz.x,mz.y,26,'255,120,90');
   const c=chestWorld(t);
   if(!r.ok){const miss={x:c.x+rnd(-30,30)+a.dir*120,y:c.y+rnd(-70,-30)};shot(mz.x,mz.y,miss.x,miss.y,a.bolt,220);await wait(220);
     if(st==='cover')floatT(c.x,c.y-50,'À couvert','#c9bcc6',16);log(`${short(a.name)} manque ${short(t.name)}.`,a.side);await wait(160);return;}
   // un porteur de sabre peut dévier le tir
-  if(!t.ranged&&!t.disarmed&&t.alive&&!t.cancelled){
+  if(t.saberW&&!t.disarmed&&t.alive&&!t.cancelled){
     const parrying=isParrying(t);
     const hb=handWorld(t,true);
     shot(mz.x,mz.y,hb.x,hb.y-30,a.bolt,200);await wait(200);
@@ -2878,10 +3014,10 @@ async function fire(a,t,mod,dmgBonus,label){
       setTimeout(()=>{if(t.alive&&!t.tw)setPose(t,restPose(t),250);},300);
       await wait(260);return;
     }
-    burn(t);damage(t,((a.pvMax<20?rint(3,6):rint(4,7))+(a.weapon==='rifle'?1:0)+Math.floor(Math.max(0,r.margin)/2)+dmgBonus)*(r.crit?1.5:1),a);log(`${short(a.name)} touche ${short(t.name)}.`,a.side);await wait(260);return;
+    burn(t);damage(t,((a.pvMax<20?rint(3,6):rint(4,7))+(a.weapon==='rifle'?1:0)+Math.floor(Math.max(0,r.margin)/2)+dmgBonus-(t.techs.has('beskar')?2:0))*(r.crit?1.5:1),a);log(`${short(a.name)} touche ${short(t.name)}.`,a.side);await wait(260);return;
   }
   shot(mz.x,mz.y,c.x,c.y,a.bolt,200);await wait(200);
-  burn(t);damage(t,((a.pvMax<20?rint(3,6):rint(4,7))+(a.weapon==='rifle'?1:0)+Math.floor(Math.max(0,r.margin)/2)+dmgBonus)*(r.crit?1.5:1),a);
+  burn(t);damage(t,((a.pvMax<20?rint(3,6):rint(4,7))+(a.weapon==='rifle'?1:0)+Math.floor(Math.max(0,r.margin)/2)+dmgBonus-(t.techs.has('beskar')?2:0))*(r.crit?1.5:1),a);
   log(`${short(a.name)} touche ${short(t.name)}.`,a.side);await wait(260);
 }
 async function throwGrenade(a,t){
@@ -2910,7 +3046,20 @@ async function perform(f){
     case'aimed':await fire(f,t,3,2,'Tir visé');break;
     case'rapid':await fire(f,t,-2,0,'Tir rapide');if(!over&&t.alive)await fire(f,t,-2,0,'Tir rapide');else if(!over){const o=otherSide(f);if(o.length)await fire(f,o[0],-2,0,'Tir rapide');}break;
     case'grenade':await throwGrenade(f,t);break;
+    case'jet':{
+      liftTo(f,140,280);await wait(300);
+      if(f.ranged)await fire(f,t,2,1,'Tir en vol',{air:true});else await strike(f,t,2,0,false,{air:true});
+      liftTo(f,0,320);await wait(320);break;}
+    case'flame':{
+      f.fuel--;setPose(f,'aim',160);await wait(170);
+      const r=test(f,'Lance-flammes',f.tir+1+f.med);
+      const mz=muzzleWorld(f),c=chestWorld(t);fx.push({k:'flame',x1:mz.x,y1:mz.y,x2:c.x,y2:c.y,t0:performance.now(),dur:650});await wait(450);
+      if(!r.ok){log(`Les flammes de ${short(f.name)} manquent ${short(t.name)}.`,f.side);await wait(200);break;}
+      burn(t);damage(t,rint(6,9)-(t.techs.has('beskar')?2:0),f);log(`${short(f.name)} arrose ${short(t.name)} de flammes.`,f.side);
+      for(const o of team(t.side)){if(o===t)continue;if(Math.random()<.5){damage(o,rint(3,5),f);log(`${short(o.name)} est léché par les flammes.`,f.side);break;}}
+      await wait(300);break;}
     case'push':{
+      if(t.techs.has('vong')){setPose(f,'force',200);await wait(300);floatT(headWorld(t).x,headWorld(t).y-40,'Invisible dans la Force','#c9b4ff',16);log(`${short(t.name)} est invisible dans la Force : ${short(f.name)} ne trouve aucune prise.`,t.side);await wait(300);break;}
       setPose(f,'force',200);await wait(200);
       const r=test(f,'Poussée de Force',f.force+formMod(f,'force'));
       const h=handWorld(f,false);wave(h.x,h.y,f.dir);await wait(180);
@@ -2920,6 +3069,7 @@ async function perform(f){
       else log(`${short(t.name)} résiste à la poussée de ${short(f.name)}.`,f.side);
       await wait(200);break;}
     case'lightning':{
+      if(t.techs.has('vong')){setPose(f,'force',200);await wait(300);floatT(headWorld(t).x,headWorld(t).y-40,'Invisible dans la Force','#c9b4ff',16);log(`${short(t.name)} est invisible dans la Force : les éclairs se perdent.`,t.side);await wait(300);break;}
       setPose(f,'force',200);await wait(200);
       const r=test(f,'Éclairs de Force',f.force+formMod(f,'force'));const parrying=isParrying(t);
       if(r.ok){boltsFx(f,()=>parrying?handWorld(t,true):chestWorld(t));await wait(500);let n=rint(6,9)+Math.floor(Math.max(0,r.margin)/2);
@@ -2949,6 +3099,7 @@ function aiChoose(e){
     if(foes.some(f=>!f.ranged))w.dodge+=1;
   }
   if(e.kind!=='none'&&e.fp>0){w.push=1.1;w.lightning=1.2;if(team(e.side).length>1&&!e.medNext)w.meditate=.9;if(e.disarmed)w.push+=2;}
+  if(e.techs.has('jetpack'))w.jet=1.6;if(e.techs.has('flamer'))w.flame=foes.length>=2?2.4:1.4;
   if(e.end<=1)w.recover=(w.recover||0)+3.5;
   for(const k in w){if(!actAvail(e,k)||!actAfford(e,k))w[k]=0;}
   if(Object.values(w).every(v=>v<=0))w.recover=1;
@@ -3019,7 +3170,7 @@ function log(txt,cls=''){logs.unshift({txt,cls});if(logs.length>50)logs.pop();}
 const pips=(n,max,cls='')=>`<span class="pips ${cls}">${Array.from({length:max},(_,i)=>`<i class="${i<n?'on':''}"></i>`).join('')}</span>`;
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function weaponSummary(f){
-  const w={saber:'Sabre',dual:'Deux sabres',double:'Sabre double',pistol:'Pistolet',rifle:'Fusil'}[f.weapon];
+  const w={saber:'Sabre',dual:'Deux sabres',double:'Sabre double',pistol:'Pistolet',rifle:'Fusil',staff:'Bâton',vibro:'Vibrolame'}[f.weapon];
   const form=!isRanged(f.weapon)&&f.form&&f.form!=='none'?' · '+FORMS[f.form].label:'';
   const t=(f.tech||[]).filter(k=>TECH[k]&&(isRanged(f.weapon)?TECH[k].ranged:TECH[k].melee)).map(k=>TECH[k].label).join(', ');
   return w+form+(t?' · '+t:'');
@@ -3118,7 +3269,7 @@ function syncEditor(){
   const r=isRanged(edit.weapon);
   $('cB1').hidden=r;$('cB2').hidden=edit.weapon!=='dual';$('cBolt').hidden=!r;
   $('formWrap').hidden=r;$('formDesc').hidden=r;$('formDesc').textContent=FORMS[edit.form||'none'].d;
-  const avail=Object.keys(TECH).filter(k=>(r?TECH[k].ranged:TECH[k].melee));
+  const avail=Object.keys(TECH).filter(k=>(r?TECH[k].ranged:TECH[k].melee)&&(!TECH[k].saber||isSaber(edit.weapon)));
   $('techs').innerHTML=avail.map(k=>{const dis=TECH[k].needs&&edit.weapon!==TECH[k].needs;return `<label><input type="checkbox" value="${k}" ${(edit.tech||[]).includes(k)&&!dis?'checked':''} ${dis?'disabled':''}><span>${TECH[k].label}<small>${TECH[k].d}</small></span></label>`;}).join('');
   rngs.forEach(([id,k])=>{$('o'+id.slice(1)).textContent=edit[k];});
   $('oH').textContent=Math.round(edit.look.h*100)+'%';$('oBuild').textContent=Math.round(edit.look.build*100)+'%';
@@ -3190,7 +3341,7 @@ function drawScene(list,now,reflect){
       ctx.save();ctx.fillStyle='rgba(0,0,0,.45)';ctx.beginPath();ctx.ellipse(f.x,FLOOR-(f.zOff||0),60*f.depth,9*f.depth,0,0,7);ctx.fill();
       if(ring){ctx.strokeStyle=ring;ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(f.x,FLOOR-(f.zOff||0),64*f.depth,11*f.depth,0,0,7);ctx.stroke();}ctx.restore();
     }
-    drawFighter(ctx,f,now,f.x,FLOOR-(f.zOff||0),sizeOf(f));
+    drawFighter(ctx,f,now,f.x,FLOOR-(f.zOff||0)-(f.air||0),sizeOf(f));
     if(!reflect)drawCover(f);
   }
 }
@@ -3285,8 +3436,14 @@ const OBJECTIF={assaut:'Prendre le générateur',elimination:'Anéantir l’enne
 const DECOR_DUEL={toits:'Toits sous la pluie',temple:'Temple ancien',desert:'Désert',foret:'Forêt',vaisseau:'Coursive de vaisseau',glace:'Monde de glace',lave:'Monde volcanique'};
 const TROOP_T={inf:'Escouade d’assaut',tank:'Char lourd',art:'Artillerie',speed:'Éclaireurs motorisés'};
 const FORMS={none:'Aucune',shiicho:'Shii-Cho',makashi:'Makashi',soresu:'Soresu',ataru:'Ataru',shien:'Djem So / Shien',niman:'Niman',juyo:'Juyo / Vaapad'};
-const TECHS={trakata:'Trakata',jarkai:'Jar’Kai',cortosis:'Gantelets de cortosis',rapid:'Tir rapide',grenades:'Grenades'};
-const WEAPONS={saber:'Sabre laser',dual:'Deux sabres',double:'Sabre double',pistol:'Pistolet blaster',rifle:'Fusil blaster'};
+const TECHS={trakata:'Trakata',jarkai:'Jar’Kai',cortosis:'Gantelets de cortosis',rapid:'Tir rapide',grenades:'Grenades',beskar:'Armure en beskar',jetpack:'Jetpack',flamer:'Lance-flammes',brute:'Force brute',vong:'Hors de la Force'};
+const TECH_CAT={trakata:'saber',jarkai:'dual',cortosis:'melee',rapid:'ranged',grenades:'ranged',beskar:'any',jetpack:'any',flamer:'any',brute:'melee',vong:'any'};
+const TECH_LEARN=['trakata','jarkai','rapid'];
+const EQUIP=['beskar','jetpack','flamer','cortosis','grenades'];
+const WEAPONS={saber:'Sabre laser',dual:'Deux sabres',double:'Sabre double',pistol:'Pistolet blaster',rifle:'Fusil blaster',staff:'Électrobâton / bâton',vibro:'Vibrolame'};
+const HEADS={hair:'Cheveux courts',hairlong:'Cheveux attachés',beard:'Cheveux et barbe',bald:'Crâne rasé',horns:'Cornes (zabrak)',hood:'Capuche',helm:'Casque anguleux',trooper:'Casque intégral',mando:'Casque mandalorien',clone:'Casque de clone',scout:'Casque d’éclaireur',royal:'Casque de garde royal',mask:'Masque respiratoire',lekku:'Twi’lek',montrals:'Togruta',rodian:'Rodien',reptile:'Trandoshan',wookiee:'Wookiee',vong:'Yuuzhan Vong',droid:'Droïde B1',b2:'Droïde lourd',hk:'Droïde assassin'};
+const OUTFITS={robe:'Robe',armor:'Armure',jacket:'Veste',uniform:'Uniforme',trooper:'Armure de soldat',beskar:'Armure mandalorienne',fur:'Fourrure',vong:'Armure vivante (vong)',droid:'Châssis de droïde',b2:'Droïde lourd'};
+const LOOK_COLORS=['skin','hair','cloth','cloth2','legs','cloakC','glove','stripe','eyes'];
 
 /* Modèles d'apparence et d'adversaires (utilisés par le MJ et la création) */
 const LOOKS={
@@ -3303,9 +3460,46 @@ const LOOKS={
   officer:{label:'Officier',kind:'none',weapon:'pistol',bolt:'#ff3030',pv:18,sabre:8,tir:12,force:7,fp:0,ref:11,look:{h:1.0,build:.95,outfit:'uniform',cloak:'none',head:'hair',skin:'#e0bfa4',hair:'#4a3626',cloth:'#4a4f45',cloth2:'#2a2d27',legs:'#2a2d27',cloakC:'#222222',glove:'#151515',bare:false,tattoo:false}},
   thug:{label:'Homme de main',kind:'none',weapon:'pistol',bolt:'#ff5a3a',pv:16,sabre:10,tir:11,force:6,fp:0,ref:11,look:{h:1.04,build:1.15,outfit:'jacket',cloak:'none',head:'horns',skin:'#7a6a9a',hair:'#222',cloth:'#3a3030',cloth2:'#5a4a40',legs:'#262222',cloakC:'#222222',glove:'#222222',bare:true,tattoo:false}},
   guard:{label:'Garde en armure',kind:'none',weapon:'rifle',bolt:'#ff5a3a',pv:20,sabre:10,tir:11,force:6,fp:0,ref:10,look:{h:1.05,build:1.1,outfit:'armor',cloak:'none',head:'trooper',skin:'#a07a60',hair:'#222',cloth:'#6a2f2a',cloth2:'#221a18',legs:'#2a2220',cloakC:'#222222',glove:'#1a1514',bare:false,tattoo:false}},
+  scoutTrooper:{"label": "Éclaireur impérial", "kind": "none", "weapon": "pistol", "bolt": "#ff3030", "form": "none", "tech": [], "pv": 14, "sabre": 8, "tir": 11, "force": 6, "fp": 0, "ref": 12, "look": {"h": 0.98, "build": 0.95, "outfit": "trooper", "cloak": "none", "head": "scout", "skin": "#c9a184", "hair": "#222", "cloth": "#e6e8ea", "cloth2": "#1c1e22", "legs": "#e6e8ea", "cloakC": "#222222", "glove": "#1c1e22", "bare": false, "tattoo": false}},
+  snowtrooper:{"label": "Snowtrooper", "kind": "none", "weapon": "rifle", "bolt": "#ff3030", "form": "none", "tech": ["grenades"], "pv": 16, "sabre": 7, "tir": 11, "force": 6, "fp": 0, "ref": 10, "look": {"h": 1.0, "build": 1.05, "outfit": "trooper", "cloak": "long", "head": "trooper", "skin": "#c9a184", "hair": "#222", "cloth": "#e2e5e8", "cloth2": "#3a3d42", "legs": "#e2e5e8", "cloakC": "#c9ccd0", "glove": "#3a3d42", "bare": false, "tattoo": false}},
+  royalGuard:{"label": "Garde royal", "kind": "none", "weapon": "staff", "blade1": "#ff4040", "form": "none", "tech": ["cortosis"], "pv": 26, "sabre": 13, "tir": 9, "force": 6, "fp": 0, "ref": 13, "look": {"h": 1.06, "build": 1.05, "outfit": "robe", "cloak": "long", "head": "royal", "skin": "#c9a184", "hair": "#222", "cloth": "#9a1414", "cloth2": "#6a0e0e", "legs": "#6a0e0e", "cloakC": "#8a1212", "glove": "#4a0a0a", "bare": false, "tattoo": false}},
+  rebelTrooper:{"label": "Soldat rebelle", "kind": "none", "weapon": "rifle", "bolt": "#ff5a3a", "form": "none", "tech": [], "pv": 14, "sabre": 8, "tir": 11, "force": 6, "fp": 0, "ref": 11, "look": {"h": 1.0, "build": 1.0, "outfit": "jacket", "cloak": "none", "head": "hair", "skin": "#c49a7c", "hair": "#3a2a1a", "cloth": "#7a6a50", "cloth2": "#d8d2c4", "legs": "#4a4a40", "cloakC": "#222222", "glove": "#2a2620", "bare": false, "tattoo": false}},
+  rebelCommando:{"label": "Commando rebelle", "kind": "none", "weapon": "rifle", "bolt": "#ff5a3a", "form": "none", "tech": ["grenades"], "pv": 22, "sabre": 10, "tir": 13, "force": 6, "fp": 0, "ref": 13, "look": {"h": 1.0, "build": 1.05, "outfit": "armor", "cloak": "none", "head": "beard", "skin": "#b98a6a", "hair": "#2a1c12", "cloth": "#4e5a3c", "cloth2": "#2a2e24", "legs": "#3a4030", "cloakC": "#222222", "glove": "#2a2a22", "bare": false, "tattoo": false}},
+  rebelPilot:{"label": "Pilote rebelle", "kind": "none", "weapon": "pistol", "bolt": "#ff5a3a", "form": "none", "tech": [], "pv": 16, "sabre": 8, "tir": 12, "force": 6, "fp": 0, "ref": 14, "look": {"h": 1.0, "build": 0.95, "outfit": "uniform", "cloak": "none", "head": "hair", "skin": "#d4ab8e", "hair": "#5a3a1a", "cloth": "#d8742a", "cloth2": "#3a3a3a", "legs": "#d8742a", "cloakC": "#222222", "glove": "#3a3a3a", "bare": false, "tattoo": false}},
+  cloneTrooper:{"label": "Soldat clone", "kind": "none", "weapon": "rifle", "bolt": "#4aa8ff", "form": "none", "tech": ["grenades"], "pv": 18, "sabre": 9, "tir": 12, "force": 6, "fp": 0, "ref": 12, "look": {"h": 1.0, "build": 1.0, "outfit": "trooper", "cloak": "none", "head": "clone", "skin": "#a87c5c", "hair": "#111", "cloth": "#eef0f2", "cloth2": "#1c1e22", "legs": "#eef0f2", "cloakC": "#222222", "glove": "#1c1e22", "bare": false, "tattoo": false}},
+  cloneCommander:{"label": "Commandant clone", "kind": "none", "weapon": "pistol", "bolt": "#4aa8ff", "form": "none", "tech": ["rapid"], "pv": 26, "sabre": 10, "tir": 14, "force": 6, "fp": 0, "ref": 14, "look": {"h": 1.02, "build": 1.05, "outfit": "trooper", "cloak": "none", "head": "clone", "skin": "#a87c5c", "hair": "#111", "cloth": "#eef0f2", "cloth2": "#1c1e22", "legs": "#eef0f2", "cloakC": "#222222", "glove": "#1c1e22", "bare": false, "tattoo": false, "stripe": "#e0802a"}},
+  arcTrooper:{"label": "Soldat ARC", "kind": "none", "weapon": "pistol", "bolt": "#4aa8ff", "form": "none", "tech": ["rapid", "grenades"], "pv": 28, "sabre": 11, "tir": 15, "force": 6, "fp": 0, "ref": 15, "look": {"h": 1.02, "build": 1.05, "outfit": "trooper", "cloak": "tattered", "head": "clone", "skin": "#a87c5c", "hair": "#111", "cloth": "#eef0f2", "cloth2": "#1c1e22", "legs": "#eef0f2", "cloakC": "#3a2a20", "glove": "#1c1e22", "bare": false, "tattoo": false, "stripe": "#b02a2a"}},
+  b1Droid:{"label": "Droïde de combat B1", "kind": "none", "weapon": "rifle", "bolt": "#ff3030", "form": "none", "tech": [], "pv": 10, "sabre": 6, "tir": 9, "force": 6, "fp": 0, "ref": 9, "look": {"h": 1.04, "build": 1.0, "outfit": "droid", "cloak": "none", "head": "droid", "skin": "#c9b48a", "hair": "#111", "cloth": "#c9b48a", "cloth2": "#8a7a5c", "legs": "#c9b48a", "cloakC": "#222222", "glove": "#c9b48a", "bare": false, "tattoo": false}},
+  b2Droid:{"label": "Super droïde B2", "kind": "none", "weapon": "rifle", "bolt": "#ff3030", "form": "none", "tech": ["brute"], "pv": 24, "sabre": 10, "tir": 11, "force": 6, "fp": 0, "ref": 9, "look": {"h": 1.1, "build": 1.15, "outfit": "b2", "cloak": "none", "head": "b2", "skin": "#7a7e86", "hair": "#111", "cloth": "#6e737c", "cloth2": "#3a3e44", "legs": "#6e737c", "cloakC": "#222222", "glove": "#4a4e56", "bare": false, "tattoo": false}},
+  magnaguard:{"label": "Magnagarde", "kind": "none", "weapon": "staff", "blade1": "#b46aff", "form": "none", "tech": ["cortosis"], "pv": 26, "sabre": 14, "tir": 9, "force": 6, "fp": 0, "ref": 14, "look": {"h": 1.1, "build": 1.0, "outfit": "droid", "cloak": "tattered", "head": "hk", "skin": "#3a3a40", "hair": "#111", "cloth": "#3a3a40", "cloth2": "#24242a", "legs": "#3a3a40", "cloakC": "#2a1a1a", "glove": "#3a3a40", "bare": false, "tattoo": false, "eyes": "#ff3030"}},
+  commandoDroid:{"label": "Droïde commando", "kind": "none", "weapon": "vibro", "blade1": "#ff3030", "form": "none", "tech": [], "pv": 16, "sabre": 13, "tir": 11, "force": 6, "fp": 0, "ref": 15, "look": {"h": 1.02, "build": 0.95, "outfit": "droid", "cloak": "none", "head": "droid", "skin": "#3a3d44", "hair": "#111", "cloth": "#3a3d44", "cloth2": "#24262a", "legs": "#3a3d44", "cloakC": "#222222", "glove": "#3a3d44", "bare": false, "tattoo": false}},
+  mandoWarrior:{"label": "Guerrier mandalorien", "kind": "none", "weapon": "pistol", "bolt": "#ff6a3a", "form": "none", "tech": ["beskar", "jetpack", "rapid"], "pv": 32, "sabre": 12, "tir": 15, "force": 6, "fp": 0, "ref": 14, "look": {"h": 1.0, "build": 1.05, "outfit": "beskar", "cloak": "none", "head": "mando", "skin": "#b98a6a", "hair": "#222", "cloth": "#5d7a8c", "cloth2": "#2b2f33", "legs": "#2b2f33", "cloakC": "#222222", "glove": "#3a3d40", "bare": false, "tattoo": false, "stripe": "#c9a227"}},
+  mandoCommando:{"label": "Commando mandalorien", "kind": "none", "weapon": "rifle", "bolt": "#ff6a3a", "form": "none", "tech": ["beskar", "jetpack", "flamer"], "pv": 34, "sabre": 12, "tir": 14, "force": 6, "fp": 0, "ref": 13, "look": {"h": 1.02, "build": 1.1, "outfit": "beskar", "cloak": "none", "head": "mando", "skin": "#b98a6a", "hair": "#222", "cloth": "#9a2a22", "cloth2": "#2a2224", "legs": "#2a2224", "cloakC": "#222222", "glove": "#3a2a28", "bare": false, "tattoo": false, "stripe": "#e8e2d0"}},
+  mandoChief:{"label": "Chef de clan mandalorien", "kind": "none", "weapon": "pistol", "bolt": "#ff6a3a", "form": "none", "tech": ["beskar", "jetpack", "rapid", "grenades"], "pv": 40, "sabre": 14, "tir": 16, "force": 6, "fp": 0, "ref": 15, "look": {"h": 1.04, "build": 1.1, "outfit": "beskar", "cloak": "long", "head": "mando", "skin": "#b98a6a", "hair": "#222", "cloth": "#c9a227", "cloth2": "#2a2a2e", "legs": "#2a2a2e", "cloakC": "#3a2a1a", "glove": "#4a3a20", "bare": false, "tattoo": false, "stripe": "#7a1a1a"}},
+  deathWatch:{"label": "Garde de la Mort", "kind": "none", "weapon": "rifle", "bolt": "#ff6a3a", "form": "none", "tech": ["beskar", "jetpack"], "pv": 30, "sabre": 12, "tir": 14, "force": 6, "fp": 0, "ref": 14, "look": {"h": 1.0, "build": 1.05, "outfit": "beskar", "cloak": "none", "head": "mando", "skin": "#b98a6a", "hair": "#222", "cloth": "#3c4c6a", "cloth2": "#1c2230", "legs": "#1c2230", "cloakC": "#222222", "glove": "#2a3040", "bare": false, "tattoo": false, "stripe": "#111418"}},
+  weequayPirate:{"label": "Pirate weequay", "kind": "none", "weapon": "vibro", "blade1": "#ff5a3a", "form": "none", "tech": ["brute"], "pv": 20, "sabre": 12, "tir": 10, "force": 6, "fp": 0, "ref": 12, "look": {"h": 1.0, "build": 1.0, "outfit": "jacket", "cloak": "none", "head": "hairlong", "skin": "#8a6a4a", "hair": "#2a2018", "cloth": "#5a3a28", "cloth2": "#a89a7a", "legs": "#3a3028", "cloakC": "#222222", "glove": "#3a2a20", "bare": true, "tattoo": false}},
+  trandoshanHunter:{"label": "Chasseur trandoshan", "kind": "none", "weapon": "rifle", "bolt": "#ff8a3a", "form": "none", "tech": ["brute", "grenades"], "pv": 32, "sabre": 12, "tir": 13, "force": 6, "fp": 0, "ref": 12, "look": {"h": 1.08, "build": 1.15, "outfit": "armor", "cloak": "none", "head": "reptile", "skin": "#6a7a3a", "hair": "#222", "cloth": "#5a4a32", "cloth2": "#2a241a", "legs": "#3a3424", "cloakC": "#222222", "glove": "#2a241a", "bare": true, "tattoo": false}},
+  rodianHunter:{"label": "Chasseur rodien", "kind": "none", "weapon": "pistol", "bolt": "#ff8a3a", "form": "none", "tech": ["rapid"], "pv": 20, "sabre": 9, "tir": 13, "force": 6, "fp": 0, "ref": 14, "look": {"h": 0.96, "build": 0.92, "outfit": "jacket", "cloak": "none", "head": "rodian", "skin": "#5a9a4a", "hair": "#111", "cloth": "#3a4a5a", "cloth2": "#a8a090", "legs": "#2a2a30", "cloakC": "#222222", "glove": "#2a2a30", "bare": false, "tattoo": false}},
+  twilekRogue:{"label": "Aventurière twi’lek", "kind": "none", "weapon": "pistol", "bolt": "#ff5a8a", "form": "none", "tech": ["rapid"], "pv": 20, "sabre": 9, "tir": 13, "force": 6, "fp": 0, "ref": 15, "look": {"h": 0.96, "build": 0.9, "outfit": "jacket", "cloak": "none", "head": "lekku", "skin": "#5aa0c8", "hair": "#c9a227", "cloth": "#3a2a3a", "cloth2": "#d8c8b0", "legs": "#2a2230", "cloakC": "#222222", "glove": "#2a2230", "bare": false, "tattoo": false}},
+  wookieeWarrior:{"label": "Guerrier wookiee", "kind": "none", "weapon": "rifle", "bolt": "#ff7a3a", "form": "none", "tech": ["brute"], "pv": 38, "sabre": 14, "tir": 13, "force": 6, "fp": 0, "ref": 12, "look": {"h": 1.12, "build": 1.2, "outfit": "fur", "cloak": "none", "head": "wookiee", "skin": "#6a4a2a", "hair": "#6a4a2a", "cloth": "#6a4a2a", "cloth2": "#3a2a1a", "legs": "#6a4a2a", "cloakC": "#222222", "glove": "#5a3e22", "bare": false, "tattoo": false}},
+  hkDroid:{"label": "Droïde assassin", "kind": "none", "weapon": "rifle", "bolt": "#ff5a3a", "form": "none", "tech": ["rapid"], "pv": 26, "sabre": 10, "tir": 15, "force": 6, "fp": 0, "ref": 14, "look": {"h": 1.06, "build": 1.0, "outfit": "droid", "cloak": "none", "head": "hk", "skin": "#8a4a2a", "hair": "#111", "cloth": "#8a4a2a", "cloth2": "#3a2a20", "legs": "#8a4a2a", "cloakC": "#222222", "glove": "#8a4a2a", "bare": false, "tattoo": false}},
+  templeGuard:{"label": "Gardien du Temple", "kind": "jedi", "weapon": "double", "blade1": "#ffd93a", "form": "soresu", "tech": [], "pv": 36, "sabre": 14, "tir": 9, "force": 13, "fp": 3, "ref": 12, "look": {"h": 1.04, "build": 1.05, "outfit": "robe", "cloak": "long", "head": "hood", "skin": "#c9a184", "hair": "#222", "cloth": "#d8c8a0", "cloth2": "#8a7a5a", "legs": "#8a7a5a", "cloakC": "#c8b890", "glove": "#6a5a40", "bare": false, "tattoo": false}},
+  jediConsular:{"label": "Consulaire togruta", "kind": "jedi", "weapon": "saber", "blade1": "#3fa8ff", "form": "niman", "tech": [], "pv": 28, "sabre": 12, "tir": 9, "force": 14, "fp": 4, "ref": 13, "look": {"h": 0.96, "build": 0.9, "outfit": "robe", "cloak": "long", "head": "montrals", "skin": "#c8502a", "hair": "#f0f0f0", "cloth": "#b8a07a", "cloth2": "#5a4632", "legs": "#5a4632", "cloakC": "#4a3626", "glove": "#5a4433", "bare": false, "tattoo": false}},
+  republicTrooper:{"label": "Soldat de la République", "kind": "none", "weapon": "rifle", "bolt": "#4aa8ff", "form": "none", "tech": ["grenades"], "pv": 18, "sabre": 9, "tir": 12, "force": 6, "fp": 0, "ref": 12, "look": {"h": 1.0, "build": 1.05, "outfit": "trooper", "cloak": "none", "head": "trooper", "skin": "#c9a184", "hair": "#222", "cloth": "#c8ccd0", "cloth2": "#5a1a1a", "legs": "#c8ccd0", "cloakC": "#222222", "glove": "#5a1a1a", "bare": false, "tattoo": false, "stripe": "#b03030"}},
+  sithTrooper:{"label": "Soldat sith", "kind": "none", "weapon": "rifle", "bolt": "#ff3030", "form": "none", "tech": ["grenades"], "pv": 18, "sabre": 9, "tir": 12, "force": 6, "fp": 0, "ref": 12, "look": {"h": 1.0, "build": 1.05, "outfit": "trooper", "cloak": "none", "head": "trooper", "skin": "#c9a184", "hair": "#222", "cloth": "#2a2a2e", "cloth2": "#6a1414", "legs": "#2a2a2e", "cloakC": "#222222", "glove": "#6a1414", "bare": false, "tattoo": false, "stripe": "#a01818"}},
+  vongWarrior:{"label": "Guerrier vong", "kind": "none", "weapon": "staff", "blade1": "#6b7a3a", "form": "none", "tech": ["vong"], "pv": 32, "sabre": 14, "tir": 8, "force": 6, "fp": 0, "ref": 13, "look": {"h": 1.06, "build": 1.1, "outfit": "vong", "cloak": "none", "head": "vong", "skin": "#8a7a6a", "hair": "#111", "cloth": "#5a2a22", "cloth2": "#3a1a14", "legs": "#3a1a14", "cloakC": "#222222", "glove": "#4a2018", "bare": true, "tattoo": true}},
+  vongCommander:{"label": "Commandant vong", "kind": "none", "weapon": "staff", "blade1": "#6b7a3a", "form": "none", "tech": ["vong", "brute"], "pv": 42, "sabre": 15, "tir": 8, "force": 6, "fp": 0, "ref": 14, "look": {"h": 1.1, "build": 1.15, "outfit": "vong", "cloak": "tattered", "head": "vong", "skin": "#8a7a6a", "hair": "#111", "cloth": "#6a2a1a", "cloth2": "#3a1410", "legs": "#3a1410", "cloakC": "#2a0e0a", "glove": "#4a1810", "bare": true, "tattoo": true}},
+  chissOfficer:{"label": "Officier chiss", "kind": "none", "weapon": "pistol", "bolt": "#ff3030", "form": "none", "tech": ["rapid"], "pv": 20, "sabre": 9, "tir": 14, "force": 6, "fp": 0, "ref": 14, "look": {"h": 1.0, "build": 0.95, "outfit": "uniform", "cloak": "none", "head": "hair", "skin": "#4a6fa5", "hair": "#0e0e14", "cloth": "#14161c", "cloth2": "#0a0a0e", "legs": "#14161c", "cloakC": "#222222", "glove": "#0a0a0e", "bare": false, "tattoo": false, "eyes": "#ff2020"}},
+  chissSoldier:{"label": "Soldat chiss", "kind": "none", "weapon": "rifle", "bolt": "#ff3030", "form": "none", "tech": ["grenades"], "pv": 22, "sabre": 9, "tir": 13, "force": 6, "fp": 0, "ref": 13, "look": {"h": 1.0, "build": 1.0, "outfit": "armor", "cloak": "none", "head": "hair", "skin": "#4a6fa5", "hair": "#0e0e14", "cloth": "#22262e", "cloth2": "#14161c", "legs": "#22262e", "cloakC": "#222222", "glove": "#14161c", "bare": false, "tattoo": false, "eyes": "#ff2020"}},
+  imperialKnight:{"label": "Chevalier impérial", "kind": "jedi", "weapon": "saber", "blade1": "#e0e8ff", "form": "shien", "tech": [], "pv": 36, "sabre": 15, "tir": 10, "force": 13, "fp": 3, "ref": 13, "look": {"h": 1.04, "build": 1.05, "outfit": "armor", "cloak": "long", "head": "royal", "skin": "#c9a184", "hair": "#222", "cloth": "#9a1414", "cloth2": "#4a0a0a", "legs": "#4a0a0a", "cloakC": "#7a1010", "glove": "#3a0808", "bare": false, "tattoo": false}},
+  oneSith:{"label": "Sith de l’Ordre unique", "kind": "sith", "weapon": "saber", "blade1": "#ff2020", "form": "juyo", "tech": [], "pv": 32, "sabre": 14, "tir": 10, "force": 14, "fp": 4, "ref": 14, "look": {"h": 1.02, "build": 1.0, "outfit": "robe", "cloak": "tattered", "head": "bald", "skin": "#a8322a", "hair": "#111", "cloth": "#141114", "cloth2": "#0f0d10", "legs": "#0f0d10", "cloakC": "#0b090c", "glove": "#1d1a1e", "bare": true, "tattoo": true}},
   assassin:{label:'Assassin',kind:'none',weapon:'pistol',bolt:'#c84aff',tech:['rapid'],pv:22,sabre:12,tir:14,force:7,fp:0,ref:16,look:{h:.98,build:.88,outfit:'armor',cloak:'long',head:'hood',skin:'#9a7a68',hair:'#111',cloth:'#1c1c22',cloth2:'#121216',legs:'#141418',cloakC:'#101014',glove:'#121216',bare:false,tattoo:false}}
 };
 const LOOK_KEYS=Object.keys(LOOKS);
+const LOOK_GROUP=Object.assign({sithLord:'Sith',sithWarrior:'Sith',sithAcolyte:'Sith',inquisitor:'Empire',jediMaster:'Jedi',jediKnight:'Jedi',jediWarrior:'Jedi',smuggler:'Pègre',bountyHunter:'Pègre',trooper:'Empire',officer:'Empire',thug:'Pègre',guard:'Divers',assassin:'Pègre'},{"scoutTrooper": "Empire", "snowtrooper": "Empire", "royalGuard": "Empire", "rebelTrooper": "Rébellion / Nouvelle République", "rebelCommando": "Rébellion / Nouvelle République", "rebelPilot": "Rébellion / Nouvelle République", "cloneTrooper": "République (clones)", "cloneCommander": "République (clones)", "arcTrooper": "République (clones)", "b1Droid": "Séparatistes", "b2Droid": "Séparatistes", "magnaguard": "Séparatistes", "commandoDroid": "Séparatistes", "mandoWarrior": "Mandaloriens", "mandoCommando": "Mandaloriens", "mandoChief": "Mandaloriens", "deathWatch": "Mandaloriens", "weequayPirate": "Pègre", "trandoshanHunter": "Pègre", "rodianHunter": "Pègre", "twilekRogue": "Pègre", "wookieeWarrior": "Divers", "hkDroid": "Divers", "templeGuard": "Jedi", "jediConsular": "Jedi", "republicTrooper": "Ancienne République", "sithTrooper": "Ancienne République", "vongWarrior": "Yuuzhan Vong", "vongCommander": "Yuuzhan Vong", "chissOfficer": "Chiss", "chissSoldier": "Chiss", "imperialKnight": "Ère Legacy", "oneSith": "Ère Legacy"});
+const LOOK_GROUPS=[...new Set(LOOK_KEYS.map(k=>LOOK_GROUP[k]||'Divers'))];
+const lookOptions=sel=>LOOK_GROUPS.map(g=>`<optgroup label="${g}">${LOOK_KEYS.filter(k=>(LOOK_GROUP[k]||'Divers')===g).map(k=>`<option value="${k}" ${sel===k?'selected':''}>${LOOKS[k].label}</option>`).join('')}</optgroup>`).join('');
+const lookCatalog=()=>LOOK_GROUPS.map(g=>`${g} : ${LOOK_KEYS.filter(k=>(LOOK_GROUP[k]||'Divers')===g).join(', ')}`).join(' ; ');
 
 const PATHS={
   sith:{l:'Seigneur Sith',d:'Adepte du côté obscur. Combats en duel, peu de moyens au départ.',force:true,kind:'sith',look:'sithLord',weapon:'saber',blade:'#ff2b2b',form:'juyo',tech:[],
@@ -3497,20 +3691,20 @@ function renderStep(){
       <div class="pvwrap"><canvas id="cPrev" width="520" height="598" aria-label="Aperçu du personnage"></canvas>
       <div style="display:grid;gap:12px;align-content:start">
         <div class="grid2">
-          <label class="fld"><span>Modèle de départ</span><select id="cLook">${LOOK_KEYS.map(k=>`<option value="${k}" ${h.lookKey===k?'selected':''}>${LOOKS[k].label}</option>`).join('')}</select></label>
+          <label class="fld"><span>Modèle de départ</span><select id="cLook">${lookOptions(h.lookKey)}</select></label>
           <label class="fld"><span>Arme</span><select id="cWeapon">${Object.entries(WEAPONS).map(([k,l])=>`<option value="${k}" ${h.weapon===k?'selected':''}>${l}</option>`).join('')}</select></label>
-          ${isR?'':`<label class="fld"><span>Forme de combat</span><select id="cForm">${Object.entries(FORMS).map(([k,l])=>`<option value="${k}" ${h.form===k?'selected':''}>${l}</option>`).join('')}</select></label>`}
+          ${!isSaberW(h.weapon)?'':`<label class="fld"><span>Forme de combat</span><select id="cForm">${Object.entries(FORMS).map(([k,l])=>`<option value="${k}" ${h.form===k?'selected':''}>${l}</option>`).join('')}</select></label>`}
         </div>
         <div class="colors">
           ${isR?`<label><input type="color" id="cBolt" value="${h.bolt}">Tirs</label>`:`<label><input type="color" id="cBlade1" value="${h.blade1}">Lame</label>${h.weapon==='dual'?`<label><input type="color" id="cBlade2" value="${h.blade2}">2e lame</label>`:''}`}
         </div>
-        <div class="checks">${Object.entries(TECHS).filter(([k])=>isR?(k==='rapid'||k==='grenades'):(k!=='rapid'&&k!=='grenades')).map(([k,l])=>`<label><input type="checkbox" data-tech="${k}" ${h.tech.includes(k)?'checked':''} ${k==='jarkai'&&h.weapon!=='dual'?'disabled':''}> ${l}</label>`).join('')}</div>
+        <div class="checks">${Object.entries(TECHS).filter(([k])=>techOk(h,k)).map(([k,l])=>`<label><input type="checkbox" data-tech="${k}" ${h.tech.includes(k)?'checked':''}> ${l}</label>`).join('')}</div>
         <div class="grid2">
-          <label class="fld"><span>Tenue</span><select id="cOutfit">${[['robe','Robe'],['armor','Armure'],['jacket','Veste'],['uniform','Uniforme'],['trooper','Armure de soldat']].map(([k,l])=>`<option value="${k}" ${h.look.outfit===k?'selected':''}>${l}</option>`).join('')}</select></label>
+          <label class="fld"><span>Tenue</span><select id="cOutfit">${Object.entries(OUTFITS).map(([k,l])=>`<option value="${k}" ${h.look.outfit===k?'selected':''}>${l}</option>`).join('')}</select></label>
           <label class="fld"><span>Cape</span><select id="cCloak">${[['none','Aucune'],['long','Longue'],['tattered','En lambeaux']].map(([k,l])=>`<option value="${k}" ${h.look.cloak===k?'selected':''}>${l}</option>`).join('')}</select></label>
-          <label class="fld"><span>Tête</span><select id="cHead">${[['hair','Cheveux courts'],['hairlong','Cheveux attachés'],['beard','Cheveux et barbe'],['bald','Crâne rasé'],['horns','Cornes'],['hood','Capuche'],['helm','Casque anguleux'],['trooper','Casque intégral']].map(([k,l])=>`<option value="${k}" ${h.look.head===k?'selected':''}>${l}</option>`).join('')}</select></label>
+          <label class="fld"><span>Tête</span><select id="cHead">${Object.entries(HEADS).map(([k,l])=>`<option value="${k}" ${h.look.head===k?'selected':''}>${l}</option>`).join('')}</select></label>
         </div>
-        <div class="colors">${[['skin','Peau'],['hair','Cheveux'],['cloth','Tenue'],['cloth2','Dessous'],['legs','Jambes'],['cloakC','Cape'],['glove','Gants']].map(([k,l])=>`<label><input type="color" data-lk="${k}" value="${h.look[k]}">${l}</label>`).join('')}</div>
+        <div class="colors">${[['skin','Peau'],['hair','Cheveux / fourrure'],['cloth','Tenue / armure'],['cloth2','Dessous'],['legs','Jambes'],['cloakC','Cape'],['glove','Gants'],['eyes','Yeux']].map(([k,l])=>`<label><input type="color" data-lk="${k}" value="${h.look[k]||(k==='eyes'?'#1a1410':'#888888')}">${l}</label>`).join('')}<label><input type="checkbox" id="cStripeOn" ${h.look.stripe?'checked':''}> Marques</label><input type="color" id="cStripe" value="${h.look.stripe||'#c9a227'}" aria-label="Couleur des marques"></div>
         <div class="checks"><label><input type="checkbox" id="cBare" ${h.look.bare?'checked':''}> Bras nus</label><label><input type="checkbox" id="cTattoo" ${h.look.tattoo?'checked':''}> Tatouages</label></div>
       </div></div>`;
     startPreview();
@@ -3520,7 +3714,7 @@ function renderStep(){
       <div class="grid2"><label class="fld"><span>Crédits</span><input type="number" id="rCredits" min="0" step="100" value="${r.credits}"></label><label class="fld"><span>Vaisseau personnel</span><input type="text" id="rShip" maxlength="40" value="${esc(r.ship)}"></label></div>
       <div class="fld"><span>Flotte (vaisseau amiral en premier)</span><div class="listed">${r.fleet.map((s,i)=>`<div class="lrow"><select data-fl="${i}" data-f="type">${Object.entries(SHIP_T).map(([k,l])=>`<option value="${k}" ${s.type===k?'selected':''}>${l}</option>`).join('')}</select><input type="text" data-fl="${i}" data-f="name" value="${esc(s.name)}" maxlength="30"><button type="button" class="small" data-del="fleet:${i}">Retirer</button></div>`).join('')||'<span class="muted">Aucune flotte.</span>'}</div><div><button type="button" class="small" data-addres="fleet" ${r.fleet.length>=8?'disabled':''}>Ajouter un vaisseau</button></div></div>
       <div class="fld"><span>Troupes au sol (ton escouade de commandement est ajoutée automatiquement)</span><div class="listed">${r.troops.map((s,i)=>`<div class="lrow"><select data-tr="${i}" data-f="type">${Object.entries(TROOP_T).map(([k,l])=>`<option value="${k}" ${s.type===k?'selected':''}>${l}</option>`).join('')}</select><input type="text" data-tr="${i}" data-f="name" value="${esc(s.name)}" maxlength="30"><button type="button" class="small" data-del="troops:${i}">Retirer</button></div>`).join('')||'<span class="muted">Aucune troupe.</span>'}</div><div><button type="button" class="small" data-addres="troops" ${r.troops.length>=7?'disabled':''}>Ajouter une unité</button></div></div>
-      <div class="fld"><span>Compagnons (3 au plus combattent avec toi)</span><div class="listed">${r.companions.map((c,i)=>`<div class="lrow c3"><input type="text" data-co="${i}" data-f="name" value="${esc(c.name)}" maxlength="30" aria-label="Nom du compagnon"><select data-co="${i}" data-f="preset">${LOOK_KEYS.map(k=>`<option value="${k}" ${c.preset===k?'selected':''}>${LOOKS[k].label}</option>`).join('')}</select><button type="button" class="small" data-del="companions:${i}">Retirer</button></div>`).join('')||'<span class="muted">Aucun compagnon.</span>'}</div><div><button type="button" class="small" data-addres="companions" ${r.companions.length>=6?'disabled':''}>Ajouter un compagnon</button></div></div>`;
+      <div class="fld"><span>Compagnons (3 au plus combattent avec toi)</span><div class="listed">${r.companions.map((c,i)=>`<div class="lrow c3"><input type="text" data-co="${i}" data-f="name" value="${esc(c.name)}" maxlength="30" aria-label="Nom du compagnon"><select data-co="${i}" data-f="preset">${lookOptions(c.preset)}</select><button type="button" class="small" data-del="companions:${i}">Retirer</button></div>`).join('')||'<span class="muted">Aucun compagnon.</span>'}</div><div><button type="button" class="small" data-addres="companions" ${r.companions.length>=6?'disabled':''}>Ajouter un compagnon</button></div></div>`;
   }else if(step===6){
     const z=draft.zero;
     B.innerHTML=`<h3>Session zéro</h3><p class="intro">Comme un MJ avant une campagne : dis-moi ce que tu veux vivre. Le MJ en tirera un carnet secret (intrigue, antagonistes, factions) qu’il gardera pour lui.</p>
@@ -3556,7 +3750,8 @@ function readStep(){
     h.look.outfit=v('cOutfit');h.look.cloak=v('cCloak');h.look.head=v('cHead');
     document.querySelectorAll('#stepBody [data-lk]').forEach(i=>{h.look[i.dataset.lk]=i.value;});
     h.look.bare=$('cBare').checked;h.look.tattoo=$('cTattoo').checked;
-    if(h.weapon!=='dual')h.tech=h.tech.filter(t=>t!=='jarkai');
+    if($('cStripeOn').checked)h.look.stripe=v('cStripe');else delete h.look.stripe;
+    h.tech=h.tech.filter(t=>techOk(h,t));
   }
   if(step===5){
     const r=draft.res;r.credits=Math.max(0,+v('rCredits')||0);r.ship=v('rShip').trim();
@@ -3619,7 +3814,14 @@ function presetFiche(key,name,side,ov,frac){
   if(ov){if(/^#[0-9a-f]{6}$/i.test(ov.blade||'')){f.blade1=ov.blade;f.blade2=ov.blade;}if(ov.form&&FORMS[ov.form])f.form=ov.form;
     if(Number.isFinite(+ov.pv)&&ov.pv)f.pv=Math.max(8,Math.min(60,Math.round(+ov.pv)));
     if(Number.isFinite(+ov.sabre)&&ov.sabre)f.sabre=Math.max(6,Math.min(18,Math.round(+ov.sabre)));
-    if(Number.isFinite(+ov.tir)&&ov.tir)f.tir=Math.max(6,Math.min(18,Math.round(+ov.tir)));}
+    if(Number.isFinite(+ov.tir)&&ov.tir)f.tir=Math.max(6,Math.min(18,Math.round(+ov.tir)));
+    if(ov.weapon&&WEAPONS[ov.weapon])f.weapon=ov.weapon;
+    if(Array.isArray(ov.tech))f.tech=[...new Set(ov.tech.filter(t=>TECHS[t]))].slice(0,5);
+    if(['sith','jedi','none'].includes(ov.kind)){f.kind=ov.kind;if(f.kind!=='none'&&!f.fp)f.fp=2;}
+    if(ov.look&&typeof ov.look==='object')for(const [k,v] of Object.entries(ov.look)){
+      if(k==='head'&&HEADS[v])f.look.head=v;else if(k==='outfit'&&OUTFITS[v])f.look.outfit=v;else if(k==='cloak'&&['none','long','tattered'].includes(v))f.look.cloak=v;
+      else if(LOOK_COLORS.includes(k)&&/^#[0-9a-f]{6}$/i.test(v))f.look[k]=v;else if((k==='h'||k==='build')&&Number.isFinite(+v))f.look[k]=Math.max(.85,Math.min(1.2,+v));else if(k==='bare'||k==='tattoo')f.look[k]=!!v;}
+    if(/^#[0-9a-f]{6}$/i.test(ov.bolt||''))f.bolt=ov.bolt;}
   if(frac!=null&&frac<1){f.pvMax=f.pv;f.pv=Math.max(1,Math.round(f.pv*frac));}
   return f;
 }
@@ -3645,7 +3847,8 @@ const SKMAX_PLAY=18,FORM_XP=4,TECH_XP=4,END_XP=3,END_MAX=5;
 const skCost=v=>v<12?2:v<15?3:v<17?4:6;
 function knownForms(h){if(!Array.isArray(h.forms))h.forms=[h.form||'none'];if(!h.forms.includes('none'))h.forms.unshift('none');return h.forms;}
 const isRangedW=w=>w==='pistol'||w==='rifle';
-function techOk(h,t){const r=isRangedW(h.weapon);if(r!==(t==='rapid'||t==='grenades'))return false;if(t==='jarkai'&&h.weapon!=='dual')return false;return true;}
+const isSaberW=w=>w==='saber'||w==='dual'||w==='double';
+function techOk(h,t){const c=TECH_CAT[t],r=isRangedW(h.weapon);if(!c)return false;if(c==='any')return true;if(c==='ranged')return r;if(c==='melee')return !r;if(c==='saber')return isSaberW(h.weapon);if(c==='dual')return h.weapon==='dual';return false;}
 function spendXP(kind,key){
   const h=S.hero;if(!canManage())return;
   if(kind==='sk'){const v=h.skills[key],c=skCost(v);if(v>=SKMAX_PLAY||S.xp<c||(key==='force'&&!h.force))return;S.xp-=c;h.skills[key]=v+1;memo(`PROGRESSION : ${SKL[key]} passe à ${v+1}.`);}
@@ -3803,11 +4006,11 @@ const FORMAT=`FORMAT DE RÉPONSE OBLIGATOIRE :
 - choices : 3 actions courtes (moins de 12 mots) que le joueur pourrait tenter maintenant.
 - test : si l’action est risquée et incertaine : {"skill":"<clé>","mod":<entier de -6 à 2>,"why":"<raison courte>"}. Clés : sabre, tir, pilotage, commandement, discretion, persuasion, intimidation, technique, perception, athletisme, force (force seulement si le personnage est sensible à la Force). Dans ce cas, arrête la narration juste avant l’issue, ne la raconte pas, et mets "choices":[].
 - combat : si un affrontement doit être joué : {"type":"duel"|"ship"|"space"|"ground","title":"<titre court>","briefing":"<2 phrases>","allies":[…],"enemies":[…],"decor":"…"}. Arrête la narration au moment où le combat éclate et mets "choices":[]. Le jeu ajuste lui-même la force des ennemis à la difficulté choisie : décris l’adversité que l’histoire appelle.
-  · duel : "allies" = noms de compagnons existants (3 au plus, présents dans la scène). "enemies" = 1 à 4 objets {"name":"…","preset":"<modèle>","blade":"#rrggbb (facultatif)","form":"<forme facultative>","pv":<facultatif 10-60>}. Modèles : sithLord, sithWarrior, sithAcolyte, inquisitor, jediMaster, jediKnight, jediWarrior, smuggler, bountyHunter, trooper, officer, thug, guard, assassin. Formes : shiicho, makashi, soresu, ataru, shien, niman, juyo. "decor" : toits, temple, desert, foret, vaisseau, glace ou lave.
+  · duel : "allies" = noms de compagnons existants (3 au plus, présents dans la scène). "enemies" = 1 à 4 objets {"name":"…","preset":"<modèle>","blade":"#rrggbb (facultatif)","form":"<forme facultative>","pv":<facultatif 10-60>}. Modèles par faction : ${lookCatalog()}. Pour un PNJ que les modèles ne décrivent pas, pars du modèle le plus proche et ajoute "look":{"head":"…","outfit":"…","cloth":"#rrggbb","cloth2":"#…","skin":"#…","hair":"#…","stripe":"#…","eyes":"#…","cloak":"none|long|tattered"}, "weapon":"saber|dual|double|pistol|rifle|staff|vibro", "tech":[…] et "kind":"sith|jedi|none" si besoin. Têtes : ${Object.keys(HEADS).join(', ')}. Tenues : ${Object.keys(OUTFITS).join(', ')}. Techniques : ${Object.keys(TECHS).join(', ')}. Formes : shiicho, makashi, soresu, ataru, shien, niman, juyo. "decor" : toits, temple, desert, foret, vaisseau, glace ou lave.
   · ship : le vaisseau personnel du joueur, seul, contre 1 à 4 objets {"type":"fighters"|"freighter"|"frigate","name":"…"} (chasseurs, cargo armé, frégate de patrouille). Poursuites, interceptions, pirates. Le joueur peut fuir en hyperespace. "decor" : planete, espace, asteroides ou nebuleuse.
   · space : "enemies" = 2 à 7 objets {"type":"cruiser"|"frigate"|"fighters"|"freighter","name":"…"}. "decor" : planete, espace, asteroides ou nebuleuse. "fuite":true si la retraite est une option.
   · ground : "enemies" = 2 à 6 objets {"type":"einf"|"eat"|"eltank"|"eturret","name":"…"} (fantassins, équipe antichar, char léger, tourelle). "terrain" : tempere, desert, neige, urbain, jungle ou volcan. "objectif" : assaut (prendre un générateur gardé), elimination (anéantir l’ennemi) ou defense (tenir 6 tours face à un ennemi plus nombreux).
-- updates : changements concrets, sinon null : {"credits":<±entier>,"addCompanions":[{"name":"…","preset":"<modèle>","note":"…"}],"removeCompanions":["nom"],"addFleet":[{"type":"cruiser|frigate|fighters","name":"…"}],"addTroops":[{"type":"inf|tank|art|speed","name":"…"}],"notes":["fait durable à retenir"],"xp":<0 à 3>,"heal":"repos"|<PV rendus au personnage>}. "heal":"repos" soigne entièrement le personnage et ses compagnons.
+- updates : changements concrets, sinon null : {"credits":<±entier>,"addCompanions":[{"name":"…","preset":"<modèle>","note":"…"}],"removeCompanions":["nom"],"addFleet":[{"type":"cruiser|frigate|fighters","name":"…"}],"addTroops":[{"type":"inf|tank|art|speed","name":"…"}],"notes":["fait durable à retenir"],"xp":<0 à 3>,"heal":"repos"|<PV rendus au personnage>,"equipement":["beskar"|"jetpack"|"flamer"|"cortosis"|"grenades"],"perteEquipement":[…]}. Donne de l’équipement seulement quand l’histoire le met vraiment entre les mains du personnage (achat, butin, cadeau). "heal":"repos" soigne entièrement le personnage et ses compagnons.
 - chronicle : 1 ou 2 phrases factuelles résumant ce qui vient de se passer (c’est ta mémoire).
 - codex : le carnet que le joueur consulte, uniquement les entrées nouvelles ou modifiées (elles sont fusionnées par nom), sinon null : {"pnj":[{"nom":"…","role":"…","relation":"allié|amical|neutre|méfiant|hostile","statut":"vivant|mort|disparu|captif","note":"ce que le joueur sait","voix":"façon de parler, tics, ce qu’il cache","lien":"nature du lien en 2-4 mots (ex. dette d’honneur, rivalité, confiance fragile)","affinite":<−5 à +5 envers le joueur>,"evenement":"ce qui vient de changer le lien, s’il a changé","romance":"aucune|attirance|flirt|liaison|amour|rupture"}],"quetes":[{"titre":"…","etat":"en cours|réussie|échouée|abandonnée","note":"…"}],"lieux":[{"nom":"…","note":"…"}],"factions":[{"nom":"…","attitude":"alliée|neutre|hostile|…","note":"…"}]}. Ajoute chaque PNJ nommé important, chaque objectif que le joueur poursuit, chaque lieu marquant. N’y mets jamais ce que le joueur ignore (c’est la place du carnet secret).
 - chapter : uniquement quand un nouveau chapitre commence, sinon null : {"title":"…","resume":"5 à 8 phrases factuelles résumant tout le chapitre qui s’achève : faits, choix du joueur, PNJ, conséquences"}. Ce résumé est ta seule mémoire à long terme du chapitre. Change de chapitre à la fin d’un arc ou d’une étape importante (toutes les 15 à 30 scènes environ).
@@ -3914,6 +4117,8 @@ function applyData(d){
     (u.addFleet||[]).forEach(s=>{if(s&&SHIP_T[s.type]&&r.fleet.length<8)r.fleet.push({type:s.type,name:String(s.name||'Nouveau vaisseau').slice(0,30),flag:!r.fleet.length,hull:1});});
     (u.addTroops||[]).forEach(s=>{if(s&&TROOP_T[s.type]&&r.troops.length<7)r.troops.push({type:s.type,name:String(s.name||'Nouvelle unité').slice(0,30),hp:1});});
     (u.notes||[]).forEach(n=>{r.notes=r.notes||[];r.notes.push(String(n).slice(0,200));if(r.notes.length>30)r.notes.shift();});
+    (Array.isArray(u.equipement)?u.equipement:[]).forEach(t=>{if(EQUIP.includes(t)&&!S.hero.tech.includes(t)){S.hero.tech.push(t);}});
+    (Array.isArray(u.perteEquipement)?u.perteEquipement:[]).forEach(t=>{S.hero.tech=S.hero.tech.filter(x=>x!==t);});
     if(u.heal==='repos')healAll();else if(Number.isFinite(+u.heal)&&+u.heal>0)S.hero.hp=Math.min(derived(S.hero).pv,heroHP()+Math.round(+u.heal));
     if(Number.isFinite(+u.xp))S.xp=(S.xp||0)+Math.max(0,Math.min(3,Math.round(+u.xp)));
   }
@@ -4014,7 +4219,7 @@ function renderSheet(){
       <div class="zset"><span>Style</span><div class="chipset">${STYLE.map(([k,l])=>`<button type="button" data-zset="style:${k}" class="${S.zero.style===k?'on':''}">${l}</button>`).join('')}</div></div></section>
     <section><span class="label">Mes notes</span><textarea id="pNotes" rows="4" maxlength="800" placeholder="Tes propres notes. Le MJ les lit, sans les prendre pour des actions.">${esc(S.playerNotes)}</textarea></section>`;
   }else if(sheetTab==='prog'){
-    const lock=!canManage(),blade=!isRangedW(h.weapon),F=knownForms(h);
+    const lock=!canManage(),blade=isSaberW(h.weapon),F=knownForms(h);
     const nb=(c,dis)=>`${dis||lock||S.xp<c?'disabled':''}`;
     body=`<section><span class="label">Expérience disponible</span><div class="xpbig">${S.xp||0} <small>XP</small></div><p class="sub" style="margin:0">Le MJ donne de l’XP pour les accomplissements. Dépense-la ici, entre deux scènes.</p></section>
     <section><span class="label">Compétences</span><div class="buy">${SKILLS.filter(([k])=>k!=='force'||h.force).map(([k,l])=>{const v=h.skills[k],c=skCost(v),max=v>=SKMAX_PLAY;
@@ -4023,7 +4228,7 @@ function renderSheet(){
     ${blade?`<section><span class="label">Formes de combat au sabre</span>
       <label class="fld"><span>Forme utilisée</span><select id="pForm" ${lock?'disabled':''}>${F.map(k=>`<option value="${k}" ${h.form===k?'selected':''}>${FORMS[k]}</option>`).join('')}</select></label>
       <div class="buy">${Object.keys(FORMS).filter(k=>!F.includes(k)).map(k=>`<div><span>${FORMS[k]}</span><button type="button" class="small" data-xp="form" data-k="${k}" ${nb(FORM_XP)}>Apprendre · ${FORM_XP} XP</button></div>`).join('')||'<div class="sub">Toutes les formes sont maîtrisées.</div>'}</div></section>`:''}
-    <section><span class="label">Techniques</span><div class="buy">${Object.keys(TECHS).filter(t=>techOk(h,t)&&!h.tech.includes(t)).map(t=>`<div><span>${TECHS[t]}</span><button type="button" class="small" data-xp="tech" data-k="${t}" ${nb(TECH_XP)}>Apprendre · ${TECH_XP} XP</button></div>`).join('')||'<div class="sub">Rien de plus à apprendre avec cette arme.</div>'}</div></section>
+    <section><span class="label">Techniques</span><div class="buy">${TECH_LEARN.filter(t=>techOk(h,t)&&!h.tech.includes(t)).map(t=>`<div><span>${TECHS[t]}</span><button type="button" class="small" data-xp="tech" data-k="${t}" ${nb(TECH_XP)}>Apprendre · ${TECH_XP} XP</button></div>`).join('')||'<div class="sub">Rien de plus à apprendre avec cette arme.</div>'}</div></section>
     <section><span class="label">Arme</span><label class="fld"><span>À changer seulement si l’histoire te l’a donnée</span><select id="pWeapon" ${lock?'disabled':''}>${Object.entries(WEAPONS).map(([k,l])=>`<option value="${k}" ${h.weapon===k?'selected':''}>${l}</option>`).join('')}</select></label></section>`;
   }else{
     const lock=!canManage(),mc=medicCost();
@@ -4044,7 +4249,7 @@ $('sheet').addEventListener('change',e=>{
   if(!canManage())return;const h=S.hero;
   if(e.target.id==='pNotes'){S.playerNotes=e.target.value.slice(0,800);saveCampaign();return;}
   if(e.target.id==='pForm'&&knownForms(h).includes(e.target.value)){h.form=e.target.value;saveCampaign();renderSheet();}
-  if(e.target.id==='pWeapon'&&WEAPONS[e.target.value]){h.weapon=e.target.value;h.tech=h.tech.filter(t=>techOk(h,t));memo(`ÉQUIPEMENT : ${h.name} se bat désormais avec : ${WEAPONS[h.weapon]}.`);saveCampaign();renderStory();}
+  if(e.target.id==='pWeapon'&&WEAPONS[e.target.value]){h.weapon=e.target.value;h.tech=h.tech.filter(t=>techOk(h,t)||EQUIP.includes(t));memo(`ÉQUIPEMENT : ${h.name} se bat désormais avec : ${WEAPONS[h.weapon]}.`);saveCampaign();renderStory();}
 });
 function renderStory(){
   const era=ERAS.find(e=>e.k===S.era);
