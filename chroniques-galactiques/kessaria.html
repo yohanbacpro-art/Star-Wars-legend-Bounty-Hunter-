@@ -630,6 +630,7 @@ function bolt(x1,y1,x2,y2,color,delay,dur){fx.push({k:'bolt',x1,y1,x2,y2,color,t
 function floatT(x,y,txt,color){floats.push({x,y,txt,color,t0:performance.now(),dur:1300});}
 function sparks(x,y,n=14,col='255,200,120'){fx.push({k:'burst',x,y,col,t0:performance.now(),dur:550,parts:Array.from({length:n},()=>({a:rnd(0,7),v:rnd(20,70),s:rnd(1,2.5)}))});}
 function explode(s){
+  window.SFX&&window.SFX.play('boom');
   const now=performance.now();
   fx.push({k:'flash',x:s.x,y:s.y,r:s.r*1.8,t0:now,dur:450});
   fx.push({k:'ring',x:s.x,y:s.y,r:s.r*3,t0:now,dur:800});
@@ -714,7 +715,7 @@ async function attack(a,t){
     const ox=a.x+Math.cos(ang)*a.r*.45+px*sp,oy=a.y+Math.sin(ang)*a.r*.45+py*sp;
     let tx=t.x+rnd(-.3,.3)*t.r,ty=t.y+rnd(-.3,.3)*t.r;
     if(!hit){const side=Math.random()<.5?-1:1,off=t.r+rnd(18,45);tx=t.x+px*side*off+Math.cos(ang)*rnd(10,60);ty=t.y+py*side*off+Math.sin(ang)*rnd(10,60);}
-    bolt(ox,oy,tx,ty,col,i*85,dur);
+    bolt(ox,oy,tx,ty,col,i*85,dur);if(i===0)window.SFX&&window.SFX.play(SMALL(a.type)?'blaster':'laser');
   }
   await wait((n-1)*85+dur);
   const who=a.side==='p'?'p':'e';

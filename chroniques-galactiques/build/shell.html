@@ -223,6 +223,7 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
     </div>
     <div class="topr">
       <span class="save" id="saveState"></span>
+      <button type="button" class="small ghost" id="sfxBtn" aria-pressed="true">Son : activé</button>
       <button type="button" class="small ghost" id="menuNew" hidden>Mes campagnes</button>
     </div>
   </header>
@@ -278,6 +279,31 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
 <!--ENGINES-->
 
 <script>
+/* Effets sonores synthétisés (aucun fichier à charger) */
+window.SFX=(()=>{
+  let ctx=null,on=true,last={};try{on=localStorage.getItem('cg-sfx')!=='0';}catch(e){}
+  const ac=()=>{if(!ctx){const A=window.AudioContext||window.webkitAudioContext;if(!A)return null;ctx=new A();}if(ctx.state==='suspended')ctx.resume();return ctx;};
+  const env=(g,t,a,d,v)=>{g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(v,t+a);g.gain.exponentialRampToValueAtTime(0.0001,t+a+d);};
+  const noise=(c,dur)=>{const b=c.createBuffer(1,Math.ceil(c.sampleRate*dur),c.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;const n=c.createBufferSource();n.buffer=b;return n;};
+  const tone=(c,t,type,f0,f1,dur,vol)=>{const o=c.createOscillator(),g=c.createGain();o.type=type;o.frequency.setValueAtTime(f0,t);o.frequency.exponentialRampToValueAtTime(Math.max(20,f1),t+dur);env(g,t,.005,dur,vol);o.connect(g).connect(c.destination);o.start(t);o.stop(t+dur+.05);};
+  const burst=(c,t,dur,vol,ftype,f0,f1)=>{const n=noise(c,dur),f=c.createBiquadFilter(),g=c.createGain();f.type=ftype;f.frequency.setValueAtTime(f0,t);if(f1)f.frequency.exponentialRampToValueAtTime(f1,t+dur);env(g,t,.005,dur,vol);n.connect(f).connect(g).connect(c.destination);n.start(t);n.stop(t+dur+.05);};
+  const P={
+    blaster:(c,t)=>tone(c,t,'sawtooth',1500,170,.18,.09),
+    laser:(c,t)=>{tone(c,t,'square',700,90,.3,.07);tone(c,t,'sawtooth',900,120,.25,.05);},
+    cannon:(c,t)=>{tone(c,t,'sawtooth',420,60,.35,.12);burst(c,t,.25,.12,'lowpass',900,200);},
+    mortar:(c,t)=>tone(c,t,'sine',320,90,.5,.1),
+    hit:(c,t)=>burst(c,t,.09,.12,'lowpass',1600,500),
+    saber:(c,t)=>{burst(c,t,.22,.16,'bandpass',2600,900);tone(c,t,'sawtooth',140,90,.3,.07);},
+    ignite:(c,t)=>{const o=c.createOscillator(),g=c.createGain();o.type='sawtooth';o.frequency.setValueAtTime(70,t);o.frequency.exponentialRampToValueAtTime(130,t+.35);env(g,t,.05,.6,.07);o.connect(g).connect(c.destination);o.start(t);o.stop(t+.7);},
+    boom:(c,t)=>{burst(c,t,1.1,.38,'lowpass',700,60);tone(c,t,'sine',90,35,.8,.25);},
+    force:(c,t)=>burst(c,t,.55,.14,'bandpass',300,1400),
+    zap:(c,t)=>{for(let i=0;i<5;i++)tone(c,t+i*.06,'square',300+Math.random()*900,120,.08,.05);},
+    flame:(c,t)=>burst(c,t,.7,.16,'highpass',900,2600),
+    dice:(c,t)=>{for(let i=0;i<4;i++)burst(c,t+i*.09+Math.random()*.03,.04,.12,'highpass',2500,0);}
+  };
+  return{play(n){if(!on||!P[n])return;const now=performance.now();if(last[n]&&now-last[n]<45)return;last[n]=now;const c=ac();if(!c)return;try{P[n](c,c.currentTime);}catch(e){}},
+    get on(){return on;},toggle(){on=!on;try{localStorage.setItem('cg-sfx',on?'1':'0');}catch(e){}return on;}};
+})();
 /*ENGINE_JS*/
 </script>
 <script>
@@ -1218,6 +1244,7 @@ async function doRoll(reroll){
   if(reroll){if(!p.rolled||(S.destiny||0)<1)return;S.destiny--;}else if(p.rolled)return;
   document.querySelectorAll('#actZone .dicecard button').forEach(b=>b.disabled=true);
   const box=$('rollDice');box.innerHTML='<i>?</i><i>?</i><i>?</i>';box.querySelectorAll('i').forEach(i=>i.classList.add('rolling'));
+  window.SFX.play('dice');
   const iv=setInterval(()=>box.querySelectorAll('i').forEach(i=>i.textContent=rint(1,6)),70);
   await wait(800);clearInterval(iv);
   const d=[rint(1,6),rint(1,6),rint(1,6)],sum=d[0]+d[1]+d[2],score=S.hero.skills[p.skill]+p.mod;
@@ -1309,6 +1336,8 @@ function renderCamps(){
 }
 function toTitle(){if(S)saveCampaign();S=null;showScreen('scr-title');renderCamps();}
 $('btnNew').addEventListener('click',startCreation);
+function sfxLabel(){const b=$('sfxBtn');b.textContent=window.SFX.on?'Son : activé':'Son : coupé';b.setAttribute('aria-pressed',String(window.SFX.on));}
+$('sfxBtn').addEventListener('click',()=>{window.SFX.toggle();sfxLabel();});sfxLabel();
 $('menuNew').addEventListener('click',toTitle);
 $('campZone').addEventListener('click',async e=>{
   const b=e.target.closest('button');if(!b)return;

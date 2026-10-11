@@ -825,13 +825,13 @@ function renderToits(){
 let fx=[],floats=[];
 function sparks(x,y,n,col='255,210,150'){fx.push({k:'sparks',x,y,col,t0:performance.now(),dur:700,p:Array.from({length:n},()=>({vx:rnd(-260,260),vy:rnd(-320,40),s:rnd(1.5,3)}))});}
 function flash(x,y,r,col){fx.push({k:'flash',x,y,r,col,t0:performance.now(),dur:260});}
-function burn(f){const c=chestWorld(f);fx.push({k:'burn',f,ox:rnd(-8,8),oy:rnd(-10,10),t0:performance.now(),dur:900});sparks(c.x,c.y,14,'255,140,70');}
-function wave(x,y,dir){fx.push({k:'wave',x,y,dir,t0:performance.now(),dur:520});}
-function boltsFx(a,end){fx.push({k:'bolts',a,end,t0:performance.now(),dur:700});}
+function burn(f){window.SFX&&window.SFX.play('hit');const c=chestWorld(f);fx.push({k:'burn',f,ox:rnd(-8,8),oy:rnd(-10,10),t0:performance.now(),dur:900});sparks(c.x,c.y,14,'255,140,70');}
+function wave(x,y,dir){window.SFX&&window.SFX.play('force');fx.push({k:'wave',x,y,dir,t0:performance.now(),dur:520});}
+function boltsFx(a,end){window.SFX&&window.SFX.play('zap');fx.push({k:'bolts',a,end,t0:performance.now(),dur:700});}
 function aura(f,col){fx.push({k:'aura',f,col,t0:performance.now(),dur:1100});}
-function shot(x1,y1,x2,y2,col,dur=200,delay=0){fx.push({k:'shot',x1,y1,x2,y2,col,t0:performance.now()+delay,dur});}
+function shot(x1,y1,x2,y2,col,dur=200,delay=0){window.SFX&&window.SFX.play('blaster');fx.push({k:'shot',x1,y1,x2,y2,col,t0:performance.now()+delay,dur});}
 function lob(x1,y1,x2,y2,dur){fx.push({k:'lob',x1,y1,x2,y2,t0:performance.now(),dur});}
-function boom(x,y,r){flash(x,y,r,'255,170,70');sparks(x,y,40,'255,190,110');fx.push({k:'ring',x,y,r:r*1.8,t0:performance.now(),dur:600});}
+function boom(x,y,r){window.SFX&&window.SFX.play('boom');flash(x,y,r,'255,170,70');sparks(x,y,40,'255,190,110');fx.push({k:'ring',x,y,r:r*1.8,t0:performance.now(),dur:600});}
 function floatT(x,y,txt,color,size=22){floats.push({x,y,txt,color,size,t0:performance.now(),dur:1400});}
 function drawFx(now){
   const g=ctx;
@@ -955,7 +955,7 @@ async function strike(a,t,mod,bladeIdx,isFeint,opts){
   if(parrying){
     setPose(t,'parry',80);await wait(60);
     const pr=test(t,'Parade',t.sabre+2+formMod(t,'parry')-(a.saberW&&t.weapon==='vibro'?3:0)-(opts&&opts.air?2:0));
-    flash(cp.x,cp.y,90,'255,230,200');sparks(cp.x,cp.y,26);
+    flash(cp.x,cp.y,90,'255,230,200');sparks(cp.x,cp.y,26);window.SFX&&window.SFX.play('saber');
     if(pr.ok&&!(r.crit&&!pr.crit)){
       floatT(cp.x,cp.y-30,'Parade !','#a8d8ff',20);log(`${short(t.name)} bloque la frappe de ${short(a.name)}.`,t.side);
       await wait(260);
@@ -1041,7 +1041,7 @@ async function perform(f){
       liftTo(f,140,280);await wait(300);
       if(f.ranged)await fire(f,t,2,1,'Tir en vol',{air:true});else await strike(f,t,2,0,false,{air:true});
       liftTo(f,0,320);await wait(320);break;}
-    case'flame':{
+    case'flame':{window.SFX&&window.SFX.play('flame');
       f.fuel--;setPose(f,'aim',160);await wait(170);
       const r=test(f,'Lance-flammes',f.tir+1+f.med);
       const mz=muzzleWorld(f),c=chestWorld(t);fx.push({k:'flame',x1:mz.x,y1:mz.y,x2:c.x,y2:c.y,t0:performance.now(),dur:650});await wait(450);
@@ -1185,6 +1185,7 @@ function startCombat(){
   fighters=[...roster.p,...roster.e].map(mkFighter);layout(fighters);
   fx=[];floats=[];logs=[];rolls=[];round=1;phase='orders';busy=false;over=false;pendingAct=null;lastP={};activeIdx=0;
   log(`${roster.p.map(f=>short(f.display||f.name)).join(', ')} face à ${roster.e.map(f=>short(f.display||f.name)).join(', ')}.`,'kill');
+  if(fighters.some(f=>f.saberW))window.SFX&&window.SFX.play('ignite');
   {const HZ={glace:'Le sol gelé est glissant : échec critique dès 16.',lave:'Le sol volcanique est instable : la lave peut jaillir à chaque échange.',desert:'Le sable gêne la visée : tous les tirs à −1.',foret:'Les arbres couvrent les combattants : tous les tirs à −1.'}[DSC];if(HZ)log(HZ,'kill');}
   $('over').hidden=true;showView('combat');renderCombat();
 }

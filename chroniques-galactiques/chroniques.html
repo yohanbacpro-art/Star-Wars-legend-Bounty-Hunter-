@@ -543,6 +543,7 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
     </div>
     <div class="topr">
       <span class="save" id="saveState"></span>
+      <button type="button" class="small ghost" id="sfxBtn" aria-pressed="true">Son : activé</button>
       <button type="button" class="small ghost" id="menuNew" hidden>Mes campagnes</button>
     </div>
   </header>
@@ -896,6 +897,31 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
 
 
 <script>
+/* Effets sonores synthétisés (aucun fichier à charger) */
+window.SFX=(()=>{
+  let ctx=null,on=true,last={};try{on=localStorage.getItem('cg-sfx')!=='0';}catch(e){}
+  const ac=()=>{if(!ctx){const A=window.AudioContext||window.webkitAudioContext;if(!A)return null;ctx=new A();}if(ctx.state==='suspended')ctx.resume();return ctx;};
+  const env=(g,t,a,d,v)=>{g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(v,t+a);g.gain.exponentialRampToValueAtTime(0.0001,t+a+d);};
+  const noise=(c,dur)=>{const b=c.createBuffer(1,Math.ceil(c.sampleRate*dur),c.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;const n=c.createBufferSource();n.buffer=b;return n;};
+  const tone=(c,t,type,f0,f1,dur,vol)=>{const o=c.createOscillator(),g=c.createGain();o.type=type;o.frequency.setValueAtTime(f0,t);o.frequency.exponentialRampToValueAtTime(Math.max(20,f1),t+dur);env(g,t,.005,dur,vol);o.connect(g).connect(c.destination);o.start(t);o.stop(t+dur+.05);};
+  const burst=(c,t,dur,vol,ftype,f0,f1)=>{const n=noise(c,dur),f=c.createBiquadFilter(),g=c.createGain();f.type=ftype;f.frequency.setValueAtTime(f0,t);if(f1)f.frequency.exponentialRampToValueAtTime(f1,t+dur);env(g,t,.005,dur,vol);n.connect(f).connect(g).connect(c.destination);n.start(t);n.stop(t+dur+.05);};
+  const P={
+    blaster:(c,t)=>tone(c,t,'sawtooth',1500,170,.18,.09),
+    laser:(c,t)=>{tone(c,t,'square',700,90,.3,.07);tone(c,t,'sawtooth',900,120,.25,.05);},
+    cannon:(c,t)=>{tone(c,t,'sawtooth',420,60,.35,.12);burst(c,t,.25,.12,'lowpass',900,200);},
+    mortar:(c,t)=>tone(c,t,'sine',320,90,.5,.1),
+    hit:(c,t)=>burst(c,t,.09,.12,'lowpass',1600,500),
+    saber:(c,t)=>{burst(c,t,.22,.16,'bandpass',2600,900);tone(c,t,'sawtooth',140,90,.3,.07);},
+    ignite:(c,t)=>{const o=c.createOscillator(),g=c.createGain();o.type='sawtooth';o.frequency.setValueAtTime(70,t);o.frequency.exponentialRampToValueAtTime(130,t+.35);env(g,t,.05,.6,.07);o.connect(g).connect(c.destination);o.start(t);o.stop(t+.7);},
+    boom:(c,t)=>{burst(c,t,1.1,.38,'lowpass',700,60);tone(c,t,'sine',90,35,.8,.25);},
+    force:(c,t)=>burst(c,t,.55,.14,'bandpass',300,1400),
+    zap:(c,t)=>{for(let i=0;i<5;i++)tone(c,t+i*.06,'square',300+Math.random()*900,120,.08,.05);},
+    flame:(c,t)=>burst(c,t,.7,.16,'highpass',900,2600),
+    dice:(c,t)=>{for(let i=0;i<4;i++)burst(c,t+i*.09+Math.random()*.03,.04,.12,'highpass',2500,0);}
+  };
+  return{play(n){if(!on||!P[n])return;const now=performance.now();if(last[n]&&now-last[n]<45)return;last[n]=now;const c=ac();if(!c)return;try{P[n](c,c.currentTime);}catch(e){}},
+    get on(){return on;},toggle(){on=!on;try{localStorage.setItem('cg-sfx',on?'1':'0');}catch(e){}return on;}};
+})();
 
 (()=>{
 const W=1600,H=1000;
@@ -1381,6 +1407,7 @@ function bolt(x1,y1,x2,y2,color,delay,dur){fx.push({k:'bolt',x1,y1,x2,y2,color,t
 function floatT(x,y,txt,color){floats.push({x,y,txt,color,t0:performance.now(),dur:1300});}
 function sparks(x,y,n=14,col='255,200,120'){fx.push({k:'burst',x,y,col,t0:performance.now(),dur:550,parts:Array.from({length:n},()=>({a:rnd(0,7),v:rnd(20,70),s:rnd(1,2.5)}))});}
 function explode(s){
+  window.SFX&&window.SFX.play('boom');
   const now=performance.now();
   fx.push({k:'flash',x:s.x,y:s.y,r:s.r*1.8,t0:now,dur:450});
   fx.push({k:'ring',x:s.x,y:s.y,r:s.r*3,t0:now,dur:800});
@@ -1465,7 +1492,7 @@ async function attack(a,t){
     const ox=a.x+Math.cos(ang)*a.r*.45+px*sp,oy=a.y+Math.sin(ang)*a.r*.45+py*sp;
     let tx=t.x+rnd(-.3,.3)*t.r,ty=t.y+rnd(-.3,.3)*t.r;
     if(!hit){const side=Math.random()<.5?-1:1,off=t.r+rnd(18,45);tx=t.x+px*side*off+Math.cos(ang)*rnd(10,60);ty=t.y+py*side*off+Math.sin(ang)*rnd(10,60);}
-    bolt(ox,oy,tx,ty,col,i*85,dur);
+    bolt(ox,oy,tx,ty,col,i*85,dur);if(i===0)window.SFX&&window.SFX.play(SMALL(a.type)?'blaster':'laser');
   }
   await wait((n-1)*85+dur);
   const who=a.side==='p'?'p':'e';
@@ -2283,6 +2310,7 @@ function shell(x1,y1,x2,y2,delay,dur){fx.push({k:'shell',x1,y1,x2,y2,t0:performa
 function floatT(x,y,txt,color){floats.push({x,y,txt,color,t0:performance.now(),dur:1300});}
 function burst(x,y,n,col,dur,spread){fx.push({k:'burst',x,y,col,t0:performance.now(),dur,parts:Array.from({length:n},()=>({a:rnd(0,7),v:rnd(spread*.3,spread),s:rnd(1.5,3.5)}))});}
 function boom(x,y,r){
+  window.SFX&&window.SFX.play('boom');
   const now=performance.now();
   fx.push({k:'flash',x,y,r,t0:now,dur:420});fx.push({k:'ring',x,y,r:r*1.6,t0:now,dur:700});
   burst(x,y,30,'255,170,80',900,r*1.2);burst(x,y,16,'120,110,90',1500,r*.9);
@@ -2375,7 +2403,7 @@ async function attack(a,t){
   a.acted=true;
   const p=preview(a,t),ang=Math.atan2(t.y-a.y,t.x-a.x);
   await aimTo(a,ang,a.T.inf||a.T.fast?160:300);
-  const hitOk=Math.random()<p.chance;
+  const hitOk=Math.random()<p.chance;window.SFX&&window.SFX.play(a.T.indirect?'mortar':a.T.heavy||a.type==='ltank'?'cannon':'blaster');
   const col=a.side==='p'?'#8dffad':'#ff6a55';
   const n=a.T.inf?Math.max(1,Math.ceil(a.hp/a.hpMax*a.T.shots)):a.T.shots;
   const px=-Math.sin(ang),py=Math.cos(ang);
@@ -3224,13 +3252,13 @@ function renderToits(){
 let fx=[],floats=[];
 function sparks(x,y,n,col='255,210,150'){fx.push({k:'sparks',x,y,col,t0:performance.now(),dur:700,p:Array.from({length:n},()=>({vx:rnd(-260,260),vy:rnd(-320,40),s:rnd(1.5,3)}))});}
 function flash(x,y,r,col){fx.push({k:'flash',x,y,r,col,t0:performance.now(),dur:260});}
-function burn(f){const c=chestWorld(f);fx.push({k:'burn',f,ox:rnd(-8,8),oy:rnd(-10,10),t0:performance.now(),dur:900});sparks(c.x,c.y,14,'255,140,70');}
-function wave(x,y,dir){fx.push({k:'wave',x,y,dir,t0:performance.now(),dur:520});}
-function boltsFx(a,end){fx.push({k:'bolts',a,end,t0:performance.now(),dur:700});}
+function burn(f){window.SFX&&window.SFX.play('hit');const c=chestWorld(f);fx.push({k:'burn',f,ox:rnd(-8,8),oy:rnd(-10,10),t0:performance.now(),dur:900});sparks(c.x,c.y,14,'255,140,70');}
+function wave(x,y,dir){window.SFX&&window.SFX.play('force');fx.push({k:'wave',x,y,dir,t0:performance.now(),dur:520});}
+function boltsFx(a,end){window.SFX&&window.SFX.play('zap');fx.push({k:'bolts',a,end,t0:performance.now(),dur:700});}
 function aura(f,col){fx.push({k:'aura',f,col,t0:performance.now(),dur:1100});}
-function shot(x1,y1,x2,y2,col,dur=200,delay=0){fx.push({k:'shot',x1,y1,x2,y2,col,t0:performance.now()+delay,dur});}
+function shot(x1,y1,x2,y2,col,dur=200,delay=0){window.SFX&&window.SFX.play('blaster');fx.push({k:'shot',x1,y1,x2,y2,col,t0:performance.now()+delay,dur});}
 function lob(x1,y1,x2,y2,dur){fx.push({k:'lob',x1,y1,x2,y2,t0:performance.now(),dur});}
-function boom(x,y,r){flash(x,y,r,'255,170,70');sparks(x,y,40,'255,190,110');fx.push({k:'ring',x,y,r:r*1.8,t0:performance.now(),dur:600});}
+function boom(x,y,r){window.SFX&&window.SFX.play('boom');flash(x,y,r,'255,170,70');sparks(x,y,40,'255,190,110');fx.push({k:'ring',x,y,r:r*1.8,t0:performance.now(),dur:600});}
 function floatT(x,y,txt,color,size=22){floats.push({x,y,txt,color,size,t0:performance.now(),dur:1400});}
 function drawFx(now){
   const g=ctx;
@@ -3354,7 +3382,7 @@ async function strike(a,t,mod,bladeIdx,isFeint,opts){
   if(parrying){
     setPose(t,'parry',80);await wait(60);
     const pr=test(t,'Parade',t.sabre+2+formMod(t,'parry')-(a.saberW&&t.weapon==='vibro'?3:0)-(opts&&opts.air?2:0));
-    flash(cp.x,cp.y,90,'255,230,200');sparks(cp.x,cp.y,26);
+    flash(cp.x,cp.y,90,'255,230,200');sparks(cp.x,cp.y,26);window.SFX&&window.SFX.play('saber');
     if(pr.ok&&!(r.crit&&!pr.crit)){
       floatT(cp.x,cp.y-30,'Parade !','#a8d8ff',20);log(`${short(t.name)} bloque la frappe de ${short(a.name)}.`,t.side);
       await wait(260);
@@ -3440,7 +3468,7 @@ async function perform(f){
       liftTo(f,140,280);await wait(300);
       if(f.ranged)await fire(f,t,2,1,'Tir en vol',{air:true});else await strike(f,t,2,0,false,{air:true});
       liftTo(f,0,320);await wait(320);break;}
-    case'flame':{
+    case'flame':{window.SFX&&window.SFX.play('flame');
       f.fuel--;setPose(f,'aim',160);await wait(170);
       const r=test(f,'Lance-flammes',f.tir+1+f.med);
       const mz=muzzleWorld(f),c=chestWorld(t);fx.push({k:'flame',x1:mz.x,y1:mz.y,x2:c.x,y2:c.y,t0:performance.now(),dur:650});await wait(450);
@@ -3585,6 +3613,7 @@ function startCombat(){
   fighters=[...roster.p,...roster.e].map(mkFighter);layout(fighters);
   fx=[];floats=[];logs=[];rolls=[];round=1;phase='orders';busy=false;over=false;pendingAct=null;lastP={};activeIdx=0;
   log(`${roster.p.map(f=>short(f.display||f.name)).join(', ')} face à ${roster.e.map(f=>short(f.display||f.name)).join(', ')}.`,'kill');
+  if(fighters.some(f=>f.saberW))window.SFX&&window.SFX.play('ignite');
   {const HZ={glace:'Le sol gelé est glissant : échec critique dès 16.',lave:'Le sol volcanique est instable : la lave peut jaillir à chaque échange.',desert:'Le sable gêne la visée : tous les tirs à −1.',foret:'Les arbres couvrent les combattants : tous les tirs à −1.'}[DSC];if(HZ)log(HZ,'kill');}
   $('over').hidden=true;showView('combat');renderCombat();
 }
@@ -4736,6 +4765,7 @@ async function doRoll(reroll){
   if(reroll){if(!p.rolled||(S.destiny||0)<1)return;S.destiny--;}else if(p.rolled)return;
   document.querySelectorAll('#actZone .dicecard button').forEach(b=>b.disabled=true);
   const box=$('rollDice');box.innerHTML='<i>?</i><i>?</i><i>?</i>';box.querySelectorAll('i').forEach(i=>i.classList.add('rolling'));
+  window.SFX.play('dice');
   const iv=setInterval(()=>box.querySelectorAll('i').forEach(i=>i.textContent=rint(1,6)),70);
   await wait(800);clearInterval(iv);
   const d=[rint(1,6),rint(1,6),rint(1,6)],sum=d[0]+d[1]+d[2],score=S.hero.skills[p.skill]+p.mod;
@@ -4827,6 +4857,8 @@ function renderCamps(){
 }
 function toTitle(){if(S)saveCampaign();S=null;showScreen('scr-title');renderCamps();}
 $('btnNew').addEventListener('click',startCreation);
+function sfxLabel(){const b=$('sfxBtn');b.textContent=window.SFX.on?'Son : activé':'Son : coupé';b.setAttribute('aria-pressed',String(window.SFX.on));}
+$('sfxBtn').addEventListener('click',()=>{window.SFX.toggle();sfxLabel();});sfxLabel();
 $('menuNew').addEventListener('click',toTitle);
 $('campZone').addEventListener('click',async e=>{
   const b=e.target.closest('button');if(!b)return;

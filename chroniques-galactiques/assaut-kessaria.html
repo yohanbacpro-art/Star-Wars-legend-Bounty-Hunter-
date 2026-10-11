@@ -704,6 +704,7 @@ function shell(x1,y1,x2,y2,delay,dur){fx.push({k:'shell',x1,y1,x2,y2,t0:performa
 function floatT(x,y,txt,color){floats.push({x,y,txt,color,t0:performance.now(),dur:1300});}
 function burst(x,y,n,col,dur,spread){fx.push({k:'burst',x,y,col,t0:performance.now(),dur,parts:Array.from({length:n},()=>({a:rnd(0,7),v:rnd(spread*.3,spread),s:rnd(1.5,3.5)}))});}
 function boom(x,y,r){
+  window.SFX&&window.SFX.play('boom');
   const now=performance.now();
   fx.push({k:'flash',x,y,r,t0:now,dur:420});fx.push({k:'ring',x,y,r:r*1.6,t0:now,dur:700});
   burst(x,y,30,'255,170,80',900,r*1.2);burst(x,y,16,'120,110,90',1500,r*.9);
@@ -796,7 +797,7 @@ async function attack(a,t){
   a.acted=true;
   const p=preview(a,t),ang=Math.atan2(t.y-a.y,t.x-a.x);
   await aimTo(a,ang,a.T.inf||a.T.fast?160:300);
-  const hitOk=Math.random()<p.chance;
+  const hitOk=Math.random()<p.chance;window.SFX&&window.SFX.play(a.T.indirect?'mortar':a.T.heavy||a.type==='ltank'?'cannon':'blaster');
   const col=a.side==='p'?'#8dffad':'#ff6a55';
   const n=a.T.inf?Math.max(1,Math.ceil(a.hp/a.hpMax*a.T.shots)):a.T.shots;
   const px=-Math.sin(ang),py=Math.cos(ang);

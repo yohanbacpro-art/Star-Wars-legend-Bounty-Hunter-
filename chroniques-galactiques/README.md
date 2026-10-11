@@ -21,7 +21,10 @@ Toute évolution du jeu doit respecter ce principe.
 - **Progression** : l’XP donnée par le MJ s’achète en compétences, endurance, formes de sabre et techniques.
 - **Mémoire** : carnet de campagne (PNJ, quêtes, lieux, factions), résumé de chaque chapitre, livre de campagne exportable.
 - **Relations** : affinité, nature du lien, voix et historique de chaque PNJ ; romances par étapes selon le réglage de la session zéro ; scènes de respiration ; longueur et style de narration réglables en cours de partie.
-- **Combats** : duel (7 décors), combat du vaisseau personnel avec fuite en hyperespace, bataille spatiale (4 décors), bataille terrestre (6 terrains, objectifs assaut / anéantissement / défense). La force des ennemis est ajustée à la difficulté choisie en session zéro.
+- **Combats** : duel (7 décors qui comptent : glace, lave, sable, forêt…), combat du vaisseau personnel avec fuite en hyperespace, bataille spatiale (4 décors ; missions bataille, escorte, blocus, station ; tempête ionique), bataille terrestre (6 terrains, 5 cartes dont ville, canyon, base fortifiée et rivière ; 6 météos dont nuit et brouillard ; 7 objectifs). La force des ennemis est ajustée à la difficulté choisie en session zéro.
+- **Factions** : 9 styles (Empire, Rébellion, République, Séparatistes, Mandaloriens, pirates, Vong, Chiss, Empire Sith) pour les vaisseaux et les troupes ; 47 modèles de personnages pour toutes les époques ; le MJ peut composer un PNJ inédit (tête, tenue, couleurs, arme, capacités).
+- **Systèmes débloqués par l’histoire** : tableau des contrats (si le personnage se lance dans la chasse aux primes), réputation par faction, jauge de la Force pour les personnages sensibles à la Force.
+- **Son** : effets synthétisés dans le navigateur, bouton pour couper le son.
 - **Campagnes** : plusieurs campagnes en parallèle, import et export de sauvegarde.
 
 ## Structure
