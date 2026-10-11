@@ -3,6 +3,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Serif:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
 <style>
+[hidden]{display:none!important}
 /* Layout : console du MJ — récit en colonne de lecture à gauche, fiche du personnage à droite (empilée sur mobile). Les moteurs de combat prennent tout l'écran quand l'histoire les déclenche. Monde sombre unique. */
 :root{
   --void:#08070a;
@@ -198,6 +199,7 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
 #sp-againBtn,#sp-newBtn,#gr-againBtn,#gr-newBtn,#ar-againBtn,#ar-backBtn,#ar-backBtn2{display:none!important}
 .engbar{max-width:1480px;margin:0 auto;padding:10px 16px 0;display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
 .engbar span{font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+#eng-space [hidden]{display:none!important}
 #eng-space{
   --void:#05070c;
   --deck:#0b1018;
@@ -285,6 +287,7 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
 #eng-space .report textarea{width:100%;min-height:150px;resize:vertical;background:var(--void);color:var(--steel);border:1px solid var(--line);border-radius:3px;padding:10px;font-family:var(--f-mono);font-size:12px;line-height:1.5}
 #eng-space .legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--dim)}
 #eng-space .legend i{display:inline-block;width:14px;height:0;border-top:2px dashed;vertical-align:middle;margin-right:5px}
+#eng-ground [hidden]{display:none!important}
 #eng-ground{
   --void:#07080a;
   --deck:#0e1013;
@@ -380,6 +383,7 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
 #eng-ground .legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--dim)}
 #eng-ground .legend i{display:inline-block;width:14px;height:0;border-top:2px dashed;vertical-align:middle;margin-right:5px}
 #eng-ground .legend b{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:5px}
+#eng-duel [hidden]{display:none!important}
 #eng-duel{
   --void:#08060a;
   --deck:#110d13;
@@ -614,7 +618,7 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
 
     <aside class="console">
       <div class="sect">
-        <div class="label">Ordres du Moff</div>
+        <div class="label">Ordres</div>
         <p class="brief">Un raid insurgé frappe l’orbite de Kessaria IV. Détruisez-le ou forcez-le à fuir. <strong>Si l’Inexorable tombe, la bataille est perdue.</strong></p>
         <div class="legend"><span><i style="color:var(--amber)"></i>Déplacement</span><span><i style="color:var(--imp)"></i>Portée de tir</span><span><i style="color:#c9a86a"></i>Astéroïdes : −30 % dégâts</span></div>
       </div>
@@ -626,6 +630,7 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
         <div class="btns">
           <button id="sp-specBtn" type="button">Boucliers</button>
           <button id="sp-endBtn" class="primary" type="button">Fin du tour</button>
+          <button id="sp-fleeBtn" type="button" hidden>Sauter en hyperespace</button>
         </div>
       </div>
 
@@ -683,7 +688,7 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
 
     <aside class="console">
       <div class="sect">
-        <div class="label">Ordres du Moff</div>
+        <div class="label">Ordres</div>
         <p class="brief">Les insurgés repliés au sol protègent un générateur de bouclier. Anéantissez-les, ou <strong>tenez le générateur deux tours d’affilée</strong>. Si l’escouade de commandement tombe, l’assaut échoue.</p>
         <div class="legend">
           <span><i style="color:var(--amber)"></i>Déplacement</span>
@@ -894,12 +899,17 @@ function resize(){
 new ResizeObserver(resize).observe(cv);resize();
 
 const TYPES={
-  cruiser:{label:'Croiseur de ligne',elabel:'Croiseur insurgé',hull:140,sh:70,move:110,range:300,dmg:[20,28],r:52,bolts:3,cost:4},
+  cruiser:{label:'Croiseur de ligne',elabel:'Croiseur ennemi',hull:140,sh:70,move:110,range:300,dmg:[20,28],r:52,bolts:3,cost:4},
   frigate:{label:'Frégate d’escorte',elabel:'Frégate marteau',hull:70,sh:35,move:170,range:250,dmg:[12,17],r:34,bolts:2,cost:2},
-  fighters:{label:'Escadron de chasseurs',elabel:'Chasseurs insurgés',hull:36,sh:0,move:260,range:130,dmg:[9,13],r:28,bolts:4,cost:1}
+  fighters:{label:'Escadron de chasseurs',elabel:'Chasseurs ennemis',hull:36,sh:0,move:260,range:130,dmg:[9,13],r:28,bolts:4,cost:1},
+  freighter:{label:'Cargo armé',elabel:'Cargo pirate',hull:90,sh:45,move:230,range:230,dmg:[12,17],r:30,bolts:2,cost:2}
 };
-const MULT={cruiser:{cruiser:1,frigate:1.3,fighters:1},frigate:{cruiser:.9,frigate:1,fighters:1.8},fighters:{cruiser:1.5,frigate:1.1,fighters:1}};
-const CH={cruiser:{cruiser:.9,frigate:.88,fighters:.5},frigate:{cruiser:.9,frigate:.88,fighters:.85},fighters:{cruiser:.85,frigate:.82,fighters:.75}};
+const EVADES=t=>t==='fighters'||t==='freighter';
+const MULT={cruiser:{cruiser:1,frigate:1.3,fighters:1,freighter:1.1},frigate:{cruiser:.9,frigate:1,fighters:1.8,freighter:1.2},fighters:{cruiser:1.5,frigate:1.1,fighters:1,freighter:1.2},freighter:{cruiser:.9,frigate:1.1,fighters:1.4,freighter:1}};
+const CH={cruiser:{cruiser:.9,frigate:.88,fighters:.5,freighter:.6},frigate:{cruiser:.9,frigate:.88,fighters:.85,freighter:.78},fighters:{cruiser:.85,frigate:.82,fighters:.75,freighter:.8},freighter:{cruiser:.9,frigate:.88,fighters:.8,freighter:.82}};
+/* Décors : planète en bas de carte, espace profond, champ d'astéroïdes, nébuleuse */
+const SCENES={planete:{planet:true,fields:[2,3]},espace:{planet:false,fields:[1,2]},asteroides:{planet:false,fields:[5,6],wide:true},nebuleuse:{planet:false,fields:[1,2],neb:true}};
+let SCENE=SCENES.planete,canFlee=false,fled=false;
 
 let ships=[],fields=[],bg=null,sel=null,hover=null,turn=1,phase='player',busy=false,over=false,acting=null,logs=[],fx=[],floats=[],anims=[],initEnemyHull=1;
 
@@ -912,7 +922,7 @@ const pick=arr=>arr.splice(Math.floor(Math.random()*arr.length),1)[0];
 function clampPos(x,y){
   x=Math.max(50,Math.min(W-50,x));y=Math.max(50,Math.min(H-40,y));
   const d=Math.hypot(x-PLANET.x,y-PLANET.y),m=PLANET.r+50;
-  if(d<m){x=PLANET.x+(x-PLANET.x)/d*m;y=PLANET.y+(y-PLANET.y)/d*m;}
+  if(SCENE.planet&&d<m){x=PLANET.x+(x-PLANET.x)/d*m;y=PLANET.y+(y-PLANET.y)/d*m;}
   return{x,y};
 }
 function settle(s,x,y){
@@ -941,9 +951,9 @@ function newBattle(){
   ships=[];fields=[];fx=[];floats=[];anims=[];logs=[];
   turn=1;phase='player';busy=false;over=false;acting=null;
   // Champs d'astéroïdes
-  const nf=rint(2,3);
-  for(let i=0;i<40&&fields.length<nf;i++){
-    const f={x:rnd(560,1080),y:rnd(140,660),r:rnd(85,125)};
+  const nf=rint(SCENE.fields[0],SCENE.fields[1]);fled=false;
+  for(let i=0;i<160&&fields.length<nf;i++){
+    const f=SCENE.wide?{x:rnd(420,1220),y:rnd(110,880),r:rnd(80,120)}:{x:rnd(560,1080),y:rnd(140,660),r:rnd(85,125)};
     if(fields.every(o=>Math.hypot(o.x-f.x,o.y-f.y)>o.r+f.r+60)){
       f.rocks=Array.from({length:Math.round(f.r/3.6)},()=>{const a=rnd(0,7),d=Math.sqrt(Math.random())*f.r*.92;
         return{x:f.x+Math.cos(a)*d,y:f.y+Math.sin(a)*d,s:rnd(3,15),rot:rnd(0,7),pts:Array.from({length:rint(6,9)},()=>rnd(.65,1.1)),tone:rint(0,2)}});
@@ -981,7 +991,7 @@ function newBattle(){
   });
   if(window.__CFG&&window.__CFG.space){const C=window.__CFG.space;ships=[];
     const PS=[[250,430],[210,650],[330,230],[380,560],[420,330],[440,460],[160,300],[150,560]];
-    (C.player||[]).slice(0,8).forEach((u,i)=>{const s=mkShip('p',u.type,u.name,PS[i][0],PS[i][1],!!u.flag);if(u.hull!=null&&u.hull<1)s.hull=Math.max(1,Math.round(s.hullMax*u.hull));const p=settle(s,s.x,s.y);s.x=p.x;s.y=p.y;ships.push(s);});
+    (C.player||[]).slice(0,8).forEach((u,i)=>{const s=mkShip('p',u.type,u.name,PS[i][0],PS[i][1],!!u.flag);if(u.hull!=null&&u.hull<1)s.hull=Math.max(1,Math.round(s.hullMax*u.hull));if(u.pilot)s.ace=Math.max(-.1,Math.min(.2,(u.pilot-10)*.025));const p=settle(s,s.x,s.y);s.x=p.x;s.y=p.y;ships.push(s);});
     if(!ships.some(s=>s.flag)&&ships[0])ships[0].flag=true;
     const en=(C.enemy||[]).slice(0,8),n=en.length;
     en.forEach((u,i)=>{const y=n===1?430:140+i*(560/Math.max(1,n-1));const x=(u.type==='cruiser'?1400:u.type==='frigate'?1320:1240)+rnd(-30,30);const s=mkShip('e',u.type,u.name,x,y);const p=settle(s,s.x,s.y);s.x=p.x;s.y=p.y;ships.push(s);});
@@ -1008,6 +1018,9 @@ function renderBG(){
     const s=b>.985?1.8:b>.9?1.2:.7;g.fillRect(x,y,s,s);
   }
   for(let i=0;i<14;i++){const x=Math.random()*W,y=Math.random()*700;const gr=g.createRadialGradient(x,y,0,x,y,5);gr.addColorStop(0,'rgba(255,255,255,.9)');gr.addColorStop(1,'rgba(180,210,255,0)');g.fillStyle=gr;g.fillRect(x-5,y-5,10,10);}
+  if(SCENE.neb){for(const [x,y,r,c,a] of [[500,420,700,'150,60,170',.32],[1150,560,640,'60,140,190',.26],[820,200,520,'210,90,120',.18]]){const gr=g.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,`rgba(${c},${a})`);gr.addColorStop(1,`rgba(${c},0)`);g.fillStyle=gr;g.fillRect(0,0,W,H);}
+    for(let i=0;i<40;i++){const x=rnd(0,W),y=rnd(0,H),r=rnd(80,240);const gr=g.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,'rgba(200,150,230,.06)');gr.addColorStop(1,'rgba(200,150,230,0)');g.fillStyle=gr;g.fillRect(0,0,W,H);}}
+  if(SCENE.planet){
   // Lune
   const M={x:1460,y:110,r:38};
   let mg=g.createRadialGradient(M.x-14,M.y-14,4,M.x,M.y,M.r);mg.addColorStop(0,'#b9b4ab');mg.addColorStop(.7,'#6c675f');mg.addColorStop(1,'#2a2824');
@@ -1048,6 +1061,7 @@ function renderBG(){
   g.restore();
   g.save();g.strokeStyle='rgba(150,215,255,.55)';g.lineWidth=3;g.shadowColor='rgba(120,200,255,1)';g.shadowBlur=24;
   g.beginPath();g.arc(P.x,P.y,P.r+1,-Math.PI/2-.8,-Math.PI/2+.25);g.stroke();g.restore();
+  }
   // Astéroïdes
   for(const f of fields){
     const dg=g.createRadialGradient(f.x,f.y,0,f.x,f.y,f.r*1.1);dg.addColorStop(0,'rgba(170,140,100,.10)');dg.addColorStop(1,'rgba(170,140,100,0)');
@@ -1153,7 +1167,32 @@ function drawEFighters(g,now){
     g.restore();
   }
 }
-const ART={pcruiser:drawPCruiser,pfrigate:drawPFrigate,pfighters:drawPFighters,ecruiser:drawECruiser,efrigate:drawEFrigate,efighters:drawEFighters};
+function drawPFreighter(g,now){
+  g.fillStyle='rgba(0,0,0,.33)';g.beginPath();g.ellipse(4,6,27,25,0,0,7);g.fill();
+  g.fillStyle=hullGrad(g,10,STEEL);
+  g.beginPath();g.moveTo(14,-9);g.lineTo(36,-11);g.lineTo(36,-3);g.lineTo(14,-2);g.closePath();g.fill();
+  g.beginPath();g.moveTo(14,9);g.lineTo(36,11);g.lineTo(36,3);g.lineTo(14,2);g.closePath();g.fill();
+  const dg=g.createRadialGradient(-6,-8,2,0,0,25);dg.addColorStop(0,'#e4e8ec');dg.addColorStop(.7,'#9aa2ab');dg.addColorStop(1,'#5b636c');
+  g.fillStyle=dg;g.beginPath();g.arc(0,0,24,0,7);g.fill();g.strokeStyle='rgba(12,15,20,.85)';g.lineWidth=1.2;g.stroke();
+  g.strokeStyle='rgba(25,30,38,.45)';g.lineWidth=1;g.beginPath();g.arc(0,0,15,0,7);g.moveTo(-24,0);g.lineTo(-9,0);g.moveTo(0,-24);g.lineTo(0,-15);g.moveTo(0,24);g.lineTo(0,15);g.stroke();
+  g.fillStyle='#c9a46a';g.fillRect(-12,-12,7,5);g.fillRect(4,8,8,4);
+  g.fillStyle='#7d8690';g.beginPath();g.arc(0,0,6,0,7);g.fill();g.fillStyle='#d8dde2';g.beginPath();g.arc(0,0,3,0,7);g.fill();
+  g.fillStyle='#aab2bb';g.fillRect(8,20,12,7);g.strokeStyle='rgba(12,15,20,.8)';g.strokeRect(8,20,12,7);
+  g.fillStyle='rgba(150,220,255,.85)';g.fillRect(16,21.5,3,4);
+  engines(g,-24,[-8,0,8],now,'120,185,255',3.2);
+}
+function drawEFreighter(g,now){
+  g.fillStyle='rgba(0,0,0,.33)';g.beginPath();g.moveTo(40,6);g.lineTo(-26,-16);g.lineTo(-26,28);g.closePath();g.fill();
+  g.fillStyle=hullGrad(g,20,SAND);
+  g.beginPath();g.moveTo(36,0);g.lineTo(-24,-21);g.lineTo(-30,-12);g.lineTo(-30,12);g.lineTo(-24,21);g.closePath();g.fill();
+  g.strokeStyle='rgba(25,18,12,.85)';g.lineWidth=1.2;g.stroke();
+  g.fillStyle='#7d6f5a';g.fillRect(-22,-9,22,18);g.strokeRect(-22,-9,22,18);
+  g.strokeStyle='rgba(60,45,30,.45)';g.lineWidth=1;g.beginPath();g.moveTo(30,-1);g.lineTo(-20,-18);g.moveTo(30,1);g.lineTo(-20,18);g.stroke();
+  g.fillStyle='rgba(255,200,120,.85)';g.fillRect(22,-2,5,4);
+  g.fillStyle='#5a4e40';g.fillRect(-4,-25,10,6);g.fillRect(-4,19,10,6);
+  engines(g,-31,[-7,7],now,'255,135,80',4);
+}
+const ART={pcruiser:drawPCruiser,pfrigate:drawPFrigate,pfighters:drawPFighters,ecruiser:drawECruiser,efrigate:drawEFrigate,efighters:drawEFighters,pfreighter:drawPFreighter,efreighter:drawEFreighter};
 
 function drawShip(s,now){
   const g=ctx;
@@ -1255,6 +1294,7 @@ function preview(a,t){
   let chance=CH[a.type][t.type];
   if(d>a.range*.75)chance-=.1;
   if(t.evade)chance-=.25;
+  chance+=(a.ace||0)-(t.ace||0);
   chance=Math.max(.1,Math.min(.95,chance));
   const cover=inField(t.x,t.y)?.7:1,m=MULT[a.type][t.type]*cover;
   return{inRange:d<=a.range,chance,min:Math.round(T.dmg[0]*m),max:Math.round(T.dmg[1]*m),bypass:a.type==='fighters',cover:cover<1};
@@ -1307,7 +1347,7 @@ function checkEnd(){
 }
 
 /* ---------- IA ennemie ---------- */
-const PREF={cruiser:{cruiser:1,frigate:1.1,fighters:.4},frigate:{cruiser:.8,frigate:1,fighters:1.4},fighters:{cruiser:1.4,frigate:1.1,fighters:.6}};
+const PREF={cruiser:{cruiser:1,frigate:1.1,fighters:.4,freighter:.8},frigate:{cruiser:.8,frigate:1,fighters:1.4,freighter:1.1},fighters:{cruiser:1.4,frigate:1.1,fighters:.6,freighter:1.1},freighter:{cruiser:.8,frigate:1,fighters:1.2,freighter:1}};
 function score(e,t){return PREF[e.type][t.type]*100-dist(e,t)*.12-(t.hull+t.sh)*.25+(t.flag?15:0);}
 function pickTarget(e,list){let best=null,bs=-1e9;for(const t of list){const s=score(e,t);if(s>bs){bs=s;best=t;}}return best;}
 async function enemyAct(e){
@@ -1340,9 +1380,9 @@ async function enemyPhase(){
   en.forEach(s=>s.sh=Math.min(s.shMax,s.sh+Math.round(s.shMax*.12)));
   const left=en.reduce((a,s)=>a+s.hull+s.sh,0);
   if(turn>=2&&left<initEnemyHull*.25){
-    log('Les insurgés rompent le combat et sautent en hyperespace.','kill');
+    log('Les ennemis rompent le combat et sautent en hyperespace.','kill');
     await wait(500);
-    endBattle(true,'Les derniers vaisseaux insurgés ont fui en hyperespace. L’espace est à vous.');busy=false;return;
+    endBattle(true,'Les derniers vaisseaux ennemis ont fui en hyperespace. L’espace est à vous.');busy=false;return;
   }
   await wait(450);
   const order=[...en].sort((a,b)=>TYPES[a.type].cost-TYPES[b.type].cost);
@@ -1350,7 +1390,7 @@ async function enemyPhase(){
   turn++;phase='player';busy=false;
   ships.filter(s=>s.side==='p'&&s.alive).forEach(s=>{s.moved=false;s.acted=false;s.evade=false;s.sh=Math.min(s.shMax,s.sh+Math.round(s.shMax*.12));});
   sel=ships.find(s=>s.side==='p'&&s.alive)||null;
-  log(`Tour ${turn} : vos ordres, Moff.`);
+  log(`Tour ${turn} : vos ordres.`);
   renderUI();
 }
 
@@ -1360,19 +1400,19 @@ function endBattle(win,text){
   const pl=ships.filter(s=>s.side==='p'),en=ships.filter(s=>s.side==='e');
   const status=s=>!s.alive?'détruit':s.hull===s.hullMax?'intact':`coque à ${Math.round(s.hull/s.hullMax*100)} %`;
   const lines=[
-    `${(window.__CFG&&window.__CFG.space&&window.__CFG.space.title||'Bataille spatiale').toUpperCase()} — ${win?'VICTOIRE':'DÉFAITE'} (tour ${turn})`,
+    `${(window.__CFG&&window.__CFG.space&&window.__CFG.space.title||'Bataille spatiale').toUpperCase()} — ${fled?'FUITE':win?'VICTOIRE':'DÉFAITE'} (tour ${turn})`,
     text,'',
     'Flotte du secteur :',
     ...pl.map(s=>`- ${s.name} (${TYPES[s.type].label}) : ${status(s)}`),'',
-    `Raid insurgé : ${en.filter(s=>!s.alive).length}/${en.length} vaisseaux détruits`,
+    `Forces ennemies : ${en.filter(s=>!s.alive).length}/${en.length} vaisseaux détruits`,
     ...en.map(s=>`- ${s.name} (${TYPES[s.type].elabel}) : ${!s.alive?'détruit':'en fuite, '+status(s)}`)
   ];
-  document.getElementById('sp-rTitle').textContent=win?'Victoire':'Défaite';
+  document.getElementById('sp-rTitle').textContent=fled?'Fuite':win?'Victoire':'Défaite';
   document.getElementById('sp-rTitle').className=win?'win':'lose';
   document.getElementById('sp-rText').textContent=text;
   document.getElementById('sp-rBox').value=lines.join('\n');
   document.getElementById('sp-over').hidden=false;
-  window.__engineEnd&&window.__engineEnd('space',{win,text,report:lines.join('\n'),lost:pl.filter(s=>!s.alive).map(s=>s.name),state:pl.map(s=>({name:s.name,alive:s.alive,hull:s.alive?s.hull/s.hullMax:0}))});
+  window.__engineEnd&&window.__engineEnd('space',{win,text,report:lines.join('\n'),lost:pl.filter(s=>!s.alive).map(s=>s.name),fled,state:pl.map(s=>({name:s.name,alive:s.alive,hull:s.alive?s.hull/s.hullMax:0}))});
   renderUI();
 }
 
@@ -1395,12 +1435,13 @@ function renderUI(){
       <div class="orders"><span class="chip ${sel.moved?'':'ok'}">Déplacement ${sel.moved?'fait':'prêt'}</span><span class="chip ${sel.acted?'':'ok'}">Action ${sel.acted?'faite':'prête'}</span>${sel.evade?'<span class="chip">Évasion active</span>':''}</div>`;
   }else card.innerHTML=`<div class="ty" style="margin:0">Aucun vaisseau sélectionné.</div>`;
   if(over)hint.textContent='La bataille est terminée. Le rapport est prêt à être recopié.';
-  else if(phase==='enemy')hint.textContent='Les insurgés manœuvrent et ouvrent le feu…';
+  else if(phase==='enemy')hint.textContent='Les ennemis manœuvrent et ouvrent le feu…';
   else if(!sel)hint.textContent='Sélectionnez un de vos vaisseaux sur la carte ou dans la liste.';
   else if(sel.moved&&sel.acted)hint.textContent='Ordres exécutés pour ce vaisseau. Choisissez-en un autre ou terminez le tour.';
   else hint.textContent=[!sel.moved&&'Cliquez dans la zone ambrée pour le déplacer.',!sel.acted&&'Cliquez un ennemi dans le cercle vert pour ouvrir le feu.'].filter(Boolean).join(' ');
   const spec=document.getElementById('sp-specBtn');
-  spec.textContent=sel&&sel.type==='fighters'?'Manœuvre évasive':'Renforcer boucliers';
+  spec.textContent=sel&&EVADES(sel.type)?'Manœuvre évasive':'Renforcer boucliers';
+  const fb=document.getElementById('sp-fleeBtn');fb.hidden=!canFlee;fb.disabled=phase!=='player'||busy||over||turn<3;fb.textContent=turn<3?`Hyperespace (calcul : tour ${turn}/3)`:'Sauter en hyperespace';
   spec.disabled=!sel||sel.acted||phase!=='player'||busy||over;
   const end=document.getElementById('sp-endBtn');
   end.disabled=phase!=='player'||busy||over;
@@ -1423,11 +1464,12 @@ document.getElementById('sp-fleet').addEventListener('click',e=>{
 document.getElementById('sp-specBtn').addEventListener('click',()=>{
   if(!sel||sel.acted||busy||over)return;
   sel.acted=true;
-  if(sel.type==='fighters'){sel.evade=true;log(`${sel.name} passe en manœuvre évasive.`,'p');}
+  if(EVADES(sel.type)){sel.evade=true;log(`${sel.name} passe en manœuvre évasive.`,'p');}
   else{const g=Math.round(sel.shMax*.4);sel.sh=Math.min(sel.shMax,sel.sh+g);fx.push({k:'shield',x:sel.x,y:sel.y,r:sel.r+6,t0:performance.now(),dur:600});log(`${sel.name} redirige l’énergie vers ses boucliers.`,'p');}
   nextReady();renderUI();
 });
 document.getElementById('sp-endBtn').addEventListener('click',()=>{if(phase==='player'&&!busy&&!over)enemyPhase();});
+document.getElementById('sp-fleeBtn').addEventListener('click',()=>{if(phase!=='player'||busy||over||!canFlee||turn<3)return;fled=true;log('Coordonnées calculées : saut en hyperespace !','kill');endBattle(false,'Vous avez rompu le combat et sauté en hyperespace.');});
 document.getElementById('sp-newBtn').addEventListener('click',()=>{if(!busy)newBattle();});
 document.getElementById('sp-againBtn').addEventListener('click',newBattle);
 document.getElementById('sp-copyBtn').addEventListener('click',()=>{
@@ -1523,8 +1565,9 @@ newBattle();
 requestAnimationFrame(frame);
 window.ENGINES=window.ENGINES||{};
 window.ENGINES.space={start(){const C=window.__CFG&&window.__CFG.space;const sec=document.getElementById('eng-space');
+  SCENE=SCENES[C&&C.decor]||SCENES.planete;canFlee=!!(C&&C.canFlee);
   if(C){sec.querySelector('h1').textContent=C.title||'Bataille spatiale';sec.querySelector('.eyebrow').textContent='Bataille spatiale';
-    const fl=(C.player||[]).find(u=>u.flag)||(C.player||[])[0];sec.querySelector('.brief').textContent=`Détruisez la flotte ennemie ou forcez-la à fuir. Si ${fl?fl.name:'votre vaisseau amiral'} tombe, la bataille est perdue.`;}
+    const fl=(C.player||[]).find(u=>u.flag)||(C.player||[])[0];sec.querySelector('.brief').textContent=C.solo?`Abattez ou faites fuir vos poursuivants. Si ${fl?fl.name:'votre vaisseau'} est détruit, c’est perdu. Dès le tour 3, vous pouvez sauter en hyperespace.`:`Détruisez la flotte ennemie ou forcez-la à fuir. Si ${fl?fl.name:'votre vaisseau amiral'} tombe, la bataille est perdue.${C.canFlee?' Dès le tour 3, vous pouvez sauter en hyperespace.':''}`;}
   newBattle();resize();}};
 })();
 
@@ -1545,9 +1588,9 @@ const TYPES={
   tank:{label:'Char lourd à répulseurs',hp:130,move:120,range:300,dmg:[22,30],r:40,shots:1,armored:true,special:'repair'},
   art:{label:'Batterie d’artillerie',hp:55,move:90,range:520,minRange:150,dmg:[16,22],r:32,shots:2,armored:true,indirect:true,special:'repair'},
   speed:{label:'Motos de reconnaissance',hp:34,move:300,range:150,dmg:[7,10],r:24,shots:2,fast:true,special:'dig'},
-  einf:{label:'Fantassins insurgés',hp:45,move:150,range:220,dmg:[8,12],r:26,shots:4,inf:true,men:5,cost:2},
+  einf:{label:'Fantassins ennemis',hp:45,move:150,range:220,dmg:[8,12],r:26,shots:4,inf:true,men:5,cost:2},
   eat:{label:'Équipe antichar',hp:35,move:130,range:260,dmg:[10,14],r:24,shots:1,inf:true,men:3,antiArmor:true,cost:2},
-  eltank:{label:'Char léger insurgé',hp:90,move:150,range:260,dmg:[16,22],r:36,shots:2,armored:true,cost:3},
+  eltank:{label:'Char léger ennemi',hp:90,move:150,range:260,dmg:[16,22],r:36,shots:2,armored:true,cost:3},
   eturret:{label:'Tourelle défensive',hp:110,move:0,range:340,dmg:[16,22],r:30,shots:2,armored:true,static:true}
 };
 
@@ -1564,6 +1607,16 @@ const hit=(list,x,y)=>list.some(p=>Math.hypot(x-p.x,y-p.y)<p.r);
 const coverAt=(x,y)=>hit(T.ruins,x,y)?'ruins':hit(T.forests,x,y)?'forest':null;
 const onHill=(x,y)=>hit(T.hills,x,y);
 const effRange=u=>Math.round(u.T.range*(onHill(u.x,u.y)?1.2:1));
+/* Biomes du terrain et objectifs de bataille */
+const BIOMES={
+  tempere:{base:'#5d5a3e',tones:['rgba(122,114,74,.28)','rgba(72,70,46,.28)','rgba(92,104,60,.25)','rgba(140,124,88,.18)'],grass:'rgba(140,150,90,.28)',trees:[['#5f7d3c','#2a3d1b'],['#4f6e33','#1f3015'],['#6a7f40','#33431d']],road:'rgba(150,132,96,.55)',f:[3,4],r:[2,3],k:[1,2]},
+  desert:{base:'#b0915f',tones:['rgba(214,184,132,.16)','rgba(158,122,78,.13)','rgba(190,158,108,.14)','rgba(232,206,160,.12)'],grass:null,trees:[['#8c8a55','#4c4a2c'],['#7c7a48','#3e3c22'],['#9a8c5a','#544a2e']],road:'rgba(120,96,64,.45)',f:[0,1],r:[2,3],k:[2,3]},
+  neige:{base:'#c3c9d2',tones:['rgba(244,247,252,.22)','rgba(168,178,194,.13)','rgba(214,222,232,.16)','rgba(148,158,174,.11)'],grass:null,trees:[['#3d5a4a','#1c2c24'],['#34503f','#16241c'],['#45604f','#203028']],road:'rgba(120,124,132,.45)',f:[2,3],r:[1,2],k:[1,2]},
+  urbain:{base:'#4b4a47',tones:['rgba(110,108,102,.30)','rgba(60,58,55,.30)','rgba(88,86,80,.25)','rgba(130,126,118,.18)'],grass:null,trees:[['#4f6a3a','#22301a'],['#46603a','#1e2a17'],['#566f3e','#2a361c']],road:'rgba(40,40,42,.65)',f:[0,1],r:[5,6],k:[0,1]},
+  jungle:{base:'#36502a',tones:['rgba(70,110,50,.30)','rgba(30,52,22,.30)','rgba(84,120,56,.25)','rgba(110,98,60,.18)'],grass:'rgba(110,160,70,.30)',trees:[['#3f8a3a','#164018'],['#2f7a34','#0f3412'],['#4f9440','#1d4a1a']],road:'rgba(110,86,52,.55)',f:[5,6],r:[1,2],k:[0,1]},
+  volcan:{base:'#2f2826',tones:['rgba(90,60,50,.30)','rgba(30,24,22,.35)','rgba(120,60,40,.20)','rgba(70,64,60,.25)'],grass:null,trees:[['#4a4038','#1e1a16'],['#3e3630','#18140f'],['#55473a','#221c16']],road:'rgba(100,80,70,.45)',f:[0,1],r:[1,2],k:[3,3],lava:true}
+};
+let BIOME=BIOMES.tempere,MODE='assaut',HOLD=6;
 const COVER={forest:{dmg:.7,ch:.1,label:'forêt'},ruins:{dmg:.55,ch:.15,label:'ruines'}};
 
 function clampPos(x,y){
@@ -1604,9 +1657,9 @@ function newBattle(){
     }
   };
   for(let i=0;i<60&&T.hills.length<2;i++){const r=rnd(120,160),x=rnd(420,1150),y=rnd(r,H-r);if(T.hills.every(h=>Math.hypot(h.x-x,h.y-y)>h.r+r+80)&&Math.hypot(x-OBJ.x,y-OBJ.y)>r+OBJ.r+40)T.hills.push({x,y,r});}
-  place(T.rocks,rint(1,2),45,65,520,1150,50);
-  place(T.ruins,rint(2,3),55,80,450,1300,30);
-  place(T.forests,rint(3,4),70,115,380,1300,25);
+  place(T.rocks,rint(BIOME.k[0],BIOME.k[1]),45,65,520,1150,50);
+  place(T.ruins,rint(BIOME.r[0],BIOME.r[1]),55,80,450,1300,30);
+  place(T.forests,rint(BIOME.f[0],BIOME.f[1]),70,115,380,1300,25);
   for(let i=0;i<9;i++)T.craters.push({x:rnd(300,1300),y:rnd(60,H-60),r:rnd(10,28)});
   T.forests.forEach(f=>{f.trees=[];const n=Math.round(f.r*f.r/70);for(let i=0;i<n;i++){const a=rnd(0,7),d=Math.sqrt(Math.random())*f.r*1.02;f.trees.push({x:f.x+Math.cos(a)*d,y:f.y+Math.sin(a)*d,r:rnd(7,15),t:rint(0,2)});}});
   T.ruins.forEach(z=>{z.blocks=Array.from({length:rint(4,6)},()=>{const a=rnd(0,7),d=rnd(0,z.r*.6);return{x:z.x+Math.cos(a)*d,y:z.y+Math.sin(a)*d,w:rnd(26,48),h:rnd(18,34),rot:rnd(-.4,.4),gap:rint(0,3)};});
@@ -1639,7 +1692,7 @@ function newBattle(){
     const PP=[[170,500],[300,370],[300,640],[230,250],[90,690],[330,505],[200,800],[400,220]];
     const pl=[{type:'cmd',name:C.commander||'Commandement'},...(C.player||[]).filter(u=>u.type!=='cmd').slice(0,7)];
     pl.forEach((u,i)=>{const m=mkUnit('p',u.type,u.name,PP[i][0],PP[i][1],i===0);if(u.hp!=null&&u.hp<1)m.hp=Math.max(1,Math.round(m.hpMax*u.hp));const p=settle(m,m.x,m.y);m.x=p.x;m.y=p.y;units.push(m);});
-    (C.enemy||[]).slice(0,6).forEach((t,i)=>{const guard=i%2===0;const x=guard?OBJ.x+rnd(-170,-60):rnd(1000,1200),y=guard?OBJ.y+rnd(-200,200):rnd(120,880);const u=mkUnit('e',t.type,t.name,x,y);u.role=guard?'guard':'assault';const p=settle(u,u.x,u.y);u.x=p.x;u.y=p.y;units.push(u);});
+    (C.enemy||[]).slice(0,6).forEach((t,i)=>{const guard=MODE==='assaut'&&i%2===0;const x=guard?OBJ.x+rnd(-170,-60):rnd(1000,1200),y=guard?OBJ.y+rnd(-200,200):rnd(120,880);const u=mkUnit('e',t.type,t.name,x,y);u.role=guard?'guard':'assault';const p=settle(u,u.x,u.y);u.x=p.x;u.y=p.y;units.push(u);});
     orbital=C.orbital?1:0;
   }
   initEnemy=units.filter(u=>u.side==='e'&&!u.T.static).reduce((a,u)=>a+u.hpMax,0);
@@ -1655,12 +1708,13 @@ function blob(g,x,y,rx,ry,rot,fill){g.save();g.translate(x,y);g.rotate(rot);g.fi
 function renderBG(){
   bg=document.createElement('canvas');bg.width=W;bg.height=H;
   const g=bg.getContext('2d');
-  g.fillStyle='#5d5a3e';g.fillRect(0,0,W,H);
-  const tones=['rgba(122,114,74,.28)','rgba(72,70,46,.28)','rgba(92,104,60,.25)','rgba(140,124,88,.18)'];
+  g.fillStyle=BIOME.base;g.fillRect(0,0,W,H);
+  const tones=BIOME.tones;
   for(let i=0;i<280;i++)blob(g,rnd(-50,W+50),rnd(-50,H+50),rnd(40,190),rnd(25,110),rnd(0,7),tones[rint(0,3)]);
   for(let i=0;i<7000;i++){g.fillStyle=Math.random()<.5?'rgba(255,245,210,.06)':'rgba(0,0,0,.08)';g.fillRect(rnd(0,W),rnd(0,H),rnd(1,2.5),rnd(1,2.5));}
-  g.strokeStyle='rgba(140,150,90,.28)';g.lineWidth=1;g.beginPath();
-  for(let i=0;i<1400;i++){const x=rnd(0,W),y=rnd(0,H);g.moveTo(x,y);g.lineTo(x+rnd(-2,2),y-rnd(3,7));}g.stroke();
+  if(BIOME.grass){g.strokeStyle=BIOME.grass;g.lineWidth=1;g.beginPath();
+  for(let i=0;i<1400;i++){const x=rnd(0,W),y=rnd(0,H);g.moveTo(x,y);g.lineTo(x+rnd(-2,2),y-rnd(3,7));}g.stroke();}
+  if(BIOME.lava){g.lineCap='round';for(let i=0;i<5;i++){const x0=rnd(300,1300),y0=rnd(0,H);g.strokeStyle='rgba(255,110,40,.18)';g.lineWidth=14;g.beginPath();g.moveTo(x0,y0);for(let k=1;k<6;k++)g.lineTo(x0+k*rnd(30,70),y0+rnd(-60,60));g.stroke();g.strokeStyle='rgba(255,170,70,.55)';g.lineWidth=3;g.stroke();}}
   // Collines
   for(const h of T.hills){
     for(let k=0;k<5;k++){const rr=h.r*(1-k*.18);
@@ -1675,7 +1729,7 @@ function renderBG(){
   const road=()=>{g.beginPath();g.moveTo(-20,500);g.bezierCurveTo(500,rnd(300,700),900,rnd(300,700),OBJ.x-60,OBJ.y);};
   const seed=Math.random;const s1=[rnd(300,700),rnd(300,700)];
   const drawRoad=(w,c)=>{g.strokeStyle=c;g.lineWidth=w;g.beginPath();g.moveTo(-20,500);g.bezierCurveTo(500,s1[0],900,s1[1],OBJ.x-60,OBJ.y);g.stroke();};
-  drawRoad(52,'rgba(60,50,32,.35)');drawRoad(42,'rgba(150,132,96,.55)');
+  drawRoad(52,'rgba(60,50,32,.35)');drawRoad(42,BIOME.road);
   g.setLineDash([2,10]);drawRoad(28,'rgba(90,76,52,.25)');g.setLineDash([]);
   // Cratères
   for(const c of T.craters){
@@ -1712,7 +1766,7 @@ function renderBG(){
     g.fillStyle='rgba(22,30,14,.35)';g.beginPath();g.arc(f.x+6,f.y+8,f.r*1.02,0,7);g.fill();
     for(const t of f.trees){g.fillStyle='rgba(0,0,0,.35)';g.beginPath();g.arc(t.x+5,t.y+6,t.r,0,7);g.fill();}
     for(const t of f.trees){
-      const c=[['#5f7d3c','#2a3d1b'],['#4f6e33','#1f3015'],['#6a7f40','#33431d']][t.t];
+      const c=BIOME.trees[t.t];
       const gr=g.createRadialGradient(t.x-t.r*.35,t.y-t.r*.4,1,t.x,t.y,t.r);gr.addColorStop(0,c[0]);gr.addColorStop(1,c[1]);
       g.fillStyle=gr;g.beginPath();g.arc(t.x,t.y,t.r,0,7);g.fill();
     }
@@ -2002,7 +2056,7 @@ function checkEnd(){
   if(over)return true;
   const cmd=units.find(u=>u.flag);
   if(!cmd.alive){endBattle(false,'L’escouade de commandement est tombée. Sans ordres, les troupes regagnent les barges et l’assaut échoue.');return true;}
-  if(!units.some(u=>u.side==='e'&&u.alive)){endBattle(true,'Toutes les positions insurgées ont été réduites au silence. Le générateur tombe intact entre vos mains.');return true;}
+  if(!units.some(u=>u.side==='e'&&u.alive)){endBattle(true,'Toutes les positions ennemies ont été réduites au silence. Le générateur tombe intact entre vos mains.');return true;}
   return false;
 }
 
@@ -2046,22 +2100,25 @@ async function enemyPhase(){
   units.filter(u=>u.side==='e').forEach(u=>u.dug=false);
   const mobile=units.filter(u=>u.side==='e'&&u.alive&&!u.T.static);
   const left=mobile.reduce((a,u)=>a+u.hp,0);
-  if(turn>=3&&left<initEnemy*.2){
-    log('Les insurgés abandonnent leurs positions et fuient dans les collines.','kill');await wait(500);
-    endBattle(true,'Brisés, les derniers insurgés ont fui. Le générateur est à vous.');busy=false;return;
+  if(turn>=3&&left<initEnemy*.2&&MODE!=='defense'){
+    log('Les ennemis abandonnent leurs positions et fuient dans les collines.','kill');await wait(500);
+    endBattle(true,'Brisés, les derniers ennemis ont fui. Le générateur est à vous.');busy=false;return;
   }
   await wait(400);
   const order=units.filter(u=>u.side==='e'&&u.alive).sort((a,b)=>(a.T.static?1:0)-(b.T.static?1:0));
   for(const e of order){await enemyAct(e);if(checkEnd()){busy=false;acting=null;return;}await wait(140);}
+  if(MODE==='defense'&&turn>=HOLD){endBattle(true,`Vos troupes ont tenu la position pendant ${HOLD} tours. L’ennemi se replie.`);busy=false;return;}
   // capture du générateur
+  if(MODE==='assaut'){
   const meIn=units.some(u=>u.alive&&u.side==='p'&&dist(u,OBJ)<OBJ.r),enemyIn=units.some(u=>u.alive&&u.side==='e'&&!u.T.static&&dist(u,OBJ)<OBJ.r);
   if(meIn&&!enemyIn){capture++;log(capture>=2?'Le générateur est saboté !':'Vos troupes tiennent le générateur (1/2).','kill');}
   else if(capture>0){capture=0;log('Le contrôle du générateur est perdu.','e');}
-  if(capture>=2){endBattle(true,'Vos troupes ont tenu le générateur et l’ont saboté. Le bouclier insurgé tombe.');busy=false;return;}
+  if(capture>=2){endBattle(true,'Vos troupes ont tenu le générateur et l’ont saboté. Le bouclier ennemi tombe.');busy=false;return;}
+  }
   turn++;phase='player';busy=false;
   units.filter(u=>u.side==='p'&&u.alive).forEach(u=>{u.moved=false;u.acted=false;u.dug=false;});
   sel=units.find(u=>u.side==='p'&&u.alive)||null;
-  log(`Tour ${turn} : vos ordres, Moff.`);
+  log(`Tour ${turn} : vos ordres.`);
   renderUI();
 }
 
@@ -2074,7 +2131,7 @@ function endBattle(win,text){
     `${(window.__CFG&&window.__CFG.ground&&window.__CFG.ground.title||'Bataille terrestre').toUpperCase()} — ${win?'VICTOIRE':'DÉFAITE'} (tour ${turn})`,text,'',
     `Frappe orbitale : ${orbital?'non utilisée':'utilisée'}`,'',
     'Forces de débarquement :',...pl.map(u=>`- ${u.name} (${u.T.label}) : ${st(u)}`),'',
-    `Insurgés : ${en.filter(u=>!u.alive).length}/${en.length} positions détruites`,
+    `Ennemis : ${en.filter(u=>!u.alive).length}/${en.length} positions détruites`,
     ...en.map(u=>`- ${u.name} (${u.T.label}) : ${!u.alive?'détruit':'en fuite, '+st(u)}`)
   ];
   const t=document.getElementById('gr-rTitle');t.textContent=win?'Victoire':'Défaite';t.className=win?'win':'lose';
@@ -2091,6 +2148,7 @@ function hcol(h){return h>.6?'var(--imp)':h>.3?'var(--amber)':'var(--foe)';}
 function renderUI(){
   document.getElementById('gr-turnNo').textContent=String(turn).padStart(2,'0');
   document.getElementById('gr-c1').className=capture>=1?'on':'';document.getElementById('gr-c2').className=capture>=2?'on':'';
+  const cap=document.querySelector('.cap');if(cap){cap.hidden=MODE==='elimination';if(MODE==='defense'){cap.title=`Tenez jusqu’au tour ${HOLD}`;cap.firstChild.textContent=`Tenir : tour ${Math.min(turn,HOLD)}/${HOLD} `;cap.querySelectorAll('i').forEach(i=>i.hidden=true);}}
   const ph=document.getElementById('gr-phase');
   ph.textContent=over?'Bataille terminée':phase==='enemy'?'Tour ennemi':'Vos ordres';ph.className='phase'+(phase==='enemy'&&!over?' enemy':'');
   const card=document.getElementById('gr-card'),hint=document.getElementById('gr-hint');
@@ -2104,7 +2162,7 @@ function renderUI(){
   }else card.innerHTML='<div class="ty" style="margin:0">Aucune unité sélectionnée.</div>';
   if(over)hint.textContent='La bataille est terminée. Le rapport est prêt à être recopié.';
   else if(orbMode)hint.textContent='Cliquez la zone à frapper. Attention : la frappe touche aussi vos propres troupes.';
-  else if(phase==='enemy')hint.textContent='Les insurgés manœuvrent et ouvrent le feu…';
+  else if(phase==='enemy')hint.textContent='Les ennemis manœuvrent et ouvrent le feu…';
   else if(!sel)hint.textContent='Sélectionnez une de vos unités sur la carte ou dans la liste.';
   else if(sel.moved&&sel.acted)hint.textContent='Ordres exécutés. Choisissez une autre unité ou terminez le tour.';
   else if(sel.T.indirect&&!sel.acted&&!sel.moved)hint.textContent='L’artillerie tire de très loin, mais seulement si elle ne bouge pas ce tour-ci.';
@@ -2205,7 +2263,7 @@ function drawHover(){
     const d=moveDest(sel,hover);
     g.strokeStyle='rgba(232,171,82,.75)';g.setLineDash([4,6]);g.lineWidth=1.5;g.beginPath();g.moveTo(sel.x,sel.y);g.lineTo(d.x,d.y);g.stroke();g.setLineDash([]);
     g.strokeStyle='rgba(232,171,82,.95)';g.beginPath();g.arc(d.x,d.y,sel.r*.7,0,7);g.stroke();
-    const tags=[sel.T.inf&&coverAt(d.x,d.y)&&('COUVERT : '+COVER[coverAt(d.x,d.y)].label.toUpperCase()),onHill(d.x,d.y)&&'COLLINE : PORTÉE +20 %',Math.hypot(d.x-OBJ.x,d.y-OBJ.y)<OBJ.r&&'ZONE DU GÉNÉRATEUR'].filter(Boolean);
+    const tags=[sel.T.inf&&coverAt(d.x,d.y)&&('COUVERT : '+COVER[coverAt(d.x,d.y)].label.toUpperCase()),onHill(d.x,d.y)&&'COLLINE : PORTÉE +20 %',MODE==='assaut'&&Math.hypot(d.x-OBJ.x,d.y-OBJ.y)<OBJ.r&&'ZONE DU GÉNÉRATEUR'].filter(Boolean);
     g.font='600 13px "Chakra Petch",sans-serif';g.textAlign='center';
     tags.forEach((t,i)=>{g.fillStyle='rgba(0,0,0,.6)';g.fillText(t,d.x+1,d.y+sel.r*.7+19+i*16);g.fillStyle='#e8ab52';g.fillText(t,d.x,d.y+sel.r*.7+18+i*16);});
   }
@@ -2214,7 +2272,7 @@ function frame(now){if(window.__ENG!=="ground"){requestAnimationFrame(frame);ret
   anims=anims.filter(f=>!f(now));
   ctx.setTransform(scale,0,0,scale,0,0);ctx.clearRect(0,0,W,H);
   if(bg)ctx.drawImage(bg,0,0,W,H);
-  drawGenerator(now);
+  if(MODE==='assaut')drawGenerator(now);
   drawOverlays(now);
   for(const u of units)if(u.alive)drawUnit(u,now);
   drawFx(now);drawHover();
@@ -2224,8 +2282,10 @@ newBattle();
 requestAnimationFrame(frame);
 window.ENGINES=window.ENGINES||{};
 window.ENGINES.ground={start(){const C=window.__CFG&&window.__CFG.ground;const sec=document.getElementById('eng-ground');
+  BIOME=BIOMES[C&&C.terrain]||BIOMES.tempere;MODE=C&&['assaut','elimination','defense'].includes(C.mode)?C.mode:'assaut';HOLD=C&&C.hold||6;
   if(C){sec.querySelector('h1').textContent=C.title||'Bataille terrestre';sec.querySelector('.eyebrow').textContent='Bataille terrestre';
-    sec.querySelector('.brief').textContent=`Anéantissez l’ennemi ou tenez le générateur deux tours d’affilée. Si l’escouade de ${C.commander||'commandement'} tombe, l’assaut échoue.`;}
+    const cmd=`Si l’escouade de ${C.commander||'commandement'} tombe, la bataille est perdue.`;
+    sec.querySelector('.brief').textContent=MODE==='defense'?`Tenez la position jusqu’au tour ${HOLD} face à un ennemi plus nombreux. ${cmd}`:MODE==='elimination'?`Anéantissez l’ennemi ou mettez-le en déroute. ${cmd}`:`Anéantissez l’ennemi ou tenez le générateur deux tours d’affilée. ${cmd}`;}
   newBattle();resize();}};
 })();
 
@@ -2554,7 +2614,57 @@ function muzzleWorld(f){const J=f._J||solve(f,performance.now());return toWorld(
 
 /* ---------- Décor ---------- */
 let bg=null,rain=[],cars=[];
+/* Décors de combat : les toits de Nar Shaddaa et six autres lieux */
+const DUEL_SCENES={
+  toits:{label:'Toits sous la pluie',part:'rain',refl:.22},
+  temple:{label:'Temple ancien',sky:['#0c0a08','#2a1e14','#5a3a1e'],glow:'255,170,90',kind:'pillars',floor:['#3a2c20','#120c08'],line:'rgba(255,200,140,.08)',part:'dust',refl:.12},
+  desert:{label:'Désert',sky:['#3a1a10','#b8572a','#f0b060'],glow:'255,200,120',sun:true,kind:'mesas',floor:['#b58350','#5a3a20'],line:null,part:'dust',refl:0},
+  foret:{label:'Forêt',sky:['#06100a','#14301c','#2c5a32'],glow:'150,230,140',kind:'trees',floor:['#26361c','#0c1408'],line:null,part:'leaf',refl:0},
+  vaisseau:{label:'Coursive de vaisseau',sky:['#05070c','#101824','#1c2a3a'],glow:'120,180,255',kind:'panels',floor:['#2a3038','#0c0f13'],line:'rgba(160,200,255,.10)',part:null,refl:.16},
+  glace:{label:'Monde de glace',sky:['#0c1420','#3a5878','#a8c4dc'],glow:'220,240,255',kind:'peaks',floor:['#c8d6e2','#5a6a7a'],line:'rgba(255,255,255,.10)',part:'snow',refl:.18},
+  lave:{label:'Monde volcanique',sky:['#0a0404','#3a0c06','#a02a0a'],glow:'255,110,40',kind:'cliffs',floor:['#2a1410','#0a0404'],line:'rgba(255,120,60,.10)',part:'ember',refl:.08}
+};
+let DSC='toits';
 function renderBG(){
+  if(DSC==='toits'||!DUEL_SCENES[DSC])return renderToits();
+  const S=DUEL_SCENES[DSC];bg=document.createElement('canvas');bg.width=W;bg.height=H;const g=bg.getContext('2d');cars=[];
+  const sky=g.createLinearGradient(0,0,0,FLOOR);sky.addColorStop(0,S.sky[0]);sky.addColorStop(.6,S.sky[1]);sky.addColorStop(1,S.sky[2]);g.fillStyle=sky;g.fillRect(0,0,W,H);
+  if(S.kind!=='panels')for(let i=0;i<(S.kind==='trees'?0:160);i++){g.fillStyle=`rgba(255,255,255,${rnd(.05,.4)*(1-i/200)})`;g.fillRect(rnd(0,W),rnd(0,FLOOR*.45),1.2,1.2);}
+  const glow=g.createRadialGradient(W*.62,FLOOR-60,20,W*.62,FLOOR-60,900);glow.addColorStop(0,`rgba(${S.glow},.35)`);glow.addColorStop(1,`rgba(${S.glow},0)`);g.fillStyle=glow;g.fillRect(0,0,W,H);
+  if(S.sun){const sg=g.createRadialGradient(W*.62,FLOOR-210,0,W*.62,FLOOR-210,90);sg.addColorStop(0,'rgba(255,240,200,1)');sg.addColorStop(.5,'rgba(255,200,120,.7)');sg.addColorStop(1,'rgba(255,170,90,0)');g.fillStyle=sg;g.fillRect(0,0,W,H);
+    g.fillStyle='rgba(255,236,190,.9)';g.beginPath();g.arc(W*.7,FLOOR-330,22,0,7);g.fill();}
+  const ridge=(base,amp,col,step,flat)=>{g.fillStyle=col;g.beginPath();g.moveTo(0,FLOOR);let y=base;for(let x=0;x<=W+step;x+=step){y=Math.max(base-amp,Math.min(base,y+rnd(-amp*.4,amp*.4)));if(flat&&Math.random()<.4){g.lineTo(x,y);x+=step;}g.lineTo(x,y);}g.lineTo(W,FLOOR);g.closePath();g.fill();};
+  if(S.kind==='mesas'){ridge(FLOOR-120,220,'rgba(120,52,30,.55)',60,true);ridge(FLOOR-60,140,'rgba(80,34,20,.8)',80,true);}
+  if(S.kind==='peaks'){g.lineJoin='miter';ridge(FLOOR-160,300,'rgba(150,175,200,.6)',45,false);ridge(FLOOR-70,180,'rgba(90,112,138,.85)',55,false);}
+  if(S.kind==='cliffs'){ridge(FLOOR-120,260,'rgba(30,10,8,.85)',40,false);ridge(FLOOR-50,150,'rgba(14,5,4,.95)',50,false);
+    for(let i=0;i<7;i++){const x=rnd(0,W);const lg=g.createLinearGradient(x,FLOOR-260,x,FLOOR);lg.addColorStop(0,'rgba(255,120,40,0)');lg.addColorStop(1,'rgba(255,120,40,.5)');g.fillStyle=lg;g.fillRect(x,FLOOR-260,rnd(3,8),260);}}
+  if(S.kind==='trees'){for(let layer=0;layer<3;layer++){const a=[.35,.6,.9][layer],c=[[30,60,36],[18,40,22],[8,20,10]][layer];
+      for(let i=0;i<14-layer*3;i++){const x=rnd(-40,W),w=rnd(18,40)*(1+layer*.5);g.fillStyle=`rgba(${c},${a})`;g.fillRect(x,0,w,FLOOR);
+        for(let k=0;k<5;k++){g.beginPath();g.ellipse(x+w/2+rnd(-80,80),rnd(0,FLOOR*.5),rnd(60,140),rnd(40,90),0,0,7);g.fill();}}}
+    for(let i=0;i<9;i++){const x=rnd(0,W);const lg=g.createLinearGradient(x,0,x+120,FLOOR);lg.addColorStop(0,'rgba(200,255,180,.10)');lg.addColorStop(1,'rgba(200,255,180,0)');g.fillStyle=lg;g.beginPath();g.moveTo(x,0);g.lineTo(x+40,0);g.lineTo(x+200,FLOOR);g.lineTo(x+120,FLOOR);g.fill();}}
+  if(S.kind==='pillars'){for(let i=0;i<8;i++){const x=i*W/7-30+rnd(-20,20),w=rnd(70,96),top=rnd(70,150);
+      const pg=g.createLinearGradient(x,0,x+w,0);pg.addColorStop(0,'#2a1e14');pg.addColorStop(.35,'#6a5038');pg.addColorStop(1,'#1a120c');g.fillStyle=pg;g.fillRect(x,top,w,FLOOR-top);
+      g.fillStyle='#4a3826';g.fillRect(x-10,top-18,w+20,18);g.fillRect(x-8,FLOOR-24,w+16,24);
+      g.strokeStyle='rgba(0,0,0,.25)';g.lineWidth=2;for(let k=1;k<4;k++){g.beginPath();g.moveTo(x+k*w/4,top);g.lineTo(x+k*w/4,FLOOR-24);g.stroke();}
+      if(Math.random()<.4){g.fillStyle='rgba(0,0,0,.35)';g.beginPath();g.moveTo(x+rnd(0,w),top+rnd(40,200));g.lineTo(x+w,top+rnd(60,300));g.lineTo(x+w,top+rnd(300,400));g.fill();}}
+    g.fillStyle='rgba(20,14,10,.9)';g.fillRect(0,0,W,50);}
+  if(S.kind==='panels'){g.fillStyle='#0e131a';g.fillRect(0,0,W,90);
+    const vg=g.createLinearGradient(0,150,0,520);vg.addColorStop(0,'#020308');vg.addColorStop(1,'#08101e');g.fillStyle=vg;g.fillRect(260,150,1080,370);
+    for(let i=0;i<220;i++){g.fillStyle=`rgba(255,255,255,${rnd(.2,.9)})`;g.fillRect(260+rnd(0,1080),150+rnd(0,370),1.3,1.3);}
+    const pl=g.createRadialGradient(1100,560,40,1100,560,300);pl.addColorStop(0,'rgba(90,140,200,.8)');pl.addColorStop(1,'rgba(90,140,200,0)');g.fillStyle=pl;g.fillRect(260,150,1080,370);
+    g.strokeStyle='#2a3440';g.lineWidth=14;g.strokeRect(260,150,1080,370);for(let x=260+216;x<1340;x+=216){g.beginPath();g.moveTo(x,150);g.lineTo(x,520);g.stroke();}
+    for(let x=0;x<W;x+=130){g.fillStyle='#161d26';g.fillRect(x,90,8,FLOOR-90);g.fillStyle='rgba(120,180,255,.75)';g.fillRect(x-30,96,60,4);}
+    g.fillStyle='#1a222c';g.fillRect(0,520,W,FLOOR-520);for(let x=20;x<W;x+=90){g.fillStyle='#232c37';g.fillRect(x,540,70,FLOOR-560);g.fillStyle=Math.random()<.3?'rgba(255,80,80,.8)':'rgba(120,255,160,.6)';g.fillRect(x+8,550,6,3);}}
+  const fl=g.createLinearGradient(0,FLOOR,0,H);fl.addColorStop(0,S.floor[0]);fl.addColorStop(1,S.floor[1]);g.fillStyle=fl;g.fillRect(0,FLOOR,W,H-FLOOR);
+  if(S.line){g.strokeStyle=S.line;g.lineWidth=1;for(let i=1;i<7;i++){const y=FLOOR+Math.pow(i/7,1.6)*(H-FLOOR);g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke();}for(let i=-10;i<=10;i++){g.beginPath();g.moveTo(800+i*60,FLOOR);g.lineTo(800+i*220,H);g.stroke();}}
+  if(S.kind==='trees'||S.kind==='mesas'){for(let i=0;i<500;i++){g.fillStyle=S.kind==='trees'?`rgba(${rint(40,90)},${rint(80,130)},${rint(30,60)},.5)`:'rgba(90,60,30,.25)';g.fillRect(rnd(0,W),rnd(FLOOR,H),rnd(2,5),rnd(1,3));}}
+  if(S.kind==='cliffs'){for(let i=0;i<6;i++){const x=rnd(0,W),y=rnd(FLOOR+20,H-20);g.strokeStyle='rgba(255,120,40,.5)';g.lineWidth=2;g.beginPath();g.moveTo(x,y);for(let k=1;k<5;k++)g.lineTo(x+k*rnd(20,50),y+rnd(-8,8));g.stroke();}}
+  g.fillStyle=`rgba(${S.glow},.25)`;g.fillRect(0,FLOOR,W,1.5);
+  const v=g.createRadialGradient(W/2,H/2,H*.4,W/2,H/2,H*1.05);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.55)');g.fillStyle=v;g.fillRect(0,0,W,H);
+  const n={dust:70,snow:220,leaf:40,ember:90}[S.part]||0;
+  rain=Array.from({length:n},()=>({x:rnd(0,W),y:rnd(0,H),v:S.part==='snow'?rnd(40,110):S.part==='ember'?-rnd(30,90):rnd(15,45),l:rnd(1.2,3.2),p:rnd(0,7)}));
+}
+function renderToits(){
   bg=document.createElement('canvas');bg.width=W;bg.height=H;const g=bg.getContext('2d');
   let sky=g.createLinearGradient(0,0,0,FLOOR);sky.addColorStop(0,'#07040c');sky.addColorStop(.55,'#1a0a1c');sky.addColorStop(1,'#3d0f24');g.fillStyle=sky;g.fillRect(0,0,W,H);
   const haze=g.createRadialGradient(800,FLOOR-80,40,800,FLOOR-80,900);haze.addColorStop(0,'rgba(255,60,120,.28)');haze.addColorStop(1,'rgba(255,60,120,0)');g.fillStyle=haze;g.fillRect(0,0,W,H);
@@ -3102,13 +3212,16 @@ function frame(now){if(window.__ENG!=="duel"){requestAnimationFrame(frame);retur
   ctx.setTransform(scale,0,0,scale,0,0);ctx.clearRect(0,0,W,H);
   if(bg)ctx.drawImage(bg,0,0,W,H);
   for(const c of cars){c.x+=c.v*dt;if(c.x>W+60)c.x=-60;if(c.x<-60)c.x=W+60;ctx.save();ctx.globalCompositeOperation='lighter';const gr=ctx.createLinearGradient(c.x,0,c.x-c.v*.5,0);gr.addColorStop(0,`rgba(${c.c},.9)`);gr.addColorStop(1,`rgba(${c.c},0)`);ctx.strokeStyle=gr;ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(c.x,c.y);ctx.lineTo(c.x-c.v*.5,c.y);ctx.stroke();ctx.restore();}
-  ctx.save();ctx.beginPath();ctx.rect(0,FLOOR,W,H-FLOOR);ctx.clip();ctx.globalAlpha=.22;ctx.translate(0,2*FLOOR);ctx.scale(1,-1);drawScene(list,now,true);ctx.restore();ctx.globalAlpha=1;
+  const SC=DUEL_SCENES[DSC]||DUEL_SCENES.toits;
+  if(SC.refl){ctx.save();ctx.beginPath();ctx.rect(0,FLOOR,W,H-FLOOR);ctx.clip();ctx.globalAlpha=SC.refl;ctx.translate(0,2*FLOOR);ctx.scale(1,-1);drawScene(list,now,true);ctx.restore();ctx.globalAlpha=1;}
   drawScene(list,now,false);
   if(view==='combat')drawFx(now);
   drawLabels(list);
   if(view==='setup'){ctx.font='600 15px "Chakra Petch",sans-serif';ctx.textAlign='center';ctx.fillStyle='rgba(226,219,224,.55)';ctx.fillText('CLIQUEZ UN COMBATTANT POUR MODIFIER SA FICHE',W/2,H-30);}
-  ctx.strokeStyle='rgba(220,200,230,.22)';ctx.lineWidth=1.1;ctx.beginPath();
-  for(const r of rain){r.y+=r.v*dt;r.x-=r.v*dt*.12;if(r.y>H){r.y=-20;r.x=rnd(0,W+100);}ctx.moveTo(r.x,r.y);ctx.lineTo(r.x+r.l*.12,r.y-r.l);}ctx.stroke();
+  if(SC.part==='rain'){ctx.strokeStyle='rgba(220,200,230,.22)';ctx.lineWidth=1.1;ctx.beginPath();
+  for(const r of rain){r.y+=r.v*dt;r.x-=r.v*dt*.12;if(r.y>H){r.y=-20;r.x=rnd(0,W+100);}ctx.moveTo(r.x,r.y);ctx.lineTo(r.x+r.l*.12,r.y-r.l);}ctx.stroke();}
+  else if(SC.part){ctx.fillStyle=SC.part==='snow'?'rgba(255,255,255,.75)':SC.part==='ember'?'rgba(255,150,60,.85)':SC.part==='leaf'?'rgba(150,200,110,.6)':'rgba(240,200,150,.35)';
+    for(const r of rain){r.p+=dt;r.y+=r.v*dt;r.x+=(SC.part==='dust'?40:Math.sin(r.p*1.3)*20)*dt;if(r.y>H)r.y=-10;if(r.y<-10)r.y=H;if(r.x>W)r.x=0;ctx.fillRect(r.x,r.y,r.l,r.l);}}
   drawPreview(now);
   requestAnimationFrame(frame);
 }
@@ -3119,6 +3232,7 @@ requestAnimationFrame(frame);
 window.ENGINES=window.ENGINES||{};
 window.ENGINES.duel={start(){const C=window.__CFG&&window.__CFG.duel;const sec=document.getElementById('eng-duel');
     if(!C)return;sec.querySelector('h1').textContent=C.title||'Combat';sec.querySelector('.eyebrow').textContent='Combat rapproché';
+    DSC=DUEL_SCENES[C.decor]?C.decor:'toits';renderBG();
     roster={p:C.p.map(f=>({...clone(f),side:'p'})),e:C.e.map(f=>({...clone(f),side:'e'}))};startCombat();resize();},
   preview(canvas,get){let f=null,last='';const g=canvas.getContext('2d');
     function loop(now){if(!canvas.isConnected)return;let fc=null;try{fc=get();}catch(e){}
@@ -3154,6 +3268,11 @@ const SKILLS=[['sabre','Sabre / mêlée'],['tir','Tir'],['pilotage','Pilotage'],
 const SKL=Object.fromEntries(SKILLS);
 const POOL=26,BASE=8,MAXSK=16;
 const SHIP_T={cruiser:'Croiseur',frigate:'Frégate',fighters:'Escadron de chasseurs'};
+const DIFF={facile:{l:'Facile',k:.75},normal:{l:'Normale',k:1},difficile:{l:'Difficile',k:1.25},brutal:{l:'Brutale',k:1.5}};
+const DECOR_SPACE={planete:'Orbite planétaire',espace:'Espace profond',asteroides:'Champ d’astéroïdes',nebuleuse:'Nébuleuse'};
+const TERRAIN={tempere:'Plaines tempérées',desert:'Désert',neige:'Toundra enneigée',urbain:'Ruines urbaines',jungle:'Jungle',volcan:'Monde volcanique'};
+const OBJECTIF={assaut:'Prendre le générateur',elimination:'Anéantir l’ennemi',defense:'Tenir la position'};
+const DECOR_DUEL={toits:'Toits sous la pluie',temple:'Temple ancien',desert:'Désert',foret:'Forêt',vaisseau:'Coursive de vaisseau',glace:'Monde de glace',lave:'Monde volcanique'};
 const TROOP_T={inf:'Escouade d’assaut',tank:'Char lourd',art:'Artillerie',speed:'Éclaireurs motorisés'};
 const FORMS={none:'Aucune',shiicho:'Shii-Cho',makashi:'Makashi',soresu:'Soresu',ataru:'Ataru',shien:'Djem So / Shien',niman:'Niman',juyo:'Juyo / Vaapad'};
 const TECHS={trakata:'Trakata',jarkai:'Jar’Kai',cortosis:'Gantelets de cortosis',rapid:'Tir rapide',grenades:'Grenades'};
@@ -3304,7 +3423,7 @@ function trimState(s){const c=clone(s);if(c.feed.length>140)c.feed=c.feed.slice(
 let S=null,draft=null,step=0,busyMJ=false,abortCtl=null;
 function newDraft(){
   const d={era:'dark',year:'',path:null,hero:{name:'',species:'Humain',age:'',origin:'',trait:'',flaw:'',secret:'',force:false,side:'sith',skills:{},rolled:false,lookKey:'smuggler',weapon:'pistol',blade1:'#ff2b2b',blade2:'#ff2b2b',bolt:'#ff4a3a',form:'none',tech:[],look:null},
-    res:{credits:0,ship:'',fleet:[],troops:[],companions:[]},zero:{themes:[],ambition:'',tone:'sombre',dosage:50,canon:'discret',free:''}};
+    res:{credits:0,ship:'',fleet:[],troops:[],companions:[]},zero:{themes:[],ambition:'',tone:'sombre',dosage:50,canon:'discret',free:'',diff:'normal'}};
   SKILLS.forEach(([k])=>d.hero.skills[k]=BASE);
   return d;
 }
@@ -3398,6 +3517,7 @@ function renderStep(){
         <div class="fld"><span>Ton</span><div class="chipset">${TONES.map(([k,l])=>`<button type="button" data-tone="${k}" class="${z.tone===k?'on':''}">${l}</button>`).join('')}</div></div>
         <div class="fld"><span>Le canon</span><div class="chipset">${CANON.map(([k,l])=>`<button type="button" data-canon="${k}" class="${z.canon===k?'on':''}">${l}</button>`).join('')}</div></div>
       </div>
+      <div class="fld"><span>Difficulté des combats</span><div class="chipset">${Object.entries(DIFF).map(([k,d])=>`<button type="button" data-diff="${k}" class="${(z.diff||'normal')===k?'on':''}">${d.l}</button>`).join('')}</div></div>
       <label class="fld"><span>Dosage : <b id="zDoseL">${doseLabel(z.dosage)}</b></span><input type="range" id="zDose" min="0" max="100" step="10" value="${z.dosage}" style="accent-color:var(--amber)"></label>
       <label class="fld"><span>Raconte en quelques lignes ce que tu imagines (facultatif)</span><textarea id="zFree" rows="3" maxlength="1200">${esc(z.free)}</textarea></label>`;
   }
@@ -3451,6 +3571,7 @@ $('stepBody').addEventListener('click',e=>{
   else if(t.dataset.theme){readStep();const z=draft.zero;const th=t.dataset.theme;z.themes=z.themes.includes(th)?z.themes.filter(x=>x!==th):[...z.themes,th];renderStep();}
   else if(t.dataset.tone){readStep();draft.zero.tone=t.dataset.tone;renderStep();}
   else if(t.dataset.canon){readStep();draft.zero.canon=t.dataset.canon;renderStep();}
+  else if(t.dataset.diff){readStep();draft.zero.diff=t.dataset.diff;renderStep();}
 });
 $('stepBody').addEventListener('change',e=>{
   if(step===1&&(e.target.id==='cForce'||e.target.id==='cSide')){readStep();renderStep();}
@@ -3490,7 +3611,7 @@ const hullLabel=f=>f>=1?'intact':f>=.6?'endommagé':f>=.3?'lourdement endommagé
 const troopLabel=f=>f>=1?'au complet':f>=.6?'éprouvée':f>=.3?'décimée':'presque anéantie';
 const frac=v=>v==null?1:Math.max(0,Math.min(1,+v));
 const pct=f=>Math.round(frac(f)*100)+' %';
-const REPAIR={cruiser:8000,frigate:4000,fighters:2000};
+const REPAIR={cruiser:8000,frigate:4000,fighters:2000,freighter:3000};
 const REINF={inf:3000,tank:6000,art:5000,speed:2000};
 const BUY_SHIP={cruiser:40000,frigate:15000,fighters:6000};
 const BUY_TROOP={inf:5000,tank:14000,art:10000,speed:4000};
@@ -3517,6 +3638,7 @@ function manage(kind,key,name){
   if(!canManage())return;const r=S.res;let cost=0,txt='';
   if(kind==='medic'){cost=medicCost();if(!cost||r.credits<cost)return;healAll();txt=`Soins médicaux pour ${S.hero.name}${r.companions.length?' et ses compagnons':''}`;}
   else if(kind==='repair'){const sh=r.fleet[+key];if(!sh)return;cost=Math.round((1-frac(sh.hull))*REPAIR[sh.type]);if(!cost||r.credits<cost)return;sh.hull=1;txt=`Réparations du ${sh.name}`;}
+  else if(kind==='shiprep'){cost=Math.round((1-frac(r.shipHull))*REPAIR.freighter);if(!cost||r.credits<cost)return;r.shipHull=1;txt=`Réparations du ${r.ship}`;}
   else if(kind==='reinf'){const tr=r.troops[+key];if(!tr)return;cost=Math.round((1-frac(tr.hp))*REINF[tr.type]);if(!cost||r.credits<cost)return;tr.hp=1;txt=`Renforts pour ${tr.name}`;}
   else if(kind==='buyship'){cost=BUY_SHIP[key];if(!cost||r.credits<cost||r.fleet.length>=8)return;name=(name||'').trim().slice(0,30)||'Nouveau '+SHIP_T[key].toLowerCase();r.fleet.push({type:key,name,flag:!r.fleet.length,hull:1});txt=`Acquisition : ${SHIP_T[key]} ${name}`;}
   else if(kind==='buytroop'){cost=BUY_TROOP[key];if(!cost||r.credits<cost||r.troops.length>=7)return;name=(name||'').trim().slice(0,30)||TROOP_T[key];r.troops.push({type:key,name,hp:1});txt=`Recrutement : ${TROOP_T[key]} ${name}`;}
@@ -3559,7 +3681,41 @@ function migrate(s){
   if(!Array.isArray(s.chapters))s.chapters=[];if(s.playerNotes==null)s.playerNotes='';
   s.res.fleet.forEach(x=>{if(x.hull==null)x.hull=1;});s.res.troops.forEach(x=>{if(x.hp==null)x.hp=1;});s.res.companions.forEach(x=>{if(x.hp==null)x.hp=1;});
   if(!Array.isArray(s.hero.forms))s.hero.forms=['none',...(s.hero.form&&s.hero.form!=='none'?[s.hero.form]:[])];
+  if(!s.zero.diff)s.zero.diff='normal';if(s.res.ship&&s.res.shipHull==null)s.res.shipHull=1;
   if(s.xp==null)s.xp=0;if(s.destiny==null)s.destiny=3;if(s.bookPart==null)s.bookPart=0;return s;
+}
+
+/* ================= Équilibrage des combats ================= */
+const SHIP_COST={cruiser:4,frigate:2,fighters:1,freighter:2},TROOP_COST={cmd:2,inf:2,tank:4,art:3,speed:1},FOE_COST={einf:2,eat:2,eltank:3,eturret:3};
+const diffK=()=>DIFF[(S.zero&&S.zero.diff)||'normal'].k;
+function trimTo(list,cost,target,fill,max){
+  let E=list.reduce((a,x)=>a+cost(x),0);
+  while(E>target*1.25&&list.length>1){let i=0;list.forEach((x,j)=>{if(cost(x)>=cost(list[i]))i=j;});E-=cost(list[i]);list.splice(i,1);}
+  let n=1;while(E<target*.7&&list.length<max){const f=fill(n++);list.push(f);E+=cost(f);}
+}
+function balanceFleet(c){
+  const k=diffK();
+  if(c.type==='space'||c.type==='ship'){
+    const ok=c.type==='ship'?['fighters','freighter','frigate']:Object.keys(SHIP_COST);
+    c.enemies=c.enemies.filter(x=>x&&ok.includes(x.type)).map(x=>({type:x.type,name:String(x.name||'Vaisseau ennemi').slice(0,30)}));
+    const P=c.type==='ship'?2*(1+Math.max(0,(S.hero.skills.pilotage-10)*.05)):S.res.fleet.reduce((a,s)=>a+SHIP_COST[s.type],0);
+    trimTo(c.enemies,x=>SHIP_COST[x.type],P*k,n=>({type:'fighters',name:`Renforts ${n}`}),c.type==='ship'?4:7);
+  }else if(c.type==='ground'){
+    c.enemies=c.enemies.filter(x=>x&&FOE_COST[x.type]).map(x=>({type:x.type,name:String(x.name||'Ennemis').slice(0,30)}));
+    if(c.enemies.filter(x=>x.type==='eturret').length>2){let t=0;c.enemies=c.enemies.filter(x=>x.type!=='eturret'||++t<=2);}
+    if(c.objectif!=='assaut')c.enemies=c.enemies.filter(x=>x.type!=='eturret');
+    const P=TROOP_COST.cmd+S.res.troops.slice(0,7).reduce((a,s)=>a+TROOP_COST[s.type],0);
+    const mob=c.enemies.filter(x=>x.type!=='eturret'),tur=c.enemies.filter(x=>x.type==='eturret');
+    const target=P*k*(c.objectif==='defense'?1.4:1)-tur.length*FOE_COST.eturret;
+    trimTo(mob,x=>FOE_COST[x.type],Math.max(2,target),n=>({type:n%3?'einf':'eat',name:`Renforts ${n}`}),6);
+    c.enemies=[...mob,...tur];
+  }
+}
+const fPow=f=>(f.pvMax||f.pv)*Math.max(1,Math.max(f.sabre,f.tir)-6)*(1+(f.fp||0)*.08);
+function balanceDuel(p,e){
+  const P=p.reduce((a,f)=>a+fPow(f),0),E=e.reduce((a,f)=>a+fPow(f),0);if(!E)return;
+  const m=Math.max(.6,Math.min(1.5,P*diffK()/E));
+  e.forEach(f=>{f.pv=Math.max(8,Math.min(70,Math.round(f.pv*m)));});
 }
 
 /* ================= Le MJ ================= */
@@ -3581,13 +3737,13 @@ function heroBlock(){
 }
 function resBlock(){
   const r=S.res;
-  return[`Crédits : ${r.credits}`,`Vaisseau personnel : ${r.ship||'aucun'}`,
+  return[`Crédits : ${r.credits}`,`Vaisseau personnel : ${r.ship?`${r.ship} (coque ${pct(r.shipHull)}) — combat "ship" possible`:'aucun'}`,
     `Flotte : ${r.fleet.length?r.fleet.map(s=>`${s.name} (${s.type}, coque ${pct(s.hull)})`).join(', '):'aucune (pas de bataille spatiale possible)'}`,
     `Troupes : ${r.troops.length?r.troops.map(s=>`${s.name} (${s.type}, effectifs ${pct(s.hp)})`).join(', '):'aucune (pas de bataille terrestre possible)'}`,
     `Compagnons : ${r.companions.length?r.companions.map(c=>`${c.name} [modèle ${c.preset}, ${hurtLabel(frac(c.hp))}]${c.note?' — '+c.note:''}`).join(' ; '):'aucun'}`,
     `Notes : ${(r.notes||[]).slice(-20).join(' | ')||'—'}`].join('\n');
 }
-function zeroBlock(){const z=S.zero;return[`Thèmes voulus : ${z.themes.join(', ')}`,`Ambition : ${z.ambition||'—'}`,`Ton : ${TONES.find(t=>t[0]===z.tone)[1]}`,`Dosage : ${doseLabel(z.dosage)}`,`Canon : ${CANON.find(c=>c[0]===z.canon)[1]}`,`Ce que le joueur imagine : ${z.free||'—'}`].join('\n');}
+function zeroBlock(){const z=S.zero;return[`Thèmes voulus : ${z.themes.join(', ')}`,`Ambition : ${z.ambition||'—'}`,`Ton : ${TONES.find(t=>t[0]===z.tone)[1]}`,`Dosage : ${doseLabel(z.dosage)}`,`Canon : ${CANON.find(c=>c[0]===z.canon)[1]}`,`Difficulté des combats : ${DIFF[z.diff||'normal'].l} (le jeu ajuste lui-même la force des ennemis)`,`Ce que le joueur imagine : ${z.free||'—'}`].join('\n');}
 function recentBlock(){
   const out=[];let n=0;
   for(let i=S.feed.length-1;i>=0&&n<9;i--){const e=S.feed[i];
@@ -3605,7 +3761,7 @@ Principes :
 - Ne décide jamais à la place du joueur de ses actions ou de ses paroles importantes. Termine chaque réponse sur une situation ouverte.
 - Dialogues vivants et incarnés (le joueur les adore), descriptions sensorielles courtes. Ton et dosage selon la session zéro.
 - Jets : système 3d6 sous la compétence. Modificateurs : facile +2, normal 0, difficile −2, très difficile −4, presque impossible −6. Ne demande un jet que si l’issue est incertaine ET qu’elle compte.
-- Combats : ne déclenche un combat jouable que si l’histoire y mène vraiment et que l’affrontement mérite d’être joué. Choisis le type selon la situation et les ressources : "duel" pour tout combat à échelle humaine (sabres et/ou blasters), "space" seulement si le joueur a une flotte, "ground" seulement s’il a des troupes. Équilibre la difficulté avec la puissance du joueur et ses compagnons.
+- Combats : ne déclenche un combat jouable que si l’histoire y mène vraiment et que l’affrontement mérite d’être joué. Choisis le type selon la situation et les ressources : "duel" pour tout combat à échelle humaine (sabres et/ou blasters), "ship" pour un combat du vaisseau personnel du joueur (s’il en a un), "space" seulement si le joueur a une flotte, "ground" seulement s’il a des troupes. Choisis un décor et un objectif cohérents avec le lieu de la scène. Équilibre la difficulté avec la puissance du joueur et ses compagnons.
 - Après un rapport de combat ou un résultat de jet, raconte les conséquences en restant exactement fidèle au résultat.
 - Les blessures et les dégâts durent : un personnage blessé, une flotte abîmée ou des troupes décimées le restent jusqu’à des soins, des réparations ou des renforts. Tiens-en compte dans le récit et dans la difficulté. Le joueur paie lui-même soins, réparations et recrues depuis sa fiche (lignes INTENDANCE) ; accorde "heal" seulement quand le récit apporte vraiment du repos ou des soins.
 - Expérience : 0 pour une scène ordinaire (la plupart), 1 pour un accomplissement notable ou une belle idée du joueur, 2 ou 3 pour une grande victoire ou la fin d’un arc. Les lignes PROGRESSION indiquent ce que le joueur a appris.
@@ -3617,10 +3773,11 @@ const FORMAT=`FORMAT DE RÉPONSE OBLIGATOIRE :
 {"choices":["…","…","…"],"test":null,"combat":null,"updates":null,"codex":null,"chronicle":"…","chapter":null,"secret":null}
 - choices : 3 actions courtes (moins de 12 mots) que le joueur pourrait tenter maintenant.
 - test : si l’action est risquée et incertaine : {"skill":"<clé>","mod":<entier de -6 à 2>,"why":"<raison courte>"}. Clés : sabre, tir, pilotage, commandement, discretion, persuasion, intimidation, technique, perception, athletisme, force (force seulement si le personnage est sensible à la Force). Dans ce cas, arrête la narration juste avant l’issue, ne la raconte pas, et mets "choices":[].
-- combat : si un affrontement doit être joué : {"type":"duel"|"space"|"ground","title":"<titre court>","briefing":"<2 phrases>","allies":[…],"enemies":[…]}. Arrête la narration au moment où le combat éclate et mets "choices":[].
-  · duel : "allies" = noms de compagnons existants (3 au plus, présents dans la scène). "enemies" = 1 à 4 objets {"name":"…","preset":"<modèle>","blade":"#rrggbb (facultatif)","form":"<forme facultative>","pv":<facultatif 10-60>}. Modèles : sithLord, sithWarrior, sithAcolyte, inquisitor, jediMaster, jediKnight, jediWarrior, smuggler, bountyHunter, trooper, officer, thug, guard, assassin. Formes : shiicho, makashi, soresu, ataru, shien, niman, juyo.
-  · space : "enemies" = 2 à 7 objets {"type":"cruiser"|"frigate"|"fighters","name":"…"}.
-  · ground : "enemies" = 2 à 6 objets {"type":"einf"|"eat"|"eltank"|"eturret","name":"…"} (fantassins, équipe antichar, char léger, tourelle).
+- combat : si un affrontement doit être joué : {"type":"duel"|"ship"|"space"|"ground","title":"<titre court>","briefing":"<2 phrases>","allies":[…],"enemies":[…],"decor":"…"}. Arrête la narration au moment où le combat éclate et mets "choices":[]. Le jeu ajuste lui-même la force des ennemis à la difficulté choisie : décris l’adversité que l’histoire appelle.
+  · duel : "allies" = noms de compagnons existants (3 au plus, présents dans la scène). "enemies" = 1 à 4 objets {"name":"…","preset":"<modèle>","blade":"#rrggbb (facultatif)","form":"<forme facultative>","pv":<facultatif 10-60>}. Modèles : sithLord, sithWarrior, sithAcolyte, inquisitor, jediMaster, jediKnight, jediWarrior, smuggler, bountyHunter, trooper, officer, thug, guard, assassin. Formes : shiicho, makashi, soresu, ataru, shien, niman, juyo. "decor" : toits, temple, desert, foret, vaisseau, glace ou lave.
+  · ship : le vaisseau personnel du joueur, seul, contre 1 à 4 objets {"type":"fighters"|"freighter"|"frigate","name":"…"} (chasseurs, cargo armé, frégate de patrouille). Poursuites, interceptions, pirates. Le joueur peut fuir en hyperespace. "decor" : planete, espace, asteroides ou nebuleuse.
+  · space : "enemies" = 2 à 7 objets {"type":"cruiser"|"frigate"|"fighters"|"freighter","name":"…"}. "decor" : planete, espace, asteroides ou nebuleuse. "fuite":true si la retraite est une option.
+  · ground : "enemies" = 2 à 6 objets {"type":"einf"|"eat"|"eltank"|"eturret","name":"…"} (fantassins, équipe antichar, char léger, tourelle). "terrain" : tempere, desert, neige, urbain, jungle ou volcan. "objectif" : assaut (prendre un générateur gardé), elimination (anéantir l’ennemi) ou defense (tenir 6 tours face à un ennemi plus nombreux).
 - updates : changements concrets, sinon null : {"credits":<±entier>,"addCompanions":[{"name":"…","preset":"<modèle>","note":"…"}],"removeCompanions":["nom"],"addFleet":[{"type":"cruiser|frigate|fighters","name":"…"}],"addTroops":[{"type":"inf|tank|art|speed","name":"…"}],"notes":["fait durable à retenir"],"xp":<0 à 3>,"heal":"repos"|<PV rendus au personnage>}. "heal":"repos" soigne entièrement le personnage et ses compagnons.
 - chronicle : 1 ou 2 phrases factuelles résumant ce qui vient de se passer (c’est ta mémoire).
 - codex : le carnet que le joueur consulte, uniquement les entrées nouvelles ou modifiées (elles sont fusionnées par nom), sinon null : {"pnj":[{"nom":"…","role":"…","relation":"allié|amical|neutre|méfiant|hostile","statut":"vivant|mort|disparu|captif","note":"ce que le joueur sait"}],"quetes":[{"titre":"…","etat":"en cours|réussie|échouée|abandonnée","note":"…"}],"lieux":[{"nom":"…","note":"…"}],"factions":[{"nom":"…","attitude":"alliée|neutre|hostile|…","note":"…"}]}. Ajoute chaque PNJ nommé important, chaque objectif que le joueur poursuit, chaque lieu marquant. N’y mets jamais ce que le joueur ignore (c’est la place du carnet secret).
@@ -3725,12 +3882,18 @@ function applyData(d){
   S.choices=Array.isArray(d.choices)?d.choices.slice(0,4).map(c=>String(c).slice(0,120)):[];
   if(d.test&&SKL[d.test.skill]&&(d.test.skill!=='force'||S.hero.force)){
     S.pending={kind:'test',skill:d.test.skill,mod:Math.max(-6,Math.min(4,Math.round(+d.test.mod||0))),why:String(d.test.why||'').slice(0,160)};
-  }else if(d.combat&&['duel','space','ground'].includes(d.combat.type)){
+  }else if(d.combat&&['duel','ship','space','ground'].includes(d.combat.type)){
     const c=d.combat;
-    if(c.type==='space'&&!S.res.fleet.length)c.type='duel';
+    if(c.type==='space'&&!S.res.fleet.length)c.type=S.res.ship?'ship':'duel';
+    if(c.type==='ship'&&!S.res.ship)c.type=S.res.fleet.length?'space':'duel';
     if(c.type==='ground'&&!S.res.troops.length)c.type='duel';
     if(c.type==='duel'&&(!Array.isArray(c.enemies)||!c.enemies.length))c.enemies=[{name:'Adversaire',preset:'thug'}];
-    S.pending={kind:'combat',combat:{type:c.type,title:String(c.title||'Affrontement').slice(0,60),briefing:String(c.briefing||'').slice(0,400),allies:(c.allies||[]).slice(0,3),enemies:(c.enemies||[]).slice(0,c.type==='space'?7:c.type==='ground'?6:4)}};
+    const dec={duel:DECOR_DUEL,ship:DECOR_SPACE,space:DECOR_SPACE,ground:TERRAIN}[c.type],dv=c.type==='ground'?c.terrain:c.decor;
+    const combat={type:c.type,title:String(c.title||'Affrontement').slice(0,60),briefing:String(c.briefing||'').slice(0,400),allies:(c.allies||[]).slice(0,3),
+      enemies:(Array.isArray(c.enemies)?c.enemies:[]).slice(0,c.type==='space'?7:c.type==='ground'?6:4),decor:dec[dv]?dv:Object.keys(dec)[0],
+      objectif:c.type==='ground'&&OBJECTIF[c.objectif]?c.objectif:'assaut',fuite:c.type==='ship'?c.fuite!==false:c.fuite===true};
+    balanceFleet(combat);
+    S.pending={kind:'combat',combat};
   }
   if(!S.pending&&!S.choices.length)S.choices=['Observer les alentours','Continuer'];
 }
@@ -3762,10 +3925,11 @@ function renderAct(){
         <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="primary" id="rerollBtn">Relancer · 1 point de Destin (${S.destiny})</button><button type="button" id="acceptBtn">Accepter l’échec</button></div>`
       :`<div class="dd" id="rollDice"><i>?</i><i>?</i><i>?</i></div><div><button type="button" class="primary" id="rollBtn">Lancer les dés</button></div>`}</div>`;
   }else if(S.pending&&S.pending.kind==='combat'){
-    const c=S.pending.combat;const kind={duel:'Combat rapproché',space:'Bataille spatiale',ground:'Bataille terrestre'}[c.type];
+    const c=S.pending.combat;const kind={duel:'Combat rapproché',ship:'Combat de vaisseau',space:'Bataille spatiale',ground:'Bataille terrestre'}[c.type];
     const foes=c.type==='duel'?c.enemies.map(e=>esc(e.name||'?')):c.enemies.map(e=>esc(e.name||e.type));
-    const mine=c.type==='duel'?[esc(S.hero.name),...(c.allies||[]).map(n=>esc(typeof n==='string'?n:n.name))]:c.type==='space'?S.res.fleet.map(s=>esc(s.name)):[esc(S.hero.name)+' (commandement)',...S.res.troops.map(s=>esc(s.name))];
-    main=`<div class="combatcard"><span class="kind">${kind}</span><span class="t">${esc(c.title)}</span><span>${esc(c.briefing)}</span><ul><li>Ton camp : ${mine.join(', ')}</li><li>En face : ${foes.join(', ')}</li></ul><div><button type="button" class="primary" id="fightBtn">Engager le combat</button></div></div>`;
+    const mine=c.type==='duel'?[esc(S.hero.name),...(c.allies||[]).map(n=>esc(typeof n==='string'?n:n.name))]:c.type==='ship'?[`${esc(S.res.ship)} (${pct(S.res.shipHull)})`]:c.type==='space'?S.res.fleet.map(s=>esc(s.name)):[esc(S.hero.name)+' (commandement)',...S.res.troops.map(s=>esc(s.name))];
+    const where=c.type==='ground'?`${TERRAIN[c.decor]} · ${OBJECTIF[c.objectif]}`:c.type==='duel'?DECOR_DUEL[c.decor]:DECOR_SPACE[c.decor];
+    main=`<div class="combatcard"><span class="kind">${kind}</span><span class="t">${esc(c.title)}</span><span class="kind">${esc(where||'')} · Difficulté ${DIFF[S.zero.diff||'normal'].l.toLowerCase()}${c.fuite?' · fuite possible':''}</span><span>${esc(c.briefing)}</span><ul><li>Ton camp : ${mine.join(', ')}</li><li>En face : ${foes.join(', ')}</li></ul><div><button type="button" class="primary" id="fightBtn">Engager le combat</button></div></div>`;
   }else{
     main=`<div class="choices">${(S.choices||[]).map((c,i)=>`<button type="button" data-choice="${i}">${esc(c)}</button>`).join('')}</div>
     <div class="say"><textarea id="sayBox" rows="2" maxlength="1200" placeholder="Ou écris ce que fait ou dit ${esc(S.hero.name)}…"></textarea><button type="button" class="primary" id="sayBtn">Agir</button></div>`;
@@ -3785,8 +3949,8 @@ function renderSheet(){
       <div class="sub">${WEAPONS[h.weapon]}${/saber|dual|double/.test(h.weapon)?' · '+FORMS[h.form]:''}${h.tech.length?' · '+h.tech.map(t=>TECHS[t]).join(', '):''}</div></section>
     <section><span class="label">Ressources</span><div class="reslist">
       <div><span>Crédits</span><span>${r.credits.toLocaleString('fr-FR')}</span></div>
-      ${r.ship?`<div><span>Vaisseau</span><span>${esc(r.ship)}</span></div>`:''}
     </div>
+    ${r.ship?`<div class="units"><span class="label">Vaisseau personnel</span><div><span>${esc(r.ship)}</span>${meter(frac(r.shipHull),hullLabel(frac(r.shipHull)))}<span class="muted">${pct(r.shipHull)}</span></div></div>`:''}
     ${r.companions.length?`<div class="units"><span class="label">Compagnons</span>${r.companions.map(c=>`<div><span>${esc(c.name)}</span>${meter(frac(c.hp),hurtLabel(frac(c.hp)))}<span class="muted">${hurtLabel(frac(c.hp))}</span></div>`).join('')}</div>`:''}
     ${r.fleet.length?`<div class="units"><span class="label">Flotte</span>${r.fleet.map(s=>`<div><span>${s.flag?'★ ':''}${esc(s.name)}</span>${meter(frac(s.hull),hullLabel(frac(s.hull)))}<span class="muted">${pct(s.hull)}</span></div>`).join('')}</div>`:''}
     ${r.troops.length?`<div class="units"><span class="label">Troupes</span>${r.troops.map(s=>`<div><span>${esc(s.name)}</span>${meter(frac(s.hp),troopLabel(frac(s.hp)))}<span class="muted">${pct(s.hp)}</span></div>`).join('')}</div>`:''}
@@ -3820,6 +3984,7 @@ function renderSheet(){
     const can=c=>lock||!c||r.credits<c?'disabled':'';
     body=`<section><span class="label">Crédits</span><div class="xpbig">${r.credits.toLocaleString('fr-FR')}</div>${lock?'<p class="sub" style="margin:0">Pas pendant une scène en cours ou avant un combat.</p>':''}</section>
     <section><span class="label">Soins</span><div class="buy"><div><span>${mc?`Remettre sur pied ${esc(h.name)}${r.companions.some(c=>frac(c.hp)<1)?' et les compagnons':''}`:'Tout le monde est en forme'}</span><button type="button" class="small" data-mg="medic" ${can(mc)}>${mc?mc.toLocaleString('fr-FR')+' cr':'—'}</button></div></div><p class="sub" style="margin:0">Le repos entre deux chapitres soigne gratuitement.</p></section>
+    ${r.ship?(()=>{const c=Math.round((1-frac(r.shipHull))*REPAIR.freighter);return`<section><span class="label">Vaisseau personnel</span><div class="buy"><div><span>${esc(r.ship)} <b>${pct(r.shipHull)}</b></span><button type="button" class="small" data-mg="shiprep" ${can(c)}>${c?'Réparer · '+c.toLocaleString('fr-FR')+' cr':'Intact'}</button></div></div></section>`;})():''}
     ${r.fleet.length?`<section><span class="label">Chantier naval</span><div class="buy">${r.fleet.map((sh,i)=>{const c=Math.round((1-frac(sh.hull))*REPAIR[sh.type]);return`<div><span>${esc(sh.name)} <b>${pct(sh.hull)}</b></span><button type="button" class="small" data-mg="repair" data-k="${i}" ${can(c)}>${c?'Réparer · '+c.toLocaleString('fr-FR')+' cr':'Intact'}</button></div>`;}).join('')}</div>
       <div class="buyrow"><select id="bShipT">${Object.entries(SHIP_T).map(([k,l])=>`<option value="${k}">${l} · ${BUY_SHIP[k].toLocaleString('fr-FR')} cr</option>`).join('')}</select><input type="text" id="bShipN" maxlength="30" placeholder="Nom"><button type="button" class="small" data-mg="buyship" ${lock||r.fleet.length>=8?'disabled':''}>Acquérir</button></div></section>`:''}
     ${r.troops.length?`<section><span class="label">Troupes</span><div class="buy">${r.troops.map((t,i)=>{const c=Math.round((1-frac(t.hp))*REINF[t.type]);return`<div><span>${esc(t.name)} <b>${pct(t.hp)}</b></span><button type="button" class="small" data-mg="reinf" data-k="${i}" ${can(c)}>${c?'Renforcer · '+c.toLocaleString('fr-FR')+' cr':'Complète'}</button></div>`;}).join('')}</div>
@@ -3902,33 +4067,38 @@ function launchCombat(){
   const c=S.pending&&S.pending.combat;if(!c)return;
   combatCtx={combat:c};
   window.__CFG={};
+  let eng=c.type;
   if(c.type==='duel'){
     const p=[heroFiche()];
     for(const a of (c.allies||[])){const n=typeof a==='string'?a:a&&a.name;const comp=S.res.companions.find(x=>x.name===n);if(comp&&p.length<4)p.push(presetFiche(comp.preset,comp.name,'p',null,frac(comp.hp)));}
     const e=c.enemies.slice(0,4).map(x=>presetFiche(LOOKS[x.preset]?x.preset:'thug',String(x.name||'Adversaire').slice(0,30),'e',x));
-    window.__CFG.duel={title:c.title,p,e};
-  }else if(c.type==='space'){
-    const fleet=S.res.fleet.slice(0,8);
-    window.__CFG.space={title:c.title,player:fleet.map((s,i)=>({type:s.type,name:s.name,flag:i===0,hull:frac(s.hull)})),enemy:c.enemies.filter(x=>SHIP_T[x.type]).map(x=>({type:x.type,name:String(x.name||'Vaisseau ennemi').slice(0,30)}))};
-    if(!window.__CFG.space.enemy.length)window.__CFG.space.enemy=[{type:'frigate',name:'Frégate ennemie'},{type:'fighters',name:'Chasseurs ennemis'}];
+    balanceDuel(p,e);
+    window.__CFG.duel={title:c.title,p,e,decor:c.decor};
+  }else if(c.type==='space'||c.type==='ship'){
+    eng='space';
+    const player=c.type==='ship'?[{type:'freighter',name:S.res.ship,flag:true,hull:frac(S.res.shipHull),pilot:S.hero.skills.pilotage}]
+      :S.res.fleet.slice(0,8).map((s,i)=>({type:s.type,name:s.name,flag:i===0,hull:frac(s.hull)}));
+    window.__CFG.space={title:c.title,solo:c.type==='ship',canFlee:!!c.fuite,decor:c.decor,player,enemy:c.enemies.map(x=>({type:x.type,name:x.name}))};
+    if(!window.__CFG.space.enemy.length)window.__CFG.space.enemy=[{type:'fighters',name:'Chasseurs ennemis'}];
   }else{
-    const ok=['einf','eat','eltank','eturret'];
     window.__CFG.ground={title:c.title,commander:S.hero.name,player:S.res.troops.slice(0,7).map(s=>({type:s.type,name:s.name,hp:frac(s.hp)})),
-      enemy:c.enemies.filter(x=>ok.includes(x.type)&&x.type!=='eturret').map(x=>({type:x.type,name:String(x.name||'Ennemis').slice(0,30)})),
-      turrets:Math.min(2,c.enemies.filter(x=>x.type==='eturret').length),orbital:S.res.fleet.some(s=>s.type==='cruiser')};
+      enemy:c.enemies.filter(x=>x.type!=='eturret').map(x=>({type:x.type,name:x.name})),
+      turrets:Math.min(2,c.enemies.filter(x=>x.type==='eturret').length),orbital:S.res.fleet.some(s=>s.type==='cruiser'),terrain:c.decor,mode:c.objectif};
     if(!window.__CFG.ground.enemy.length)window.__CFG.ground.enemy=[{type:'einf',name:'Fantassins'},{type:'einf',name:'Tireurs'}];
   }
-  showEngine(c.type);
-  window.ENGINES[c.type].start();
+  combatCtx.engine=eng;
+  showEngine(eng);
+  window.ENGINES[eng].start();
 }
 window.__engineEnd=(engine,res)=>{if(combatCtx)combatCtx.result={engine,...res};};
 document.addEventListener('click',e=>{
   if(!e.target.closest('[data-return]'))return;
   if(!combatCtx||!combatCtx.result)return;
-  const R=combatCtx.result;hideEngines();
+  const R=combatCtx.result,CC=combatCtx.combat;hideEngines();
   // Pertes réelles
   const stOf=n=>(R.state||[]).find(x=>x.name===n);
-  if(R.engine==='space'){S.res.fleet=S.res.fleet.filter(s=>!(R.lost||[]).includes(s.name));S.res.fleet.forEach(s=>{const x=stOf(s.name);if(x)s.hull=x.hull;});}
+  if(CC.type==='ship'){const x=(R.state||[])[0];if(x)S.res.shipHull=x.alive?x.hull:.05;}
+  else if(R.engine==='space'){S.res.fleet=S.res.fleet.filter(s=>!(R.lost||[]).includes(s.name));S.res.fleet.forEach(s=>{const x=stOf(s.name);if(x)s.hull=x.hull;});}
   if(R.engine==='ground'){S.res.troops=S.res.troops.filter(s=>!(R.lost||[]).includes(s.name));S.res.troops.forEach(s=>{const x=stOf(s.name);if(x)s.hp=x.hp;});}
   if(R.engine==='duel')(R.state||[]).forEach(x=>{
     if(x.hero){S.hero.hp=x.alive?Math.max(1,x.pv):1;return;}
@@ -3937,7 +4107,7 @@ document.addEventListener('click',e=>{
   S.pending=null;
   addFeed({k:'combat',text:R.report});
   combatCtx=null;renderStory();
-  askMJ(`[RAPPORT DE COMBAT — ${R.win?'VICTOIRE':'DÉFAITE'} du joueur]\n${R.report}\nRaconte l’issue et ses conséquences immédiates, fidèlement à ce rapport.${R.engine==='duel'&&!R.win?' Le personnage a perdu : il est vaincu, blessé, capturé ou forcé de fuir selon ce qui est le plus intéressant, mais la campagne continue.':''}`);
+  askMJ(`[RAPPORT DE COMBAT — ${R.fled?'FUITE en hyperespace':R.win?'VICTOIRE':'DÉFAITE'} du joueur]\n${R.report}\nRaconte l’issue et ses conséquences immédiates, fidèlement à ce rapport.${R.fled?' Le joueur a rompu le combat : raconte son saut en hyperespace et ce qu’il laisse derrière lui.':''}${CC.type==='ship'&&!R.win&&!R.fled?' Le vaisseau du joueur est une épave : il survit (capsule, crash, capture…), mais son vaisseau est hors d’usage tant qu’il n’est pas réparé.':''}${R.engine==='duel'&&!R.win?' Le personnage a perdu : il est vaincu, blessé, capturé ou forcé de fuir selon ce qui est le plus intéressant, mais la campagne continue.':''}`);
 });
 
 /* ================= Lancement ================= */

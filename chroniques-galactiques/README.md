@@ -2,6 +2,15 @@
 
 Jeu de rôle Star Wars avec MJ intégré, en HTML/CSS/JS sans dépendance.
 
+## Ce que le jeu gère
+
+- **Récit** : MJ intégré, jets 3d6 sous la compétence, points de Destin (relance d’un jet raté), régénérer la réponse du MJ, annuler son action, questions hors-jeu.
+- **Conséquences** : PV du héros et des compagnons, coque de la flotte et du vaisseau personnel, effectifs des troupes ; repos entre chapitres, soins, réparations, renforts et achats dans l’onglet Intendance.
+- **Progression** : l’XP donnée par le MJ s’achète en compétences, endurance, formes de sabre et techniques.
+- **Mémoire** : carnet de campagne (PNJ, quêtes, lieux, factions), résumé de chaque chapitre, livre de campagne exportable.
+- **Combats** : duel (7 décors), combat du vaisseau personnel avec fuite en hyperespace, bataille spatiale (4 décors), bataille terrestre (6 terrains, objectifs assaut / anéantissement / défense). La force des ennemis est ajustée à la difficulté choisie en session zéro.
+- **Campagnes** : plusieurs campagnes en parallèle, import et export de sauvegarde.
+
 ## Structure
 
 - `chroniques.html` — **le jeu complet assemblé** (c'est ce fichier qui est publié en artifact). Ne pas le modifier à la main : il est généré.

@@ -7,9 +7,9 @@ const prompts=[],saved=[];
 const R=(narr,data)=>narr+'\n@@DONNEES\n'+JSON.stringify(data);
 const answers=[
   R('— Bienvenue, Moff. La station tremble.\nLes sirènes hurlent.',{choices:[],test:{skill:'perception',mod:-2,why:'Repérer le saboteur'},combat:null,updates:null,chronicle:'Ouverture sur la station.',chapter:{title:'L’ombre sur Kessaria'},codex:{pnj:[{nom:'Varek',role:'gouverneur',relation:'méfiant',note:'Sourit trop'}],quetes:[{titre:'Démasquer le saboteur',etat:'en cours'}],lieux:[{nom:'Station Kessaria',note:'Orbite basse'}]},secret:{arc:'Trahison',actes:['I','II','III'],antagonistes:[{nom:'Varek',but:'pouvoir',methode:'complot'}],factions:[],fils:[],prochaine_etape:'duel'}}),
-  R('Tu repères une silhouette. Elle dégaine.',{choices:[],test:null,combat:{type:'duel',title:'Le saboteur',briefing:'Un assassin et un garde.',allies:['Capitaine Rhal'],enemies:[{name:'Vessk',preset:'assassin'},{name:'Garde rouge',preset:'guard',pv:18}]},updates:null,chronicle:'Le saboteur attaque.',chapter:null,secret:null}),
+  R('Tu repères une silhouette. Elle dégaine.',{choices:[],test:null,combat:{type:'duel',title:'Le saboteur',decor:'temple',briefing:'Un assassin et un garde.',allies:['Capitaine Rhal'],enemies:[{name:'Vessk',preset:'assassin'},{name:'Garde rouge',preset:'guard',pv:18}]},updates:null,chronicle:'Le saboteur attaque.',chapter:null,secret:null}),
   R('Après le combat, la flotte ennemie surgit.',{choices:[],combat:{type:'space',title:'Raid sur l’orbite',briefing:'Deux frégates.',enemies:[{type:'frigate',name:'Brise-Lame'},{type:'fighters',name:'Escadron Vipère'}]},updates:{credits:-500,notes:['Varek a payé le saboteur'],xp:1},chronicle:'Raid spatial.',chapter:null,secret:null}),
-  R('Les troupes débarquent.',{choices:[],combat:{type:'ground',title:'Prise du relais',briefing:'Le relais est tenu.',enemies:[{type:'einf',name:'Rebelles'},{type:'eat',name:'Antichar'},{type:'eturret',name:'Tourelle'}]},updates:null,chronicle:'Assaut au sol.',chapter:{title:'Chapitre deux',resume:'Le saboteur Vessk a frappé la station ; la flotte a été repoussée.'},codex:{pnj:[{nom:'varek',relation:'hostile',note:'A payé le saboteur'}],quetes:[{titre:'Démasquer le saboteur',etat:'réussie'}]},secret:null}),
+  R('Les troupes débarquent.',{choices:[],combat:{type:'ground',title:'Prise du relais',terrain:'neige',objectif:'defense',briefing:'Le relais est tenu.',enemies:[{type:'einf',name:'Rebelles'},{type:'eat',name:'Antichar'},{type:'eturret',name:'Tourelle'}]},updates:null,chronicle:'Assaut au sol.',chapter:{title:'Chapitre deux',resume:'Le saboteur Vessk a frappé la station ; la flotte a été repoussée.'},codex:{pnj:[{nom:'varek',relation:'hostile',note:'A payé le saboteur'}],quetes:[{titre:'Démasquer le saboteur',etat:'réussie'}]},secret:null}),
   R('Le calme revient.',{choices:['Interroger le prisonnier','Rentrer au QG','Faire rapport'],test:null,combat:null,updates:{addCompanions:[{name:'Lyra',preset:'smuggler',note:'pilote'}],xp:3},chronicle:'Calme.',chapter:null,secret:null})
 ];
 const dom=new JSDOM(page,{runScripts:'dangerously',pretendToBeVisual:true,url:'https://example.org/',
@@ -34,7 +34,7 @@ const $=id=>d.getElementById(id);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const click=el=>{if(!el)throw new Error('missing element');el.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));};
 async function waitFor(fn,ms=60000,label=''){const t=Date.now();while(Date.now()-t<ms){try{if(fn())return;}catch(e){}await sleep(50);}throw new Error('timeout '+label);}
-async function finishEngine(name){
+async function finishEngine(name,flee){
   const pre={space:'sp',ground:'gr',duel:'ar'}[name];
   await waitFor(()=>!$('eng-'+name).hidden,5000,'engine shown '+name);
   let n=0;
@@ -43,7 +43,8 @@ async function finishEngine(name){
       // donner un ordre à chaque combattant du joueur
       for(let k=0;k<5;k++){const b=d.querySelector('#ar-acts [data-a="recover"]');if(b&&!b.disabled)click(b);else break;await sleep(10);}
       const go=$('ar-goBtn');if(go&&!go.disabled)click(go);
-    }else{const e=$(pre+'-endBtn');if(e&&!e.disabled)click(e);}
+    }else if(flee&&$('sp-fleeBtn')&&!$('sp-fleeBtn').disabled){click($('sp-fleeBtn'));}
+    else{const e=$(pre+'-endBtn');if(e&&!e.disabled)click(e);}
     await sleep(400);
   }
   await waitFor(()=>!$(pre+'-over').hidden,90000,'engine over '+name);
@@ -76,11 +77,15 @@ async function finishEngine(name){
   ok(prompts[1].includes('Réussite critique (après relance grâce à un point de Destin)'),'relance transmise au MJ');
   await waitFor(()=>$('fightBtn'),5000,'fight duel');
   ok(d.querySelector('.destiny').textContent.includes('●●○○○'),'un point de Destin dépensé');
+  ok($('actZone').textContent.includes('Temple ancien · Difficulté normale'),'carte de combat : décor et difficulté');
   click($('fightBtn'));await finishEngine('duel');
   await waitFor(()=>$('fightBtn'),8000,'fight space');
   click($('fightBtn'));await finishEngine('space');
   await waitFor(()=>$('fightBtn'),8000,'fight ground');
-  click($('fightBtn'));await finishEngine('ground');
+  ok($('actZone').textContent.includes('Toundra enneigée · Tenir la position'),'carte de combat : terrain et objectif');
+  click($('fightBtn'));
+  ok($('gr-turnNo')&&d.querySelector('#eng-ground .brief').textContent.includes('Tenez la position jusqu’au tour 6'),'bataille terrestre en mode défense');
+  await finishEngine('ground');
   await waitFor(()=>d.querySelector('[data-choice]'),8000,'choices');
   console.log('choices:',[...d.querySelectorAll('[data-choice]')].map(b=>b.textContent).join(' | '));
   console.log('sheet has Lyra:',$('sheet').textContent.includes('Lyra'),'fleet:',JSON.stringify(w.eval('1')));
@@ -138,5 +143,17 @@ async function finishEngine(name){
   [...d.querySelectorAll('[data-open]')].find(b=>b.closest('.camp').textContent.includes('Ancienne Kira')).click();
   await waitFor(()=>$('sheet').textContent.includes('Ancienne Kira'),3000,'old open');
   ok($('feed').textContent.includes('Ancien récit.')&&$('sheet').textContent.includes('Kira a fui.'),'ancienne campagne jouable');
+  // Étape 4 : combat du vaisseau personnel
+  answers.push(R('Des pirates surgissent.',{choices:[],combat:{type:'ship',title:'Pirates',briefing:'Deux chasseurs.',decor:'asteroides',enemies:[{type:'fighters',name:'Pirate 1'},{type:'cruiser',name:'Trop gros'}]}}));
+  const np=prompts.length;click(d.querySelector('[data-choice="0"]'));
+  await waitFor(()=>$('fightBtn'),5000,'ship fight');
+  const card=$('actZone').textContent;
+  ok(card.includes('Combat de vaisseau')&&card.includes('Champ d’astéroïdes')&&card.includes('fuite possible'),'carte du combat de vaisseau');
+  ok(card.includes('Renforts 1')&&!card.includes('Trop gros'),'ennemis filtrés et équilibrés (croiseur retiré, renfort ajouté)');
+  click($('fightBtn'));
+  ok(d.querySelector('#eng-space .brief').textContent.includes('hyperespace'),'moteur spatial en mode vaisseau seul');
+  await finishEngine('space',true);
+  await waitFor(()=>prompts.length===np+2,5000,'after ship');
+  ok(prompts[np+1].includes('FUITE en hyperespace')&&/Intercepteur \(coque \d+ %\)/.test(prompts[np+1]),'fuite et état du vaisseau transmis au MJ');
   console.log('prompt bytes',Buffer.byteLength(prompts[4]));fs.writeFileSync('p4.txt',prompts[4]);console.log('E2E OK');process.exit(0);
 })().catch(e=>{console.log('FAIL',e.message);process.exit(1);});

@@ -3,6 +3,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
+[hidden]{display:none!important}
 /* Layout : poste de commandement — carte tactique à gauche, console du Moff à droite (empilée sur mobile). Monde sombre unique, assumé. */
 :root{
   --void:#05070c;
@@ -124,7 +125,7 @@ button.pulse{animation:pulse 1.4s ease-in-out infinite}
 
     <aside class="console">
       <div class="sect">
-        <div class="label">Ordres du Moff</div>
+        <div class="label">Ordres</div>
         <p class="brief">Un raid insurgé frappe l’orbite de Kessaria IV. Détruisez-le ou forcez-le à fuir. <strong>Si l’Inexorable tombe, la bataille est perdue.</strong></p>
         <div class="legend"><span><i style="color:var(--amber)"></i>Déplacement</span><span><i style="color:var(--imp)"></i>Portée de tir</span><span><i style="color:#c9a86a"></i>Astéroïdes : −30 % dégâts</span></div>
       </div>
@@ -136,6 +137,7 @@ button.pulse{animation:pulse 1.4s ease-in-out infinite}
         <div class="btns">
           <button id="specBtn" type="button">Boucliers</button>
           <button id="endBtn" class="primary" type="button">Fin du tour</button>
+          <button id="fleeBtn" type="button" hidden>Sauter en hyperespace</button>
         </div>
       </div>
 
@@ -170,12 +172,17 @@ function resize(){
 new ResizeObserver(resize).observe(cv);resize();
 
 const TYPES={
-  cruiser:{label:'Croiseur de ligne',elabel:'Croiseur insurgé',hull:140,sh:70,move:110,range:300,dmg:[20,28],r:52,bolts:3,cost:4},
+  cruiser:{label:'Croiseur de ligne',elabel:'Croiseur ennemi',hull:140,sh:70,move:110,range:300,dmg:[20,28],r:52,bolts:3,cost:4},
   frigate:{label:'Frégate d’escorte',elabel:'Frégate marteau',hull:70,sh:35,move:170,range:250,dmg:[12,17],r:34,bolts:2,cost:2},
-  fighters:{label:'Escadron de chasseurs',elabel:'Chasseurs insurgés',hull:36,sh:0,move:260,range:130,dmg:[9,13],r:28,bolts:4,cost:1}
+  fighters:{label:'Escadron de chasseurs',elabel:'Chasseurs ennemis',hull:36,sh:0,move:260,range:130,dmg:[9,13],r:28,bolts:4,cost:1},
+  freighter:{label:'Cargo armé',elabel:'Cargo pirate',hull:90,sh:45,move:230,range:230,dmg:[12,17],r:30,bolts:2,cost:2}
 };
-const MULT={cruiser:{cruiser:1,frigate:1.3,fighters:1},frigate:{cruiser:.9,frigate:1,fighters:1.8},fighters:{cruiser:1.5,frigate:1.1,fighters:1}};
-const CH={cruiser:{cruiser:.9,frigate:.88,fighters:.5},frigate:{cruiser:.9,frigate:.88,fighters:.85},fighters:{cruiser:.85,frigate:.82,fighters:.75}};
+const EVADES=t=>t==='fighters'||t==='freighter';
+const MULT={cruiser:{cruiser:1,frigate:1.3,fighters:1,freighter:1.1},frigate:{cruiser:.9,frigate:1,fighters:1.8,freighter:1.2},fighters:{cruiser:1.5,frigate:1.1,fighters:1,freighter:1.2},freighter:{cruiser:.9,frigate:1.1,fighters:1.4,freighter:1}};
+const CH={cruiser:{cruiser:.9,frigate:.88,fighters:.5,freighter:.6},frigate:{cruiser:.9,frigate:.88,fighters:.85,freighter:.78},fighters:{cruiser:.85,frigate:.82,fighters:.75,freighter:.8},freighter:{cruiser:.9,frigate:.88,fighters:.8,freighter:.82}};
+/* Décors : planète en bas de carte, espace profond, champ d'astéroïdes, nébuleuse */
+const SCENES={planete:{planet:true,fields:[2,3]},espace:{planet:false,fields:[1,2]},asteroides:{planet:false,fields:[5,6],wide:true},nebuleuse:{planet:false,fields:[1,2],neb:true}};
+let SCENE=SCENES.planete,canFlee=false,fled=false;
 
 let ships=[],fields=[],bg=null,sel=null,hover=null,turn=1,phase='player',busy=false,over=false,acting=null,logs=[],fx=[],floats=[],anims=[],initEnemyHull=1;
 
@@ -188,7 +195,7 @@ const pick=arr=>arr.splice(Math.floor(Math.random()*arr.length),1)[0];
 function clampPos(x,y){
   x=Math.max(50,Math.min(W-50,x));y=Math.max(50,Math.min(H-40,y));
   const d=Math.hypot(x-PLANET.x,y-PLANET.y),m=PLANET.r+50;
-  if(d<m){x=PLANET.x+(x-PLANET.x)/d*m;y=PLANET.y+(y-PLANET.y)/d*m;}
+  if(SCENE.planet&&d<m){x=PLANET.x+(x-PLANET.x)/d*m;y=PLANET.y+(y-PLANET.y)/d*m;}
   return{x,y};
 }
 function settle(s,x,y){
@@ -217,9 +224,9 @@ function newBattle(){
   ships=[];fields=[];fx=[];floats=[];anims=[];logs=[];
   turn=1;phase='player';busy=false;over=false;acting=null;
   // Champs d'astéroïdes
-  const nf=rint(2,3);
-  for(let i=0;i<40&&fields.length<nf;i++){
-    const f={x:rnd(560,1080),y:rnd(140,660),r:rnd(85,125)};
+  const nf=rint(SCENE.fields[0],SCENE.fields[1]);fled=false;
+  for(let i=0;i<160&&fields.length<nf;i++){
+    const f=SCENE.wide?{x:rnd(420,1220),y:rnd(110,880),r:rnd(80,120)}:{x:rnd(560,1080),y:rnd(140,660),r:rnd(85,125)};
     if(fields.every(o=>Math.hypot(o.x-f.x,o.y-f.y)>o.r+f.r+60)){
       f.rocks=Array.from({length:Math.round(f.r/3.6)},()=>{const a=rnd(0,7),d=Math.sqrt(Math.random())*f.r*.92;
         return{x:f.x+Math.cos(a)*d,y:f.y+Math.sin(a)*d,s:rnd(3,15),rot:rnd(0,7),pts:Array.from({length:rint(6,9)},()=>rnd(.65,1.1)),tone:rint(0,2)}});
@@ -276,6 +283,9 @@ function renderBG(){
     const s=b>.985?1.8:b>.9?1.2:.7;g.fillRect(x,y,s,s);
   }
   for(let i=0;i<14;i++){const x=Math.random()*W,y=Math.random()*700;const gr=g.createRadialGradient(x,y,0,x,y,5);gr.addColorStop(0,'rgba(255,255,255,.9)');gr.addColorStop(1,'rgba(180,210,255,0)');g.fillStyle=gr;g.fillRect(x-5,y-5,10,10);}
+  if(SCENE.neb){for(const [x,y,r,c,a] of [[500,420,700,'150,60,170',.32],[1150,560,640,'60,140,190',.26],[820,200,520,'210,90,120',.18]]){const gr=g.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,`rgba(${c},${a})`);gr.addColorStop(1,`rgba(${c},0)`);g.fillStyle=gr;g.fillRect(0,0,W,H);}
+    for(let i=0;i<40;i++){const x=rnd(0,W),y=rnd(0,H),r=rnd(80,240);const gr=g.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,'rgba(200,150,230,.06)');gr.addColorStop(1,'rgba(200,150,230,0)');g.fillStyle=gr;g.fillRect(0,0,W,H);}}
+  if(SCENE.planet){
   // Lune
   const M={x:1460,y:110,r:38};
   let mg=g.createRadialGradient(M.x-14,M.y-14,4,M.x,M.y,M.r);mg.addColorStop(0,'#b9b4ab');mg.addColorStop(.7,'#6c675f');mg.addColorStop(1,'#2a2824');
@@ -316,6 +326,7 @@ function renderBG(){
   g.restore();
   g.save();g.strokeStyle='rgba(150,215,255,.55)';g.lineWidth=3;g.shadowColor='rgba(120,200,255,1)';g.shadowBlur=24;
   g.beginPath();g.arc(P.x,P.y,P.r+1,-Math.PI/2-.8,-Math.PI/2+.25);g.stroke();g.restore();
+  }
   // Astéroïdes
   for(const f of fields){
     const dg=g.createRadialGradient(f.x,f.y,0,f.x,f.y,f.r*1.1);dg.addColorStop(0,'rgba(170,140,100,.10)');dg.addColorStop(1,'rgba(170,140,100,0)');
@@ -421,7 +432,32 @@ function drawEFighters(g,now){
     g.restore();
   }
 }
-const ART={pcruiser:drawPCruiser,pfrigate:drawPFrigate,pfighters:drawPFighters,ecruiser:drawECruiser,efrigate:drawEFrigate,efighters:drawEFighters};
+function drawPFreighter(g,now){
+  g.fillStyle='rgba(0,0,0,.33)';g.beginPath();g.ellipse(4,6,27,25,0,0,7);g.fill();
+  g.fillStyle=hullGrad(g,10,STEEL);
+  g.beginPath();g.moveTo(14,-9);g.lineTo(36,-11);g.lineTo(36,-3);g.lineTo(14,-2);g.closePath();g.fill();
+  g.beginPath();g.moveTo(14,9);g.lineTo(36,11);g.lineTo(36,3);g.lineTo(14,2);g.closePath();g.fill();
+  const dg=g.createRadialGradient(-6,-8,2,0,0,25);dg.addColorStop(0,'#e4e8ec');dg.addColorStop(.7,'#9aa2ab');dg.addColorStop(1,'#5b636c');
+  g.fillStyle=dg;g.beginPath();g.arc(0,0,24,0,7);g.fill();g.strokeStyle='rgba(12,15,20,.85)';g.lineWidth=1.2;g.stroke();
+  g.strokeStyle='rgba(25,30,38,.45)';g.lineWidth=1;g.beginPath();g.arc(0,0,15,0,7);g.moveTo(-24,0);g.lineTo(-9,0);g.moveTo(0,-24);g.lineTo(0,-15);g.moveTo(0,24);g.lineTo(0,15);g.stroke();
+  g.fillStyle='#c9a46a';g.fillRect(-12,-12,7,5);g.fillRect(4,8,8,4);
+  g.fillStyle='#7d8690';g.beginPath();g.arc(0,0,6,0,7);g.fill();g.fillStyle='#d8dde2';g.beginPath();g.arc(0,0,3,0,7);g.fill();
+  g.fillStyle='#aab2bb';g.fillRect(8,20,12,7);g.strokeStyle='rgba(12,15,20,.8)';g.strokeRect(8,20,12,7);
+  g.fillStyle='rgba(150,220,255,.85)';g.fillRect(16,21.5,3,4);
+  engines(g,-24,[-8,0,8],now,'120,185,255',3.2);
+}
+function drawEFreighter(g,now){
+  g.fillStyle='rgba(0,0,0,.33)';g.beginPath();g.moveTo(40,6);g.lineTo(-26,-16);g.lineTo(-26,28);g.closePath();g.fill();
+  g.fillStyle=hullGrad(g,20,SAND);
+  g.beginPath();g.moveTo(36,0);g.lineTo(-24,-21);g.lineTo(-30,-12);g.lineTo(-30,12);g.lineTo(-24,21);g.closePath();g.fill();
+  g.strokeStyle='rgba(25,18,12,.85)';g.lineWidth=1.2;g.stroke();
+  g.fillStyle='#7d6f5a';g.fillRect(-22,-9,22,18);g.strokeRect(-22,-9,22,18);
+  g.strokeStyle='rgba(60,45,30,.45)';g.lineWidth=1;g.beginPath();g.moveTo(30,-1);g.lineTo(-20,-18);g.moveTo(30,1);g.lineTo(-20,18);g.stroke();
+  g.fillStyle='rgba(255,200,120,.85)';g.fillRect(22,-2,5,4);
+  g.fillStyle='#5a4e40';g.fillRect(-4,-25,10,6);g.fillRect(-4,19,10,6);
+  engines(g,-31,[-7,7],now,'255,135,80',4);
+}
+const ART={pcruiser:drawPCruiser,pfrigate:drawPFrigate,pfighters:drawPFighters,ecruiser:drawECruiser,efrigate:drawEFrigate,efighters:drawEFighters,pfreighter:drawPFreighter,efreighter:drawEFreighter};
 
 function drawShip(s,now){
   const g=ctx;
@@ -523,6 +559,7 @@ function preview(a,t){
   let chance=CH[a.type][t.type];
   if(d>a.range*.75)chance-=.1;
   if(t.evade)chance-=.25;
+  chance+=(a.ace||0)-(t.ace||0);
   chance=Math.max(.1,Math.min(.95,chance));
   const cover=inField(t.x,t.y)?.7:1,m=MULT[a.type][t.type]*cover;
   return{inRange:d<=a.range,chance,min:Math.round(T.dmg[0]*m),max:Math.round(T.dmg[1]*m),bypass:a.type==='fighters',cover:cover<1};
@@ -575,7 +612,7 @@ function checkEnd(){
 }
 
 /* ---------- IA ennemie ---------- */
-const PREF={cruiser:{cruiser:1,frigate:1.1,fighters:.4},frigate:{cruiser:.8,frigate:1,fighters:1.4},fighters:{cruiser:1.4,frigate:1.1,fighters:.6}};
+const PREF={cruiser:{cruiser:1,frigate:1.1,fighters:.4,freighter:.8},frigate:{cruiser:.8,frigate:1,fighters:1.4,freighter:1.1},fighters:{cruiser:1.4,frigate:1.1,fighters:.6,freighter:1.1},freighter:{cruiser:.8,frigate:1,fighters:1.2,freighter:1}};
 function score(e,t){return PREF[e.type][t.type]*100-dist(e,t)*.12-(t.hull+t.sh)*.25+(t.flag?15:0);}
 function pickTarget(e,list){let best=null,bs=-1e9;for(const t of list){const s=score(e,t);if(s>bs){bs=s;best=t;}}return best;}
 async function enemyAct(e){
@@ -608,9 +645,9 @@ async function enemyPhase(){
   en.forEach(s=>s.sh=Math.min(s.shMax,s.sh+Math.round(s.shMax*.12)));
   const left=en.reduce((a,s)=>a+s.hull+s.sh,0);
   if(turn>=2&&left<initEnemyHull*.25){
-    log('Les insurgés rompent le combat et sautent en hyperespace.','kill');
+    log('Les ennemis rompent le combat et sautent en hyperespace.','kill');
     await wait(500);
-    endBattle(true,'Les derniers vaisseaux insurgés ont fui en hyperespace. L’orbite de Kessaria IV est à vous.');busy=false;return;
+    endBattle(true,'Les derniers vaisseaux ennemis ont fui en hyperespace. L’orbite de Kessaria IV est à vous.');busy=false;return;
   }
   await wait(450);
   const order=[...en].sort((a,b)=>TYPES[a.type].cost-TYPES[b.type].cost);
@@ -618,7 +655,7 @@ async function enemyPhase(){
   turn++;phase='player';busy=false;
   ships.filter(s=>s.side==='p'&&s.alive).forEach(s=>{s.moved=false;s.acted=false;s.evade=false;s.sh=Math.min(s.shMax,s.sh+Math.round(s.shMax*.12));});
   sel=ships.find(s=>s.side==='p'&&s.alive)||null;
-  log(`Tour ${turn} : vos ordres, Moff.`);
+  log(`Tour ${turn} : vos ordres.`);
   renderUI();
 }
 
@@ -628,14 +665,14 @@ function endBattle(win,text){
   const pl=ships.filter(s=>s.side==='p'),en=ships.filter(s=>s.side==='e');
   const status=s=>!s.alive?'détruit':s.hull===s.hullMax?'intact':`coque à ${Math.round(s.hull/s.hullMax*100)} %`;
   const lines=[
-    `BATAILLE DE KESSARIA IV — ${win?'VICTOIRE':'DÉFAITE'} (tour ${turn})`,
+    `BATAILLE DE KESSARIA IV — ${fled?'FUITE':win?'VICTOIRE':'DÉFAITE'} (tour ${turn})`,
     text,'',
     'Flotte du secteur :',
     ...pl.map(s=>`- ${s.name} (${TYPES[s.type].label}) : ${status(s)}`),'',
-    `Raid insurgé : ${en.filter(s=>!s.alive).length}/${en.length} vaisseaux détruits`,
+    `Forces ennemies : ${en.filter(s=>!s.alive).length}/${en.length} vaisseaux détruits`,
     ...en.map(s=>`- ${s.name} (${TYPES[s.type].elabel}) : ${!s.alive?'détruit':'en fuite, '+status(s)}`)
   ];
-  document.getElementById('rTitle').textContent=win?'Victoire':'Défaite';
+  document.getElementById('rTitle').textContent=fled?'Fuite':win?'Victoire':'Défaite';
   document.getElementById('rTitle').className=win?'win':'lose';
   document.getElementById('rText').textContent=text;
   document.getElementById('rBox').value=lines.join('\n');
@@ -662,12 +699,13 @@ function renderUI(){
       <div class="orders"><span class="chip ${sel.moved?'':'ok'}">Déplacement ${sel.moved?'fait':'prêt'}</span><span class="chip ${sel.acted?'':'ok'}">Action ${sel.acted?'faite':'prête'}</span>${sel.evade?'<span class="chip">Évasion active</span>':''}</div>`;
   }else card.innerHTML=`<div class="ty" style="margin:0">Aucun vaisseau sélectionné.</div>`;
   if(over)hint.textContent='La bataille est terminée. Le rapport est prêt à être recopié.';
-  else if(phase==='enemy')hint.textContent='Les insurgés manœuvrent et ouvrent le feu…';
+  else if(phase==='enemy')hint.textContent='Les ennemis manœuvrent et ouvrent le feu…';
   else if(!sel)hint.textContent='Sélectionnez un de vos vaisseaux sur la carte ou dans la liste.';
   else if(sel.moved&&sel.acted)hint.textContent='Ordres exécutés pour ce vaisseau. Choisissez-en un autre ou terminez le tour.';
   else hint.textContent=[!sel.moved&&'Cliquez dans la zone ambrée pour le déplacer.',!sel.acted&&'Cliquez un ennemi dans le cercle vert pour ouvrir le feu.'].filter(Boolean).join(' ');
   const spec=document.getElementById('specBtn');
-  spec.textContent=sel&&sel.type==='fighters'?'Manœuvre évasive':'Renforcer boucliers';
+  spec.textContent=sel&&EVADES(sel.type)?'Manœuvre évasive':'Renforcer boucliers';
+  const fb=document.getElementById('fleeBtn');fb.hidden=!canFlee;fb.disabled=phase!=='player'||busy||over||turn<3;fb.textContent=turn<3?`Hyperespace (calcul : tour ${turn}/3)`:'Sauter en hyperespace';
   spec.disabled=!sel||sel.acted||phase!=='player'||busy||over;
   const end=document.getElementById('endBtn');
   end.disabled=phase!=='player'||busy||over;
@@ -690,11 +728,12 @@ document.getElementById('fleet').addEventListener('click',e=>{
 document.getElementById('specBtn').addEventListener('click',()=>{
   if(!sel||sel.acted||busy||over)return;
   sel.acted=true;
-  if(sel.type==='fighters'){sel.evade=true;log(`${sel.name} passe en manœuvre évasive.`,'p');}
+  if(EVADES(sel.type)){sel.evade=true;log(`${sel.name} passe en manœuvre évasive.`,'p');}
   else{const g=Math.round(sel.shMax*.4);sel.sh=Math.min(sel.shMax,sel.sh+g);fx.push({k:'shield',x:sel.x,y:sel.y,r:sel.r+6,t0:performance.now(),dur:600});log(`${sel.name} redirige l’énergie vers ses boucliers.`,'p');}
   nextReady();renderUI();
 });
 document.getElementById('endBtn').addEventListener('click',()=>{if(phase==='player'&&!busy&&!over)enemyPhase();});
+document.getElementById('fleeBtn').addEventListener('click',()=>{if(phase!=='player'||busy||over||!canFlee||turn<3)return;fled=true;log('Coordonnées calculées : saut en hyperespace !','kill');endBattle(false,'Vous avez rompu le combat et sauté en hyperespace.');});
 document.getElementById('newBtn').addEventListener('click',()=>{if(!busy)newBattle();});
 document.getElementById('againBtn').addEventListener('click',newBattle);
 document.getElementById('copyBtn').addEventListener('click',()=>{

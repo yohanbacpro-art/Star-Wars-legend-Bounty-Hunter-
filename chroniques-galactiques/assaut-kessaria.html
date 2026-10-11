@@ -3,6 +3,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
+[hidden]{display:none!important}
 /* Layout : même poste de commandement que la bataille spatiale — carte du terrain à gauche, console du Moff à droite (empilée sur mobile). Monde sombre unique. */
 :root{
   --void:#07080a;
@@ -133,7 +134,7 @@ button.pulse{animation:pulse 1.4s ease-in-out infinite}
 
     <aside class="console">
       <div class="sect">
-        <div class="label">Ordres du Moff</div>
+        <div class="label">Ordres</div>
         <p class="brief">Les insurgés repliés au sol protègent un générateur de bouclier. Anéantissez-les, ou <strong>tenez le générateur deux tours d’affilée</strong>. Si l’escouade de commandement tombe, l’assaut échoue.</p>
         <div class="legend">
           <span><i style="color:var(--amber)"></i>Déplacement</span>
@@ -187,9 +188,9 @@ const TYPES={
   tank:{label:'Char lourd à répulseurs',hp:130,move:120,range:300,dmg:[22,30],r:40,shots:1,armored:true,special:'repair'},
   art:{label:'Batterie d’artillerie',hp:55,move:90,range:520,minRange:150,dmg:[16,22],r:32,shots:2,armored:true,indirect:true,special:'repair'},
   speed:{label:'Motos de reconnaissance',hp:34,move:300,range:150,dmg:[7,10],r:24,shots:2,fast:true,special:'dig'},
-  einf:{label:'Fantassins insurgés',hp:45,move:150,range:220,dmg:[8,12],r:26,shots:4,inf:true,men:5,cost:2},
+  einf:{label:'Fantassins ennemis',hp:45,move:150,range:220,dmg:[8,12],r:26,shots:4,inf:true,men:5,cost:2},
   eat:{label:'Équipe antichar',hp:35,move:130,range:260,dmg:[10,14],r:24,shots:1,inf:true,men:3,antiArmor:true,cost:2},
-  eltank:{label:'Char léger insurgé',hp:90,move:150,range:260,dmg:[16,22],r:36,shots:2,armored:true,cost:3},
+  eltank:{label:'Char léger ennemi',hp:90,move:150,range:260,dmg:[16,22],r:36,shots:2,armored:true,cost:3},
   eturret:{label:'Tourelle défensive',hp:110,move:0,range:340,dmg:[16,22],r:30,shots:2,armored:true,static:true}
 };
 
@@ -206,6 +207,16 @@ const hit=(list,x,y)=>list.some(p=>Math.hypot(x-p.x,y-p.y)<p.r);
 const coverAt=(x,y)=>hit(T.ruins,x,y)?'ruins':hit(T.forests,x,y)?'forest':null;
 const onHill=(x,y)=>hit(T.hills,x,y);
 const effRange=u=>Math.round(u.T.range*(onHill(u.x,u.y)?1.2:1));
+/* Biomes du terrain et objectifs de bataille */
+const BIOMES={
+  tempere:{base:'#5d5a3e',tones:['rgba(122,114,74,.28)','rgba(72,70,46,.28)','rgba(92,104,60,.25)','rgba(140,124,88,.18)'],grass:'rgba(140,150,90,.28)',trees:[['#5f7d3c','#2a3d1b'],['#4f6e33','#1f3015'],['#6a7f40','#33431d']],road:'rgba(150,132,96,.55)',f:[3,4],r:[2,3],k:[1,2]},
+  desert:{base:'#b0915f',tones:['rgba(214,184,132,.16)','rgba(158,122,78,.13)','rgba(190,158,108,.14)','rgba(232,206,160,.12)'],grass:null,trees:[['#8c8a55','#4c4a2c'],['#7c7a48','#3e3c22'],['#9a8c5a','#544a2e']],road:'rgba(120,96,64,.45)',f:[0,1],r:[2,3],k:[2,3]},
+  neige:{base:'#c3c9d2',tones:['rgba(244,247,252,.22)','rgba(168,178,194,.13)','rgba(214,222,232,.16)','rgba(148,158,174,.11)'],grass:null,trees:[['#3d5a4a','#1c2c24'],['#34503f','#16241c'],['#45604f','#203028']],road:'rgba(120,124,132,.45)',f:[2,3],r:[1,2],k:[1,2]},
+  urbain:{base:'#4b4a47',tones:['rgba(110,108,102,.30)','rgba(60,58,55,.30)','rgba(88,86,80,.25)','rgba(130,126,118,.18)'],grass:null,trees:[['#4f6a3a','#22301a'],['#46603a','#1e2a17'],['#566f3e','#2a361c']],road:'rgba(40,40,42,.65)',f:[0,1],r:[5,6],k:[0,1]},
+  jungle:{base:'#36502a',tones:['rgba(70,110,50,.30)','rgba(30,52,22,.30)','rgba(84,120,56,.25)','rgba(110,98,60,.18)'],grass:'rgba(110,160,70,.30)',trees:[['#3f8a3a','#164018'],['#2f7a34','#0f3412'],['#4f9440','#1d4a1a']],road:'rgba(110,86,52,.55)',f:[5,6],r:[1,2],k:[0,1]},
+  volcan:{base:'#2f2826',tones:['rgba(90,60,50,.30)','rgba(30,24,22,.35)','rgba(120,60,40,.20)','rgba(70,64,60,.25)'],grass:null,trees:[['#4a4038','#1e1a16'],['#3e3630','#18140f'],['#55473a','#221c16']],road:'rgba(100,80,70,.45)',f:[0,1],r:[1,2],k:[3,3],lava:true}
+};
+let BIOME=BIOMES.tempere,MODE='assaut',HOLD=6;
 const COVER={forest:{dmg:.7,ch:.1,label:'forêt'},ruins:{dmg:.55,ch:.15,label:'ruines'}};
 
 function clampPos(x,y){
@@ -246,9 +257,9 @@ function newBattle(){
     }
   };
   for(let i=0;i<60&&T.hills.length<2;i++){const r=rnd(120,160),x=rnd(420,1150),y=rnd(r,H-r);if(T.hills.every(h=>Math.hypot(h.x-x,h.y-y)>h.r+r+80)&&Math.hypot(x-OBJ.x,y-OBJ.y)>r+OBJ.r+40)T.hills.push({x,y,r});}
-  place(T.rocks,rint(1,2),45,65,520,1150,50);
-  place(T.ruins,rint(2,3),55,80,450,1300,30);
-  place(T.forests,rint(3,4),70,115,380,1300,25);
+  place(T.rocks,rint(BIOME.k[0],BIOME.k[1]),45,65,520,1150,50);
+  place(T.ruins,rint(BIOME.r[0],BIOME.r[1]),55,80,450,1300,30);
+  place(T.forests,rint(BIOME.f[0],BIOME.f[1]),70,115,380,1300,25);
   for(let i=0;i<9;i++)T.craters.push({x:rnd(300,1300),y:rnd(60,H-60),r:rnd(10,28)});
   T.forests.forEach(f=>{f.trees=[];const n=Math.round(f.r*f.r/70);for(let i=0;i<n;i++){const a=rnd(0,7),d=Math.sqrt(Math.random())*f.r*1.02;f.trees.push({x:f.x+Math.cos(a)*d,y:f.y+Math.sin(a)*d,r:rnd(7,15),t:rint(0,2)});}});
   T.ruins.forEach(z=>{z.blocks=Array.from({length:rint(4,6)},()=>{const a=rnd(0,7),d=rnd(0,z.r*.6);return{x:z.x+Math.cos(a)*d,y:z.y+Math.sin(a)*d,w:rnd(26,48),h:rnd(18,34),rot:rnd(-.4,.4),gap:rint(0,3)};});
@@ -289,12 +300,13 @@ function blob(g,x,y,rx,ry,rot,fill){g.save();g.translate(x,y);g.rotate(rot);g.fi
 function renderBG(){
   bg=document.createElement('canvas');bg.width=W;bg.height=H;
   const g=bg.getContext('2d');
-  g.fillStyle='#5d5a3e';g.fillRect(0,0,W,H);
-  const tones=['rgba(122,114,74,.28)','rgba(72,70,46,.28)','rgba(92,104,60,.25)','rgba(140,124,88,.18)'];
+  g.fillStyle=BIOME.base;g.fillRect(0,0,W,H);
+  const tones=BIOME.tones;
   for(let i=0;i<280;i++)blob(g,rnd(-50,W+50),rnd(-50,H+50),rnd(40,190),rnd(25,110),rnd(0,7),tones[rint(0,3)]);
   for(let i=0;i<7000;i++){g.fillStyle=Math.random()<.5?'rgba(255,245,210,.06)':'rgba(0,0,0,.08)';g.fillRect(rnd(0,W),rnd(0,H),rnd(1,2.5),rnd(1,2.5));}
-  g.strokeStyle='rgba(140,150,90,.28)';g.lineWidth=1;g.beginPath();
-  for(let i=0;i<1400;i++){const x=rnd(0,W),y=rnd(0,H);g.moveTo(x,y);g.lineTo(x+rnd(-2,2),y-rnd(3,7));}g.stroke();
+  if(BIOME.grass){g.strokeStyle=BIOME.grass;g.lineWidth=1;g.beginPath();
+  for(let i=0;i<1400;i++){const x=rnd(0,W),y=rnd(0,H);g.moveTo(x,y);g.lineTo(x+rnd(-2,2),y-rnd(3,7));}g.stroke();}
+  if(BIOME.lava){g.lineCap='round';for(let i=0;i<5;i++){const x0=rnd(300,1300),y0=rnd(0,H);g.strokeStyle='rgba(255,110,40,.18)';g.lineWidth=14;g.beginPath();g.moveTo(x0,y0);for(let k=1;k<6;k++)g.lineTo(x0+k*rnd(30,70),y0+rnd(-60,60));g.stroke();g.strokeStyle='rgba(255,170,70,.55)';g.lineWidth=3;g.stroke();}}
   // Collines
   for(const h of T.hills){
     for(let k=0;k<5;k++){const rr=h.r*(1-k*.18);
@@ -309,7 +321,7 @@ function renderBG(){
   const road=()=>{g.beginPath();g.moveTo(-20,500);g.bezierCurveTo(500,rnd(300,700),900,rnd(300,700),OBJ.x-60,OBJ.y);};
   const seed=Math.random;const s1=[rnd(300,700),rnd(300,700)];
   const drawRoad=(w,c)=>{g.strokeStyle=c;g.lineWidth=w;g.beginPath();g.moveTo(-20,500);g.bezierCurveTo(500,s1[0],900,s1[1],OBJ.x-60,OBJ.y);g.stroke();};
-  drawRoad(52,'rgba(60,50,32,.35)');drawRoad(42,'rgba(150,132,96,.55)');
+  drawRoad(52,'rgba(60,50,32,.35)');drawRoad(42,BIOME.road);
   g.setLineDash([2,10]);drawRoad(28,'rgba(90,76,52,.25)');g.setLineDash([]);
   // Cratères
   for(const c of T.craters){
@@ -346,7 +358,7 @@ function renderBG(){
     g.fillStyle='rgba(22,30,14,.35)';g.beginPath();g.arc(f.x+6,f.y+8,f.r*1.02,0,7);g.fill();
     for(const t of f.trees){g.fillStyle='rgba(0,0,0,.35)';g.beginPath();g.arc(t.x+5,t.y+6,t.r,0,7);g.fill();}
     for(const t of f.trees){
-      const c=[['#5f7d3c','#2a3d1b'],['#4f6e33','#1f3015'],['#6a7f40','#33431d']][t.t];
+      const c=BIOME.trees[t.t];
       const gr=g.createRadialGradient(t.x-t.r*.35,t.y-t.r*.4,1,t.x,t.y,t.r);gr.addColorStop(0,c[0]);gr.addColorStop(1,c[1]);
       g.fillStyle=gr;g.beginPath();g.arc(t.x,t.y,t.r,0,7);g.fill();
     }
@@ -636,7 +648,7 @@ function checkEnd(){
   if(over)return true;
   const cmd=units.find(u=>u.flag);
   if(!cmd.alive){endBattle(false,'L’escouade de commandement est tombée. Sans ordres, les troupes regagnent les barges et l’assaut échoue.');return true;}
-  if(!units.some(u=>u.side==='e'&&u.alive)){endBattle(true,'Toutes les positions insurgées ont été réduites au silence. Le générateur tombe intact entre vos mains.');return true;}
+  if(!units.some(u=>u.side==='e'&&u.alive)){endBattle(true,'Toutes les positions ennemies ont été réduites au silence. Le générateur tombe intact entre vos mains.');return true;}
   return false;
 }
 
@@ -680,22 +692,25 @@ async function enemyPhase(){
   units.filter(u=>u.side==='e').forEach(u=>u.dug=false);
   const mobile=units.filter(u=>u.side==='e'&&u.alive&&!u.T.static);
   const left=mobile.reduce((a,u)=>a+u.hp,0);
-  if(turn>=3&&left<initEnemy*.2){
-    log('Les insurgés abandonnent leurs positions et fuient dans les collines.','kill');await wait(500);
-    endBattle(true,'Brisés, les derniers insurgés ont fui. Le générateur est à vous.');busy=false;return;
+  if(turn>=3&&left<initEnemy*.2&&MODE!=='defense'){
+    log('Les ennemis abandonnent leurs positions et fuient dans les collines.','kill');await wait(500);
+    endBattle(true,'Brisés, les derniers ennemis ont fui. Le générateur est à vous.');busy=false;return;
   }
   await wait(400);
   const order=units.filter(u=>u.side==='e'&&u.alive).sort((a,b)=>(a.T.static?1:0)-(b.T.static?1:0));
   for(const e of order){await enemyAct(e);if(checkEnd()){busy=false;acting=null;return;}await wait(140);}
+  if(MODE==='defense'&&turn>=HOLD){endBattle(true,`Vos troupes ont tenu la position pendant ${HOLD} tours. L’ennemi se replie.`);busy=false;return;}
   // capture du générateur
+  if(MODE==='assaut'){
   const meIn=units.some(u=>u.alive&&u.side==='p'&&dist(u,OBJ)<OBJ.r),enemyIn=units.some(u=>u.alive&&u.side==='e'&&!u.T.static&&dist(u,OBJ)<OBJ.r);
   if(meIn&&!enemyIn){capture++;log(capture>=2?'Le générateur est saboté !':'Vos troupes tiennent le générateur (1/2).','kill');}
   else if(capture>0){capture=0;log('Le contrôle du générateur est perdu.','e');}
-  if(capture>=2){endBattle(true,'Vos troupes ont tenu le générateur et l’ont saboté. Le bouclier insurgé tombe.');busy=false;return;}
+  if(capture>=2){endBattle(true,'Vos troupes ont tenu le générateur et l’ont saboté. Le bouclier ennemi tombe.');busy=false;return;}
+  }
   turn++;phase='player';busy=false;
   units.filter(u=>u.side==='p'&&u.alive).forEach(u=>{u.moved=false;u.acted=false;u.dug=false;});
   sel=units.find(u=>u.side==='p'&&u.alive)||null;
-  log(`Tour ${turn} : vos ordres, Moff.`);
+  log(`Tour ${turn} : vos ordres.`);
   renderUI();
 }
 
@@ -708,7 +723,7 @@ function endBattle(win,text){
     `ASSAUT SUR KESSARIA IV — ${win?'VICTOIRE':'DÉFAITE'} (tour ${turn})`,text,'',
     `Frappe orbitale : ${orbital?'non utilisée':'utilisée'}`,'',
     'Forces de débarquement :',...pl.map(u=>`- ${u.name} (${u.T.label}) : ${st(u)}`),'',
-    `Insurgés : ${en.filter(u=>!u.alive).length}/${en.length} positions détruites`,
+    `Ennemis : ${en.filter(u=>!u.alive).length}/${en.length} positions détruites`,
     ...en.map(u=>`- ${u.name} (${u.T.label}) : ${!u.alive?'détruit':'en fuite, '+st(u)}`)
   ];
   const t=document.getElementById('rTitle');t.textContent=win?'Victoire':'Défaite';t.className=win?'win':'lose';
@@ -724,6 +739,7 @@ function hcol(h){return h>.6?'var(--imp)':h>.3?'var(--amber)':'var(--foe)';}
 function renderUI(){
   document.getElementById('turnNo').textContent=String(turn).padStart(2,'0');
   document.getElementById('c1').className=capture>=1?'on':'';document.getElementById('c2').className=capture>=2?'on':'';
+  const cap=document.querySelector('.cap');if(cap){cap.hidden=MODE==='elimination';if(MODE==='defense'){cap.title=`Tenez jusqu’au tour ${HOLD}`;cap.firstChild.textContent=`Tenir : tour ${Math.min(turn,HOLD)}/${HOLD} `;cap.querySelectorAll('i').forEach(i=>i.hidden=true);}}
   const ph=document.getElementById('phase');
   ph.textContent=over?'Bataille terminée':phase==='enemy'?'Tour ennemi':'Vos ordres';ph.className='phase'+(phase==='enemy'&&!over?' enemy':'');
   const card=document.getElementById('card'),hint=document.getElementById('hint');
@@ -737,7 +753,7 @@ function renderUI(){
   }else card.innerHTML='<div class="ty" style="margin:0">Aucune unité sélectionnée.</div>';
   if(over)hint.textContent='La bataille est terminée. Le rapport est prêt à être recopié.';
   else if(orbMode)hint.textContent='Cliquez la zone à frapper. Attention : la frappe touche aussi vos propres troupes.';
-  else if(phase==='enemy')hint.textContent='Les insurgés manœuvrent et ouvrent le feu…';
+  else if(phase==='enemy')hint.textContent='Les ennemis manœuvrent et ouvrent le feu…';
   else if(!sel)hint.textContent='Sélectionnez une de vos unités sur la carte ou dans la liste.';
   else if(sel.moved&&sel.acted)hint.textContent='Ordres exécutés. Choisissez une autre unité ou terminez le tour.';
   else if(sel.T.indirect&&!sel.acted&&!sel.moved)hint.textContent='L’artillerie tire de très loin, mais seulement si elle ne bouge pas ce tour-ci.';
@@ -838,7 +854,7 @@ function drawHover(){
     const d=moveDest(sel,hover);
     g.strokeStyle='rgba(232,171,82,.75)';g.setLineDash([4,6]);g.lineWidth=1.5;g.beginPath();g.moveTo(sel.x,sel.y);g.lineTo(d.x,d.y);g.stroke();g.setLineDash([]);
     g.strokeStyle='rgba(232,171,82,.95)';g.beginPath();g.arc(d.x,d.y,sel.r*.7,0,7);g.stroke();
-    const tags=[sel.T.inf&&coverAt(d.x,d.y)&&('COUVERT : '+COVER[coverAt(d.x,d.y)].label.toUpperCase()),onHill(d.x,d.y)&&'COLLINE : PORTÉE +20 %',Math.hypot(d.x-OBJ.x,d.y-OBJ.y)<OBJ.r&&'ZONE DU GÉNÉRATEUR'].filter(Boolean);
+    const tags=[sel.T.inf&&coverAt(d.x,d.y)&&('COUVERT : '+COVER[coverAt(d.x,d.y)].label.toUpperCase()),onHill(d.x,d.y)&&'COLLINE : PORTÉE +20 %',MODE==='assaut'&&Math.hypot(d.x-OBJ.x,d.y-OBJ.y)<OBJ.r&&'ZONE DU GÉNÉRATEUR'].filter(Boolean);
     g.font='600 13px "Chakra Petch",sans-serif';g.textAlign='center';
     tags.forEach((t,i)=>{g.fillStyle='rgba(0,0,0,.6)';g.fillText(t,d.x+1,d.y+sel.r*.7+19+i*16);g.fillStyle='#e8ab52';g.fillText(t,d.x,d.y+sel.r*.7+18+i*16);});
   }
@@ -847,7 +863,7 @@ function frame(now){
   anims=anims.filter(f=>!f(now));
   ctx.setTransform(scale,0,0,scale,0,0);ctx.clearRect(0,0,W,H);
   if(bg)ctx.drawImage(bg,0,0,W,H);
-  drawGenerator(now);
+  if(MODE==='assaut')drawGenerator(now);
   drawOverlays(now);
   for(const u of units)if(u.alive)drawUnit(u,now);
   drawFx(now);drawHover();
