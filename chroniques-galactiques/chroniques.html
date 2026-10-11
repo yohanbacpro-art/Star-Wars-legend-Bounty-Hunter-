@@ -183,6 +183,9 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
 .sheet .chip.good{color:var(--ok);border-color:rgba(141,255,173,.35)}
 .sheet .chip.bad{color:#ff8f8f;border-color:rgba(255,74,74,.4)}
 .sheet .chip.warn{color:var(--amber);border-color:rgba(232,171,82,.4)}
+.align{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;font-size:11px;color:var(--dim);margin-top:4px}
+.abar{position:relative;height:6px;background:linear-gradient(90deg,#a01818,#3a3540 50%,#3f8ad8)}
+.abar i{position:absolute;top:-4px;width:3px;height:14px;background:var(--steel);transform:translateX(-50%)}
 .tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:8px}
 .tabs button{font-size:11px;padding:6px 10px;background:transparent;color:var(--dim)}
 .tabs button.on{color:var(--steel);border-color:var(--amber)}
@@ -4200,7 +4203,8 @@ $('stepNext').addEventListener('click',()=>{
 /* ================= Fiches de combat ================= */
 function heroFiche(src){
   const h=(src||S).hero,D=derived(h);
-  const kind=h.force?(PATHS[(src||S).path]?.kind!=='none'?PATHS[(src||S).path].kind:h.side):'none';
+  const base=h.force?(PATHS[(src||S).path]?.kind!=='none'?PATHS[(src||S).path].kind:h.side):'none';
+  const al=h.alignement||0,kind=!h.force?'none':al>=3?'jedi':al<=-3?'sith':base;
   const cur=src?D.pv:heroHP();
   return{name:h.name||'Ton personnage',side:'p',kind,weapon:h.weapon,blade1:h.blade1,blade2:h.blade2,bolt:h.bolt,form:h.form,tech:h.tech,pv:cur,pvMax:D.pv,sabre:h.skills.sabre,tir:h.skills.tir,force:h.skills.force,fp:D.fp,ref:D.ref,look:h.look,hero:true};
 }
@@ -4264,9 +4268,27 @@ function manage(kind,key,name){
   else return;
   r.credits-=cost;memo(`INTENDANCE : ${txt} (−${cost.toLocaleString('fr-FR')} crédits).`);saveCampaign();renderStory();
 }
+/* ================= Systèmes débloqués par l'histoire ================= */
+const alignLabel=a=>a>=7?'profondément lumineux':a>=3?'côté lumineux':a<=-7?'plongé dans le côté obscur':a<=-3?'côté obscur':'en équilibre, tiraillé';
+function shiftAlign(n,why){
+  const h=S.hero;if(!h.force)return;const old=h.alignement||0,nv=Math.max(-10,Math.min(10,old+Math.max(-3,Math.min(3,Math.round(n)))));if(nv===old)return;h.alignement=nv;
+  h.alignHist=h.alignHist||[];h.alignHist.push({ch:S.chapter.n,d:nv-old,t:String(why||'').slice(0,140)});if(h.alignHist.length>8)h.alignHist.shift();
+  const zone=a=>a>=3?1:a<=-3?-1:0;if(zone(nv)!==zone(old))memo(`LA FORCE : ${h.name} bascule ${nv>=3?'vers le côté lumineux':nv<=-3?'vers le côté obscur':'dans l’entre-deux'}.`);
+}
+const CONTRAT_ETATS=['disponible','accepté','rempli','échoué','abandonné'];
+function mergeContrats(list){
+  if(!Array.isArray(list))return;S.contrats=S.contrats||[];
+  list.forEach(c=>{if(!c||!c.cible)return;const id=String(c.cible).trim().slice(0,60);let cur=S.contrats.find(x=>x.cible.toLowerCase()===id.toLowerCase());
+    if(!cur){cur={cible:id,etat:'disponible'};S.contrats.push(cur);}
+    for(const f of['prime','condition','lieu','risque','note'])if(c[f]!=null&&String(c[f]).trim())cur[f]=f==='prime'?Math.max(0,Math.round(+c[f]||0)):String(c[f]).trim().slice(0,f==='note'?200:60);
+    if(CONTRAT_ETATS.includes(c.etat))cur.etat=c.etat;cur.ch=S.chapter.n;});
+  if(S.contrats.length>20){const i=S.contrats.findIndex(x=>x.etat!=='accepté'&&x.etat!=='disponible');S.contrats.splice(i<0?0:i,1);}
+}
+
 /* ================= Mémoire longue : carnet et résumés de chapitres ================= */
 const CODEX={pnj:{key:'nom',max:60,l:'Personnages'},quetes:{key:'titre',max:30,l:'Quêtes'},lieux:{key:'nom',max:40,l:'Lieux'},factions:{key:'nom',max:20,l:'Factions'}};
 const CODEX_F={pnj:['nom','role','relation','statut','note','voix','lien','romance'],quetes:['titre','etat','note'],lieux:['nom','note'],factions:['nom','attitude','note']};
+const REP_LABEL=r=>r>=4?'honoré':r>=2?'apprécié':r>=1?'bien vu':r<=-4?'traqué':r<=-2?'haï':r<=-1?'mal vu':'inconnu';
 function mergeCodex(cx){
   if(!cx||typeof cx!=='object')return;
   for(const k of Object.keys(CODEX)){
@@ -4280,6 +4302,7 @@ function mergeCodex(cx){
         if(Number.isFinite(+e.affinite)&&e.affinite!==''&&e.affinite!==null)cur.affinite=Math.max(-5,Math.min(5,Math.round(+e.affinite)));
         if(e.evenement&&String(e.evenement).trim()){cur.hist=cur.hist||[];cur.hist.push({ch:S.chapter.n,t:String(e.evenement).trim().slice(0,160)});if(cur.hist.length>6)cur.hist.shift();}
       }
+      if(k==='factions'&&Number.isFinite(+e.reputation)&&e.reputation!==''&&e.reputation!==null)cur.reputation=Math.max(-5,Math.min(5,Math.round(+e.reputation)));
       cur.ch=S.chapter.n;
       if(list.length>CODEX[k].max){const i=list.findIndex(x=>x!==cur&&(k!=='quetes'||x.etat!=='en cours'));list.splice(i<0?0:i,1);}
     });
@@ -4289,7 +4312,8 @@ function codexBlock(){
   const c=S.codex,o=[];
   if(c.quetes.length)o.push('Quêtes : '+c.quetes.map(q=>`${q.titre} [${q.etat||'en cours'}]${q.note?' — '+q.note:''}`).join(' ; '));
   if(c.pnj.length)o.push('Personnages :\n'+c.pnj.map(n=>`- ${n.nom}${n.role?' ('+n.role+')':''} [${[n.relation,n.affinite!=null?'affinité '+(n.affinite>0?'+':'')+n.affinite:'',n.lien,n.romance&&n.romance!=='aucune'?'romance : '+n.romance:'',n.statut&&n.statut!=='vivant'?n.statut:''].filter(Boolean).join(', ')||'?'}]${n.note?' — '+n.note:''}${n.voix?' · Voix : '+n.voix:''}${n.hist&&n.hist.length?' · Récemment : '+n.hist.slice(-2).map(h=>h.t).join(' / '):''}`).join('\n'));
-  if(c.factions.length)o.push('Factions : '+c.factions.map(f=>`${f.nom} [${f.attitude||'?'}]${f.note?' — '+f.note:''}`).join(' ; '));
+  if(c.factions.length)o.push('Factions : '+c.factions.map(f=>`${f.nom} [${[f.attitude,f.reputation!=null?'réputation du joueur '+(f.reputation>0?'+':'')+f.reputation+' ('+REP_LABEL(f.reputation)+')':''].filter(Boolean).join(', ')||'?'}]${f.note?' — '+f.note:''}`).join(' ; '));
+  if(S.unlocks&&S.unlocks.contrats&&(S.contrats||[]).length)o.push('Contrats de chasse : '+S.contrats.map(k=>`${k.cible} [${k.etat}]${k.prime?' '+k.prime+' cr':''}${k.condition?', '+k.condition:''}${k.lieu?', '+k.lieu:''}`).join(' ; '));
   if(c.lieux.length)o.push('Lieux : '+c.lieux.map(l=>`${l.nom}${l.note?' — '+l.note:''}`).join(' ; '));
   if(S.playerNotes)o.push('Notes personnelles du joueur (pour info) : '+S.playerNotes.slice(0,800));
   return o.join('\n');
@@ -4305,6 +4329,8 @@ function migrate(s){
   s.res.fleet.forEach(x=>{if(x.hull==null)x.hull=1;});s.res.troops.forEach(x=>{if(x.hp==null)x.hp=1;});s.res.companions.forEach(x=>{if(x.hp==null)x.hp=1;});
   if(!Array.isArray(s.hero.forms))s.hero.forms=['none',...(s.hero.form&&s.hero.form!=='none'?[s.hero.form]:[])];
   if(!s.res.faction||!FACTIONS[s.res.faction])s.res.faction=PATH_FACTION[s.path]||'pirate';
+  if(!s.unlocks)s.unlocks={};if(!Array.isArray(s.contrats))s.contrats=[];
+  if(s.hero.force&&s.hero.alignement==null)s.hero.alignement=s.path==='sith'?-5:s.path==='jedi'?5:s.hero.side==='sith'?-2:s.hero.side==='jedi'?2:0;
   if(!s.zero.diff)s.zero.diff='normal';if(!s.zero.romance)s.zero.romance='discrete';if(!s.zero.longueur)s.zero.longueur='normale';if(!s.zero.style)s.zero.style='equilibre';if(s.res.ship&&s.res.shipHull==null)s.res.shipHull=1;
   if(s.xp==null)s.xp=0;if(s.destiny==null)s.destiny=3;if(s.bookPart==null)s.bookPart=0;return s;
 }
@@ -4357,6 +4383,7 @@ function heroBlock(){
     `Compétences (3d6 sous le score) : ${SKILLS.filter(([k])=>k!=='force'||h.force).map(([k,l])=>`${k}=${h.skills[k]}`).join(', ')}`,
     `PV ${heroHP()}/${D.pv} (${hurtLabel(heroHP()/D.pv)}) · Arme : ${WEAPONS[h.weapon]}${h.weapon.match(/saber|dual|double/)?` (forme ${FORMS[h.form]})`:''}${h.tech.length?' · Techniques : '+h.tech.map(t=>TECHS[t]).join(', '):''}`,
     `Points de Destin : ${S.destiny} (le joueur peut en dépenser un pour relancer un jet raté)`,
+    ...(h.force?[`Alignement dans la Force : ${h.alignement||0} sur une échelle de −10 (obscur) à +10 (lumineux), ${alignLabel(h.alignement||0)}${h.alignHist&&h.alignHist.length?' · récemment : '+h.alignHist.slice(-2).map(x=>x.t).join(' / '):''}`]:[]),
     `Expérience non dépensée : ${S.xp||0} points (le joueur la dépense lui-même)`].join('\n');
 }
 function resBlock(){
@@ -4394,6 +4421,7 @@ Principes :
 - Chaque PNJ important a sa voix : vocabulaire, tics, accent, ce qu’il veut et ce qu’il cache. Garde-la constante d’une scène à l’autre et note-la dans "codex" ("voix").
 - Les relations vivent : les compagnons et PNJ ont leurs opinions, leurs désaccords, une loyauté qui se gagne et se perd selon les actes du joueur. Quand un moment change un lien, mets à jour "affinite" (−5 à +5) et décris-le dans "evenement".
 - Romance : __ROMANCE__
+- Systèmes de jeu : rien n’apparaît que l’histoire n’ait amené. Le tableau de contrats ne s’ouvre que si le personnage choisit la chasse aux primes ; la réputation suit ses actes envers chaque faction ; l’alignement dans la Force suit ses choix moraux, sans le juger.
 - Respiration : après un combat, une épreuve ou une fin de chapitre, ménage des scènes calmes (soins, repas, confidences, silences partagés) où les dialogues s’épanouissent. Quand c’est pertinent, l’un des choix proposés ouvre un moment avec un compagnon. Ne force rien : le joueur décide.
 - Ne révèle jamais le carnet secret au joueur.`;
 const FORMAT=`FORMAT DE RÉPONSE OBLIGATOIRE :
@@ -4413,7 +4441,8 @@ const FORMAT=`FORMAT DE RÉPONSE OBLIGATOIRE :
 - chronicle : 1 ou 2 phrases factuelles résumant ce qui vient de se passer (c’est ta mémoire).
 - codex : le carnet que le joueur consulte, uniquement les entrées nouvelles ou modifiées (elles sont fusionnées par nom), sinon null : {"pnj":[{"nom":"…","role":"…","relation":"allié|amical|neutre|méfiant|hostile","statut":"vivant|mort|disparu|captif","note":"ce que le joueur sait","voix":"façon de parler, tics, ce qu’il cache","lien":"nature du lien en 2-4 mots (ex. dette d’honneur, rivalité, confiance fragile)","affinite":<−5 à +5 envers le joueur>,"evenement":"ce qui vient de changer le lien, s’il a changé","romance":"aucune|attirance|flirt|liaison|amour|rupture"}],"quetes":[{"titre":"…","etat":"en cours|réussie|échouée|abandonnée","note":"…"}],"lieux":[{"nom":"…","note":"…"}],"factions":[{"nom":"…","attitude":"alliée|neutre|hostile|…","note":"…"}]}. Ajoute chaque PNJ nommé important, chaque objectif que le joueur poursuit, chaque lieu marquant. N’y mets jamais ce que le joueur ignore (c’est la place du carnet secret).
 - chapter : uniquement quand un nouveau chapitre commence, sinon null : {"title":"…","resume":"5 à 8 phrases factuelles résumant tout le chapitre qui s’achève : faits, choix du joueur, PNJ, conséquences"}. Ce résumé est ta seule mémoire à long terme du chapitre. Change de chapitre à la fin d’un arc ou d’une étape importante (toutes les 15 à 30 scènes environ).
-- secret : le carnet secret complet mis à jour, uniquement s’il change vraiment, sinon null.`;
+- secret : le carnet secret complet mis à jour, uniquement s’il change vraiment, sinon null.
+- Dans "updates", selon l’histoire : "cote":<−3 à +3> et "cote_raison":"…" quand un personnage sensible à la Force pose un acte qui le rapproche du côté obscur (négatif) ou lumineux (positif) ; "debloquer":["contrats"] seulement quand le personnage se lance vraiment dans la chasse aux primes dans le récit ; ensuite "contrats":[{"cible":"…","prime":<crédits>,"condition":"vivant|mort ou vif|mort","lieu":"…","risque":"faible|moyen|élevé|extrême","note":"…","etat":"disponible|accepté|rempli|échoué|abandonné"}] (fusionnés par cible). Dans "codex", les factions peuvent porter "reputation":<−5 à +5>, la réputation du joueur auprès d’elles.`;
 const ROMANCE_RULE={
   non:'le joueur ne veut pas de romance. N’en initie jamais ; si le joueur en amorce une lui-même, suis-le avec retenue.',
   discrete:'une romance peut naître si les personnages s’y prêtent, lentement et sans la forcer. Les PNJ ont leur volonté propre et peuvent dire non. Les scènes intimes restent suggérées (fondu au noir).',
@@ -4517,6 +4546,9 @@ function applyData(d){
     (u.addTroops||[]).forEach(s=>{if(s&&TROOP_T[s.type]&&r.troops.length<7)r.troops.push({type:s.type,name:String(s.name||'Nouvelle unité').slice(0,30),hp:1});});
     (u.notes||[]).forEach(n=>{r.notes=r.notes||[];r.notes.push(String(n).slice(0,200));if(r.notes.length>30)r.notes.shift();});
     if(u.faction&&FACTIONS[u.faction])r.faction=u.faction;
+    if(Number.isFinite(+u.cote)&&+u.cote)shiftAlign(+u.cote,u.cote_raison);
+    (Array.isArray(u.debloquer)?u.debloquer:[]).forEach(k=>{if(k==='contrats'&&!S.unlocks.contrats){S.unlocks.contrats=true;memo('NOUVEAU : le tableau des contrats de chasse est ouvert dans la fiche.');}});
+    if(u.contrats)mergeContrats(u.contrats);
     (Array.isArray(u.equipement)?u.equipement:[]).forEach(t=>{if(EQUIP.includes(t)&&!S.hero.tech.includes(t)){S.hero.tech.push(t);}});
     (Array.isArray(u.perteEquipement)?u.perteEquipement:[]).forEach(t=>{S.hero.tech=S.hero.tech.filter(x=>x!==t);});
     if(u.heal==='repos')healAll();else if(Number.isFinite(+u.heal)&&+u.heal>0)S.hero.hp=Math.min(derived(S.hero).pv,heroHP()+Math.round(+u.heal));
@@ -4586,12 +4618,14 @@ let sheetTab='fiche';
 const meter=(f,label)=>`<span class="meter" title="${esc(label)}"><i style="width:${Math.round(frac(f)*100)}%;background:${f>=.6?'var(--ok)':f>=.3?'var(--amber)':'var(--sith)'}"></i></span>`;
 function renderSheet(){
   const h=S.hero,D=derived(h),r=S.res,era=ERAS.find(e=>e.k===S.era),hp=heroHP();
-  const tabs=[['fiche','Fiche'],['carnet','Carnet'],['prog',`Progression${S.xp?' · '+S.xp+' XP':''}`],['inten','Intendance']];
+  const tabs=[['fiche','Fiche'],['carnet','Carnet'],...(S.unlocks&&S.unlocks.contrats?[['contrats',`Contrats${S.contrats.filter(k=>k.etat==='disponible').length?' · '+S.contrats.filter(k=>k.etat==='disponible').length:''}`]]:[]),['prog',`Progression${S.xp?' · '+S.xp+' XP':''}`],['inten','Intendance']];
+  if(sheetTab==='contrats'&&!(S.unlocks&&S.unlocks.contrats))sheetTab='fiche';
   let body='';
   if(sheetTab==='fiche'){
     body=`<section><span class="label">Compétences · 3d6 sous le score</span><div class="sklist">${SKILLS.filter(([k])=>k!=='force'||h.force).map(([k,l])=>`<div><span>${l}</span><b>${h.skills[k]}</b></div>`).join('')}</div>
       <div class="hprow"><span>PV <b>${hp}/${D.pv}</b></span>${meter(hp/D.pv,hurtLabel(hp/D.pv))}<span class="muted">${hurtLabel(hp/D.pv)}</span></div>
       <div class="sub">Réflexes ${D.ref}${h.force?' · Réserve de Force '+D.fp:''} · XP ${S.xp||0}</div>
+      ${h.force?(()=>{const a=h.alignement||0;return`<div class="align" title="${esc(alignLabel(a))}"><span>Obscur</span><div class="abar"><i style="left:${(a+10)*5}%"></i></div><span>Lumineux</span></div><div class="sub">La Force : ${esc(alignLabel(a))}</div>`;})():''}
       <div class="sub">${WEAPONS[h.weapon]}${/saber|dual|double/.test(h.weapon)?' · '+FORMS[h.form]:''}${h.tech.length?' · '+h.tech.map(t=>TECHS[t]).join(', '):''}</div></section>
     <section><span class="label">Ressources</span><div class="reslist">
       <div><span>Crédits</span><span>${r.credits.toLocaleString('fr-FR')}</span></div>
@@ -4613,7 +4647,7 @@ function renderSheet(){
       ${a!=null?`<div class="aff" title="Affinité ${a>0?'+':''}${a}"><i style="left:${a<0?50+a*10:50}%;width:${Math.abs(a)*10}%;background:${a>=0?'var(--ok)':'var(--sith)'}"></i></div>`:''}
       ${n.lien?`<p><b class="k">Lien</b> ${esc(n.lien)}</p>`:''}${n.note?`<p>${esc(n.note)}</p>`:''}${n.voix?`<p class="voix">« ${esc(n.voix)} »</p>`:''}
       ${n.hist&&n.hist.length?`<ul class="hist">${n.hist.slice().reverse().map(h=>`<li><b>Ch. ${h.ch}</b> ${esc(h.t)}</li>`).join('')}</ul>`:''}</div>`;}).join('')||'<div class="sub">Personne pour l’instant.</div>'}</div></section>
-    ${c.factions.length?`<section><span class="label">Factions</span><div class="codex">${c.factions.map(f=>`<div><b>${esc(f.nom)}</b> ${f.attitude?`<span class="chip ${rel(f.attitude)}">${esc(f.attitude)}</span>`:''}${f.note?`<p>${esc(f.note)}</p>`:''}</div>`).join('')}</div></section>`:''}
+    ${c.factions.length?`<section><span class="label">Factions</span><div class="codex">${c.factions.map(f=>`<div><b>${esc(f.nom)}</b> ${f.attitude?`<span class="chip ${rel(f.attitude)}">${esc(f.attitude)}</span>`:''}${f.reputation!=null?` <span class="chip ${f.reputation>0?'good':f.reputation<0?'bad':''}">réputation : ${REP_LABEL(f.reputation)}</span><div class="aff"><i style="left:${f.reputation<0?50+f.reputation*10:50}%;width:${Math.abs(f.reputation)*10}%;background:${f.reputation>=0?'var(--ok)':'var(--sith)'}"></i></div>`:''}${f.note?`<p>${esc(f.note)}</p>`:''}</div>`).join('')}</div></section>`:''}
     ${c.lieux.length?`<section><span class="label">Lieux</span><div class="codex">${[...c.lieux].reverse().map(l=>`<div><b>${esc(l.nom)}</b>${l.note?`<p>${esc(l.note)}</p>`:''}</div>`).join('')}</div></section>`:''}
     ${S.chapters.length?`<section><span class="label">Chapitres précédents</span><div class="codex">${[...S.chapters].reverse().map(x=>`<div><b>Ch. ${x.n} · ${esc(x.title)}</b><p>${esc(x.summary)}</p></div>`).join('')}</div></section>`:''}
     <section><span class="label">Narration</span>
@@ -4621,6 +4655,12 @@ function renderSheet(){
       <div class="zset"><span>Longueur</span><div class="chipset">${LONGUEUR.map(([k,l])=>`<button type="button" data-zset="longueur:${k}" class="${S.zero.longueur===k?'on':''}">${l}</button>`).join('')}</div></div>
       <div class="zset"><span>Style</span><div class="chipset">${STYLE.map(([k,l])=>`<button type="button" data-zset="style:${k}" class="${S.zero.style===k?'on':''}">${l}</button>`).join('')}</div></div></section>
     <section><span class="label">Mes notes</span><textarea id="pNotes" rows="4" maxlength="800" placeholder="Tes propres notes. Le MJ les lit, sans les prendre pour des actions.">${esc(S.playerNotes)}</textarea></section>`;
+  }else if(sheetTab==='contrats'){
+    const order={'accepté':0,'disponible':1,'rempli':2,'échoué':3,'abandonné':4},list=[...S.contrats].sort((a,b)=>order[a.etat]-order[b.etat]);
+    body=`<section><span class="label">Tableau des contrats</span><p class="sub" style="margin:0">Accepter un contrat, c’est le dire au MJ : la suite se joue dans le récit.</p>
+      <div class="codex">${list.map((k,i)=>`<div class="${['rempli','échoué','abandonné'].includes(k.etat)?'done':''}"><b>${esc(k.cible)}</b> <span class="chip ${k.etat==='rempli'?'good':k.etat==='échoué'?'bad':k.etat==='accepté'?'warn':''}">${esc(k.etat)}</span>
+        <p>${k.prime?`<b class="k">${k.prime.toLocaleString('fr-FR')} cr</b> · `:''}${esc(k.condition||'')}${k.lieu?' · '+esc(k.lieu):''}${k.risque?' · risque '+esc(k.risque):''}</p>${k.note?`<p>${esc(k.note)}</p>`:''}
+        ${k.etat==='disponible'?`<button type="button" class="small" data-contrat="${esc(k.cible)}" ${busyMJ||S.pending?'disabled':''}>Accepter ce contrat</button>`:''}</div>`).join('')||'<div class="sub">Aucun contrat pour l’instant. Le MJ en proposera au fil de l’histoire.</div>'}</div></section>`;
   }else if(sheetTab==='prog'){
     const lock=!canManage(),blade=isSaberW(h.weapon),F=knownForms(h);
     const nb=(c,dis)=>`${dis||lock||S.xp<c?'disabled':''}`;
@@ -4685,6 +4725,7 @@ $('sheet').addEventListener('click',e=>{
   if(b.dataset.tab){sheetTab=b.dataset.tab;renderSheet();return;}
   if(b.dataset.zset){const [k,v]=b.dataset.zset.split(':');if(['romance','longueur','style'].includes(k)){S.zero[k]=v;saveCampaign();renderSheet();}return;}
   if(b.dataset.xp){spendXP(b.dataset.xp,b.dataset.k);return;}
+  if(b.dataset.contrat){const k=S.contrats.find(x=>x.cible===b.dataset.contrat);if(k&&k.etat==='disponible'&&!busyMJ&&!S.pending){const d=[k.prime?k.prime+' crédits':'',k.condition||''].filter(Boolean).join(', ');playerAct(`J’accepte le contrat sur ${k.cible}${d?' ('+d+')':''}.`);}return;}
   if(b.dataset.mg){const m=b.dataset.mg;manage(m,m==='buyship'?$('bShipT').value:m==='buytroop'?$('bTroopT').value:b.dataset.k,m==='buyship'?$('bShipN').value:m==='buytroop'?$('bTroopN').value:'');return;}
   if(b.id==='expBtn'){const box=$('saveBox');box.hidden=false;box.value=JSON.stringify(trimState(S));box.select();try{navigator.clipboard.writeText(box.value).then(()=>{b.textContent='Copiée';},()=>{});}catch(err){}}
   if(b.id==='dlBtn'){saveCampaign();offerFile(`${fileName(S.hero.name)}-sauvegarde.json`,JSON.stringify(trimState(S)),b);}

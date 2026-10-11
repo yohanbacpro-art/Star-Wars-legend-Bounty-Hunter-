@@ -10,7 +10,7 @@ const answers=[
   R('Tu repères une silhouette. Elle dégaine.',{choices:[],test:null,combat:{type:'duel',title:'Le saboteur',decor:'temple',briefing:'Un assassin et un garde.',allies:['Capitaine Rhal'],enemies:[{name:'Vessk',preset:'assassin',look:{head:'mando',outfit:'beskar',cloth:'#224466',stripe:'#c9a227'},tech:['jetpack','beskar'],weapon:'vibro'},{name:'Garde rouge',preset:'guard',pv:18}]},updates:null,chronicle:'Le saboteur attaque.',chapter:null,secret:null}),
   R('Après le combat, la flotte ennemie surgit.',{choices:[],combat:{type:'space',title:'Raid sur l’orbite',briefing:'Deux frégates.',mission:'escorte',meteo:'ionique',camps:{joueur:'imp',ennemi:'sep'},enemies:[{type:'frigate',name:'Brise-Lame'},{type:'fighters',name:'Escadron Vipère'},{type:'bomber',name:'Hyènes'}]},updates:{credits:-500,notes:['Varek a payé le saboteur'],xp:1},chronicle:'Raid spatial.',chapter:null,secret:null}),
   R('Les troupes débarquent.',{choices:[],combat:{type:'ground',title:'Prise du relais',carte:'riviere',meteo:'nuit',camps:{joueur:'imp',ennemi:'reb'},terrain:'neige',objectif:'defense',briefing:'Le relais est tenu.',enemies:[{type:'einf',name:'Rebelles'},{type:'eat',name:'Antichar'},{type:'eturret',name:'Tourelle'}]},updates:null,chronicle:'Assaut au sol.',chapter:{title:'Chapitre deux',resume:'Le saboteur Vessk a frappé la station ; la flotte a été repoussée.'},codex:{pnj:[{nom:'varek',relation:'hostile',note:'A payé le saboteur'}],quetes:[{titre:'Démasquer le saboteur',etat:'réussie'}]},secret:null}),
-  R('Le calme revient.',{choices:['Interroger le prisonnier','Rentrer au QG','Faire rapport'],test:null,combat:null,updates:{addCompanions:[{name:'Lyra',preset:'smuggler',note:'pilote'}],xp:3},chronicle:'Calme.',chapter:null,secret:null})
+  R('Le calme revient.',{choices:['Interroger le prisonnier','Rentrer au QG','Faire rapport'],test:null,combat:null,updates:{addCompanions:[{name:'Lyra',preset:'smuggler',note:'pilote'}],xp:3,debloquer:['contrats'],contrats:[{cible:'Dax Orrin',prime:5000,condition:'vivant',lieu:'Nar Shaddaa',risque:'moyen'}]},codex:{factions:[{nom:'Rebelles de Kessaria',attitude:'hostile',reputation:-3}]},chronicle:'Calme.',chapter:null,secret:null})
 ];
 const dom=new JSDOM(page,{runScripts:'dangerously',pretendToBeVisual:true,url:'https://example.org/',
   beforeParse(w){
@@ -145,6 +145,13 @@ async function finishEngine(name,flee){
   click(d.querySelector('[data-tab="fiche"]'));click($('bookBtn'));
   await waitFor(()=>saved.length,3000,'book');
   ok(/livre\.html$/.test(saved[0].filename)&&saved[0].data.includes('Chapitre 2 — Chapitre deux')&&saved[0].data.includes('Tu repères une silhouette'),'livre de campagne exporté avec tout le récit');
+  // Systèmes débloqués par l'histoire
+  ok(d.querySelector('[data-tab="contrats"]'),'onglet Contrats ouvert par le MJ');
+  ok(prompts[prompts.length-1].includes('réputation du joueur -3 (haï)'),'réputation de faction transmise au MJ');
+  click(d.querySelector('[data-tab="contrats"]'));const np2=prompts.length;click(d.querySelector('[data-contrat="Dax Orrin"]'));
+  await waitFor(()=>prompts.length===np2+1,5000,'contrat');
+  ok(prompts[np2].includes('J’accepte le contrat sur Dax Orrin (5000 crédits, vivant).'),'accepter un contrat passe par le récit');
+  await waitFor(()=>!d.querySelector('#stopMJ'),5000,'fin MJ');
   await sleep(600);
   click($('menuNew'));
   ok($('campZone').textContent.includes('Moff Tarkis'),'campagne listée sur l’écran titre');
@@ -167,5 +174,13 @@ async function finishEngine(name,flee){
   await finishEngine('space',true);
   await waitFor(()=>prompts.length===np+2,5000,'after ship');
   ok(prompts[np+1].includes('FUITE en hyperespace')&&/Intercepteur \(coque \d+ %\)/.test(prompts[np+1]),'fuite et état du vaisseau transmis au MJ');
+  // Jauge de la Force : un Seigneur Sith
+  answers.push(R('Tu brises le prisonnier sans un mot.',{choices:['Partir'],updates:{cote:-3,cote_raison:'A torturé un prisonnier'},chronicle:'Cruauté.',chapter:{title:'Ombres'},secret:{arc:'x'}}));
+  click($('menuNew'));click($('btnNew'));click($('stepNext'));click(d.querySelector('[data-path="sith"]'));click($('stepNext'));click($('stepNext'));
+  $('cName').value='Darth Test';click($('stepNext'));click($('stepNext'));click($('stepNext'));click($('stepNext'));
+  click(d.querySelector('[data-theme="Vengeance"]'));click($('stepNext'));
+  await waitFor(()=>$('sheet').textContent.includes('plongé dans le côté obscur'),5000,'force');
+  ok(d.querySelector('.abar'),'jauge de la Force affichée pour un personnage sensible à la Force');
+  ok(!$('sheet').textContent.includes('Contrats'),'pas de contrats tant que l’histoire ne les ouvre pas');
   console.log('prompt bytes',Buffer.byteLength(prompts[4]));fs.writeFileSync('p4.txt',prompts[4]);console.log('E2E OK');process.exit(0);
 })().catch(e=>{console.log('FAIL',e.message);process.exit(1);});
