@@ -6,10 +6,10 @@ const fake=()=>new Proxy(function(){},{get:(t,k)=>k==='measureText'?()=>({width:
 const prompts=[];
 const R=(narr,data)=>narr+'\n@@DONNEES\n'+JSON.stringify(data);
 const answers=[
-  R('— Bienvenue, Moff. La station tremble.\nLes sirènes hurlent.',{choices:[],test:{skill:'perception',mod:-2,why:'Repérer le saboteur'},combat:null,updates:null,chronicle:'Ouverture sur la station.',chapter:{title:'L’ombre sur Kessaria'},secret:{arc:'Trahison',actes:['I','II','III'],antagonistes:[{nom:'Varek',but:'pouvoir',methode:'complot'}],factions:[],fils:[],prochaine_etape:'duel'}}),
+  R('— Bienvenue, Moff. La station tremble.\nLes sirènes hurlent.',{choices:[],test:{skill:'perception',mod:-2,why:'Repérer le saboteur'},combat:null,updates:null,chronicle:'Ouverture sur la station.',chapter:{title:'L’ombre sur Kessaria'},codex:{pnj:[{nom:'Varek',role:'gouverneur',relation:'méfiant',note:'Sourit trop'}],quetes:[{titre:'Démasquer le saboteur',etat:'en cours'}],lieux:[{nom:'Station Kessaria',note:'Orbite basse'}]},secret:{arc:'Trahison',actes:['I','II','III'],antagonistes:[{nom:'Varek',but:'pouvoir',methode:'complot'}],factions:[],fils:[],prochaine_etape:'duel'}}),
   R('Tu repères une silhouette. Elle dégaine.',{choices:[],test:null,combat:{type:'duel',title:'Le saboteur',briefing:'Un assassin et un garde.',allies:['Capitaine Rhal'],enemies:[{name:'Vessk',preset:'assassin'},{name:'Garde rouge',preset:'guard',pv:18}]},updates:null,chronicle:'Le saboteur attaque.',chapter:null,secret:null}),
   R('Après le combat, la flotte ennemie surgit.',{choices:[],combat:{type:'space',title:'Raid sur l’orbite',briefing:'Deux frégates.',enemies:[{type:'frigate',name:'Brise-Lame'},{type:'fighters',name:'Escadron Vipère'}]},updates:{credits:-500,notes:['Varek a payé le saboteur'],xp:1},chronicle:'Raid spatial.',chapter:null,secret:null}),
-  R('Les troupes débarquent.',{choices:[],combat:{type:'ground',title:'Prise du relais',briefing:'Le relais est tenu.',enemies:[{type:'einf',name:'Rebelles'},{type:'eat',name:'Antichar'},{type:'eturret',name:'Tourelle'}]},updates:null,chronicle:'Assaut au sol.',chapter:{title:'Chapitre deux'},secret:null}),
+  R('Les troupes débarquent.',{choices:[],combat:{type:'ground',title:'Prise du relais',briefing:'Le relais est tenu.',enemies:[{type:'einf',name:'Rebelles'},{type:'eat',name:'Antichar'},{type:'eturret',name:'Tourelle'}]},updates:null,chronicle:'Assaut au sol.',chapter:{title:'Chapitre deux',resume:'Le saboteur Vessk a frappé la station ; la flotte a été repoussée.'},codex:{pnj:[{nom:'varek',relation:'hostile',note:'A payé le saboteur'}],quetes:[{titre:'Démasquer le saboteur',etat:'réussie'}]},secret:null}),
   R('Le calme revient.',{choices:['Interroger le prisonnier','Rentrer au QG','Faire rapport'],test:null,combat:null,updates:{addCompanions:[{name:'Lyra',preset:'smuggler',note:'pilote'}],xp:3},chronicle:'Calme.',chapter:null,secret:null})
 ];
 const dom=new JSDOM(page,{runScripts:'dangerously',pretendToBeVisual:true,url:'https://example.org/',
@@ -77,6 +77,13 @@ async function finishEngine(name){
   ok(/coque \d+ %/.test(prompts[3]),'état de coque de la flotte transmis');
   ok(/effectifs \d+ %/.test(prompts[4]),'effectifs des troupes transmis');
   ok(/PV (\d+)\/\1 \(en forme\)/.test(prompts[4]),'repos de nouveau chapitre : héros soigné');
+  // Étape 2 : mémoire longue
+  ok(prompts[4].includes('Ch. 1 — L’ombre sur Kessaria : Le saboteur Vessk'),'résumé du chapitre 1 dans le prompt');
+  ok(/Varek \(gouverneur\) \[hostile\][^;]*A payé le saboteur/.test(prompts[4]),'PNJ fusionné par nom (casse ignorée)');
+  ok(prompts[4].includes('Démasquer le saboteur [réussie]'),'quête mise à jour');
+  ok(!prompts[4].includes('Ouverture sur la station.'),'chronique limitée au chapitre en cours');
+  click(d.querySelector('[data-tab="carnet"]'));
+  ok($('sheet').textContent.includes('Station Kessaria'),'onglet Carnet affiche les lieux');
   // Progression
   click(d.querySelector('[data-tab="prog"]'));
   const xpBtn=d.querySelector('[data-xp="sk"][data-k="perception"]');ok(xpBtn&&!xpBtn.disabled,'bouton +1 Perception actif avec 4 XP');
