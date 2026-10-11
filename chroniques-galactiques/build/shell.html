@@ -299,7 +299,10 @@ const ERAS=[
 const SKILLS=[['sabre','Sabre / mêlée'],['tir','Tir'],['pilotage','Pilotage'],['commandement','Commandement'],['discretion','Discrétion'],['persuasion','Persuasion'],['intimidation','Intimidation'],['technique','Technique'],['perception','Perception'],['athletisme','Athlétisme'],['force','Force']];
 const SKL=Object.fromEntries(SKILLS);
 const POOL=26,BASE=8,MAXSK=16;
-const SHIP_T={cruiser:'Croiseur',frigate:'Frégate',fighters:'Escadron de chasseurs'};
+const SHIP_T={cruiser:'Croiseur',frigate:'Frégate',corvette:'Corvette',fighters:'Escadron de chasseurs',interceptor:'Escadron d’intercepteurs',bomber:'Escadron de bombardiers'};
+const FACTIONS={imp:'Empire galactique',reb:'Rébellion / Nouvelle République',rep:'République (clones, Ancienne République)',sep:'Séparatistes',mando:'Mandaloriens',pirate:'Pègre / pirates',vong:'Yuuzhan Vong',chiss:'Chiss',sith:'Empire Sith'};
+const OPP={imp:'reb',reb:'imp',rep:'sep',sep:'rep',mando:'pirate',pirate:'imp',vong:'reb',chiss:'pirate',sith:'rep'};
+const PATH_FACTION={sith:'sith',jedi:'rep',moff:'imp',crime:'pirate',smuggler:'pirate',hunter:'pirate',rebel:'reb',free:'pirate'};
 const DIFF={facile:{l:'Facile',k:.75},normal:{l:'Normale',k:1},difficile:{l:'Difficile',k:1.25},brutal:{l:'Brutale',k:1.5}};
 const DECOR_SPACE={planete:'Orbite planétaire',espace:'Espace profond',asteroides:'Champ d’astéroïdes',nebuleuse:'Nébuleuse'};
 const TERRAIN={tempere:'Plaines tempérées',desert:'Désert',neige:'Toundra enneigée',urbain:'Ruines urbaines',jungle:'Jungle',volcan:'Monde volcanique'};
@@ -704,9 +707,9 @@ const hullLabel=f=>f>=1?'intact':f>=.6?'endommagé':f>=.3?'lourdement endommagé
 const troopLabel=f=>f>=1?'au complet':f>=.6?'éprouvée':f>=.3?'décimée':'presque anéantie';
 const frac=v=>v==null?1:Math.max(0,Math.min(1,+v));
 const pct=f=>Math.round(frac(f)*100)+' %';
-const REPAIR={cruiser:8000,frigate:4000,fighters:2000,freighter:3000};
+const REPAIR={cruiser:8000,frigate:4000,corvette:3000,fighters:2000,interceptor:2000,bomber:2500,freighter:3000};
 const REINF={inf:3000,tank:6000,art:5000,speed:2000};
-const BUY_SHIP={cruiser:40000,frigate:15000,fighters:6000};
+const BUY_SHIP={cruiser:40000,frigate:15000,corvette:12000,fighters:6000,interceptor:6000,bomber:9000};
 const BUY_TROOP={inf:5000,tank:14000,art:10000,speed:4000};
 const MEDIC_PV=25,MEDIC_COMP=600;
 function medicCost(){const h=S.hero,m=derived(h).pv;return Math.max(0,m-heroHP())*MEDIC_PV+Math.round(S.res.companions.reduce((a,c)=>a+(1-frac(c.hp))*MEDIC_COMP,0));}
@@ -779,12 +782,13 @@ function migrate(s){
   if(!Array.isArray(s.chapters))s.chapters=[];if(s.playerNotes==null)s.playerNotes='';
   s.res.fleet.forEach(x=>{if(x.hull==null)x.hull=1;});s.res.troops.forEach(x=>{if(x.hp==null)x.hp=1;});s.res.companions.forEach(x=>{if(x.hp==null)x.hp=1;});
   if(!Array.isArray(s.hero.forms))s.hero.forms=['none',...(s.hero.form&&s.hero.form!=='none'?[s.hero.form]:[])];
+  if(!s.res.faction||!FACTIONS[s.res.faction])s.res.faction=PATH_FACTION[s.path]||'pirate';
   if(!s.zero.diff)s.zero.diff='normal';if(!s.zero.romance)s.zero.romance='discrete';if(!s.zero.longueur)s.zero.longueur='normale';if(!s.zero.style)s.zero.style='equilibre';if(s.res.ship&&s.res.shipHull==null)s.res.shipHull=1;
   if(s.xp==null)s.xp=0;if(s.destiny==null)s.destiny=3;if(s.bookPart==null)s.bookPart=0;return s;
 }
 
 /* ================= Équilibrage des combats ================= */
-const SHIP_COST={cruiser:4,frigate:2,fighters:1,freighter:2},TROOP_COST={cmd:2,inf:2,tank:4,art:3,speed:1},FOE_COST={einf:2,eat:2,eltank:3,eturret:3};
+const SHIP_COST={cruiser:4,frigate:2,corvette:2,fighters:1,interceptor:1,bomber:2,freighter:2},TROOP_COST={cmd:2,inf:2,tank:4,art:3,speed:1},FOE_COST={einf:2,eat:2,eltank:3,eturret:3};
 const diffK=()=>DIFF[(S.zero&&S.zero.diff)||'normal'].k;
 function trimTo(list,cost,target,fill,max){
   let E=list.reduce((a,x)=>a+cost(x),0);
@@ -794,7 +798,7 @@ function trimTo(list,cost,target,fill,max){
 function balanceFleet(c){
   const k=diffK();
   if(c.type==='space'||c.type==='ship'){
-    const ok=c.type==='ship'?['fighters','freighter','frigate']:Object.keys(SHIP_COST);
+    const ok=c.type==='ship'?['fighters','interceptor','bomber','freighter','corvette','frigate']:Object.keys(SHIP_COST);
     c.enemies=c.enemies.filter(x=>x&&ok.includes(x.type)).map(x=>({type:x.type,name:String(x.name||'Vaisseau ennemi').slice(0,30)}));
     const P=c.type==='ship'?2*(1+Math.max(0,(S.hero.skills.pilotage-10)*.05)):S.res.fleet.reduce((a,s)=>a+SHIP_COST[s.type],0);
     trimTo(c.enemies,x=>SHIP_COST[x.type],P*k,n=>({type:'fighters',name:`Renforts ${n}`}),c.type==='ship'?4:7);
@@ -836,6 +840,7 @@ function heroBlock(){
 function resBlock(){
   const r=S.res;
   return[`Crédits : ${r.credits}`,`Vaisseau personnel : ${r.ship?`${r.ship} (coque ${pct(r.shipHull)}) — combat "ship" possible`:'aucun'}`,
+    `Faction de tes forces : ${FACTIONS[r.faction]||'—'} (style de tes vaisseaux et de tes troupes)`,
     `Flotte : ${r.fleet.length?r.fleet.map(s=>`${s.name} (${s.type}, coque ${pct(s.hull)})`).join(', '):'aucune (pas de bataille spatiale possible)'}`,
     `Troupes : ${r.troops.length?r.troops.map(s=>`${s.name} (${s.type}, effectifs ${pct(s.hp)})`).join(', '):'aucune (pas de bataille terrestre possible)'}`,
     `Compagnons : ${r.companions.length?r.companions.map(c=>`${c.name} [modèle ${c.preset}, ${hurtLabel(frac(c.hp))}]${c.note?' — '+c.note:''}`).join(' ; '):'aucun'}`,
@@ -878,10 +883,11 @@ const FORMAT=`FORMAT DE RÉPONSE OBLIGATOIRE :
 - test : si l’action est risquée et incertaine : {"skill":"<clé>","mod":<entier de -6 à 2>,"why":"<raison courte>"}. Clés : sabre, tir, pilotage, commandement, discretion, persuasion, intimidation, technique, perception, athletisme, force (force seulement si le personnage est sensible à la Force). Dans ce cas, arrête la narration juste avant l’issue, ne la raconte pas, et mets "choices":[].
 - combat : si un affrontement doit être joué : {"type":"duel"|"ship"|"space"|"ground","title":"<titre court>","briefing":"<2 phrases>","allies":[…],"enemies":[…],"decor":"…"}. Arrête la narration au moment où le combat éclate et mets "choices":[]. Le jeu ajuste lui-même la force des ennemis à la difficulté choisie : décris l’adversité que l’histoire appelle.
   · duel : "allies" = noms de compagnons existants (3 au plus, présents dans la scène). "enemies" = 1 à 4 objets {"name":"…","preset":"<modèle>","blade":"#rrggbb (facultatif)","form":"<forme facultative>","pv":<facultatif 10-60>}. Modèles par faction : ${lookCatalog()}. Pour un PNJ que les modèles ne décrivent pas, pars du modèle le plus proche et ajoute "look":{"head":"…","outfit":"…","cloth":"#rrggbb","cloth2":"#…","skin":"#…","hair":"#…","stripe":"#…","eyes":"#…","cloak":"none|long|tattered"}, "weapon":"saber|dual|double|pistol|rifle|staff|vibro", "tech":[…] et "kind":"sith|jedi|none" si besoin. Têtes : ${Object.keys(HEADS).join(', ')}. Tenues : ${Object.keys(OUTFITS).join(', ')}. Techniques : ${Object.keys(TECHS).join(', ')}. Formes : shiicho, makashi, soresu, ataru, shien, niman, juyo. "decor" : toits, temple, desert, foret, vaisseau, glace ou lave.
-  · ship : le vaisseau personnel du joueur, seul, contre 1 à 4 objets {"type":"fighters"|"freighter"|"frigate","name":"…"} (chasseurs, cargo armé, frégate de patrouille). Poursuites, interceptions, pirates. Le joueur peut fuir en hyperespace. "decor" : planete, espace, asteroides ou nebuleuse.
-  · space : "enemies" = 2 à 7 objets {"type":"cruiser"|"frigate"|"fighters"|"freighter","name":"…"}. "decor" : planete, espace, asteroides ou nebuleuse. "fuite":true si la retraite est une option.
+  · Pour "ship", "space" et "ground", ajoute "camps":{"joueur":"<faction>","ennemi":"<faction>"} : ils donnent l’apparence des vaisseaux et des troupes. Factions : ${Object.entries(FACTIONS).map(([k,l])=>k+' ('+l+')').join(', ')}.
+  · ship : le vaisseau personnel du joueur, seul, contre 1 à 4 objets {"type":"fighters"|"interceptor"|"bomber"|"freighter"|"corvette"|"frigate","name":"…"}. Poursuites, interceptions, pirates. Le joueur peut fuir en hyperespace. "decor" : planete, espace, asteroides ou nebuleuse.
+  · space : "enemies" = 2 à 7 objets {"type":"cruiser"|"frigate"|"corvette"|"fighters"|"interceptor"|"bomber"|"freighter","name":"…"}. Les bombardiers ravagent les gros vaisseaux, les intercepteurs chassent chasseurs et bombardiers. "decor" : planete, espace, asteroides ou nebuleuse. "fuite":true si la retraite est une option.
   · ground : "enemies" = 2 à 6 objets {"type":"einf"|"eat"|"eltank"|"eturret","name":"…"} (fantassins, équipe antichar, char léger, tourelle). "terrain" : tempere, desert, neige, urbain, jungle ou volcan. "objectif" : assaut (prendre un générateur gardé), elimination (anéantir l’ennemi) ou defense (tenir 6 tours face à un ennemi plus nombreux).
-- updates : changements concrets, sinon null : {"credits":<±entier>,"addCompanions":[{"name":"…","preset":"<modèle>","note":"…"}],"removeCompanions":["nom"],"addFleet":[{"type":"cruiser|frigate|fighters","name":"…"}],"addTroops":[{"type":"inf|tank|art|speed","name":"…"}],"notes":["fait durable à retenir"],"xp":<0 à 3>,"heal":"repos"|<PV rendus au personnage>,"equipement":["beskar"|"jetpack"|"flamer"|"cortosis"|"grenades"],"perteEquipement":[…]}. Donne de l’équipement seulement quand l’histoire le met vraiment entre les mains du personnage (achat, butin, cadeau). "heal":"repos" soigne entièrement le personnage et ses compagnons.
+- updates : changements concrets, sinon null : {"credits":<±entier>,"addCompanions":[{"name":"…","preset":"<modèle>","note":"…"}],"removeCompanions":["nom"],"addFleet":[{"type":"cruiser|frigate|corvette|fighters|interceptor|bomber","name":"…"}],"addTroops":[{"type":"inf|tank|art|speed","name":"…"}],"notes":["fait durable à retenir"],"xp":<0 à 3>,"heal":"repos"|<PV rendus au personnage>,"equipement":["beskar"|"jetpack"|"flamer"|"cortosis"|"grenades"],"faction":"<clé de faction, si les forces du joueur changent de camp>","perteEquipement":[…]}. Donne de l’équipement seulement quand l’histoire le met vraiment entre les mains du personnage (achat, butin, cadeau). "heal":"repos" soigne entièrement le personnage et ses compagnons.
 - chronicle : 1 ou 2 phrases factuelles résumant ce qui vient de se passer (c’est ta mémoire).
 - codex : le carnet que le joueur consulte, uniquement les entrées nouvelles ou modifiées (elles sont fusionnées par nom), sinon null : {"pnj":[{"nom":"…","role":"…","relation":"allié|amical|neutre|méfiant|hostile","statut":"vivant|mort|disparu|captif","note":"ce que le joueur sait","voix":"façon de parler, tics, ce qu’il cache","lien":"nature du lien en 2-4 mots (ex. dette d’honneur, rivalité, confiance fragile)","affinite":<−5 à +5 envers le joueur>,"evenement":"ce qui vient de changer le lien, s’il a changé","romance":"aucune|attirance|flirt|liaison|amour|rupture"}],"quetes":[{"titre":"…","etat":"en cours|réussie|échouée|abandonnée","note":"…"}],"lieux":[{"nom":"…","note":"…"}],"factions":[{"nom":"…","attitude":"alliée|neutre|hostile|…","note":"…"}]}. Ajoute chaque PNJ nommé important, chaque objectif que le joueur poursuit, chaque lieu marquant. N’y mets jamais ce que le joueur ignore (c’est la place du carnet secret).
 - chapter : uniquement quand un nouveau chapitre commence, sinon null : {"title":"…","resume":"5 à 8 phrases factuelles résumant tout le chapitre qui s’achève : faits, choix du joueur, PNJ, conséquences"}. Ce résumé est ta seule mémoire à long terme du chapitre. Change de chapitre à la fin d’un arc ou d’une étape importante (toutes les 15 à 30 scènes environ).
@@ -988,6 +994,7 @@ function applyData(d){
     (u.addFleet||[]).forEach(s=>{if(s&&SHIP_T[s.type]&&r.fleet.length<8)r.fleet.push({type:s.type,name:String(s.name||'Nouveau vaisseau').slice(0,30),flag:!r.fleet.length,hull:1});});
     (u.addTroops||[]).forEach(s=>{if(s&&TROOP_T[s.type]&&r.troops.length<7)r.troops.push({type:s.type,name:String(s.name||'Nouvelle unité').slice(0,30),hp:1});});
     (u.notes||[]).forEach(n=>{r.notes=r.notes||[];r.notes.push(String(n).slice(0,200));if(r.notes.length>30)r.notes.shift();});
+    if(u.faction&&FACTIONS[u.faction])r.faction=u.faction;
     (Array.isArray(u.equipement)?u.equipement:[]).forEach(t=>{if(EQUIP.includes(t)&&!S.hero.tech.includes(t)){S.hero.tech.push(t);}});
     (Array.isArray(u.perteEquipement)?u.perteEquipement:[]).forEach(t=>{S.hero.tech=S.hero.tech.filter(x=>x!==t);});
     if(u.heal==='repos')healAll();else if(Number.isFinite(+u.heal)&&+u.heal>0)S.hero.hp=Math.min(derived(S.hero).pv,heroHP()+Math.round(+u.heal));
@@ -1006,6 +1013,7 @@ function applyData(d){
     const combat={type:c.type,title:String(c.title||'Affrontement').slice(0,60),briefing:String(c.briefing||'').slice(0,400),allies:(c.allies||[]).slice(0,3),
       enemies:(Array.isArray(c.enemies)?c.enemies:[]).slice(0,c.type==='space'?7:c.type==='ground'?6:4),decor:dec[dv]?dv:Object.keys(dec)[0],
       objectif:c.type==='ground'&&OBJECTIF[c.objectif]?c.objectif:'assaut',fuite:c.type==='ship'?c.fuite!==false:c.fuite===true};
+    if(c.type!=='duel'){const cp=c.camps||{},j=FACTIONS[cp.joueur]?cp.joueur:S.res.faction;combat.camps={joueur:j,ennemi:FACTIONS[cp.ennemi]?cp.ennemi:(OPP[j]||'pirate')};}
     balanceFleet(combat);
     S.pending={kind:'combat',combat};
   }
@@ -1043,7 +1051,7 @@ function renderAct(){
     const foes=c.type==='duel'?c.enemies.map(e=>esc(e.name||'?')):c.enemies.map(e=>esc(e.name||e.type));
     const mine=c.type==='duel'?[esc(S.hero.name),...(c.allies||[]).map(n=>esc(typeof n==='string'?n:n.name))]:c.type==='ship'?[`${esc(S.res.ship)} (${pct(S.res.shipHull)})`]:c.type==='space'?S.res.fleet.map(s=>esc(s.name)):[esc(S.hero.name)+' (commandement)',...S.res.troops.map(s=>esc(s.name))];
     const where=c.type==='ground'?`${TERRAIN[c.decor]} · ${OBJECTIF[c.objectif]}`:c.type==='duel'?DECOR_DUEL[c.decor]:DECOR_SPACE[c.decor];
-    main=`<div class="combatcard"><span class="kind">${kind}</span><span class="t">${esc(c.title)}</span><span class="kind">${esc(where||'')} · Difficulté ${DIFF[S.zero.diff||'normal'].l.toLowerCase()}${c.fuite?' · fuite possible':''}</span><span>${esc(c.briefing)}</span><ul><li>Ton camp : ${mine.join(', ')}</li><li>En face : ${foes.join(', ')}</li></ul><div><button type="button" class="primary" id="fightBtn">Engager le combat</button></div></div>`;
+    main=`<div class="combatcard"><span class="kind">${kind}</span><span class="t">${esc(c.title)}</span><span class="kind">${c.camps?esc(FACTIONS[c.camps.joueur]+' contre '+FACTIONS[c.camps.ennemi])+' · ':''}${esc(where||'')} · Difficulté ${DIFF[S.zero.diff||'normal'].l.toLowerCase()}${c.fuite?' · fuite possible':''}</span><span>${esc(c.briefing)}</span><ul><li>Ton camp : ${mine.join(', ')}</li><li>En face : ${foes.join(', ')}</li></ul><div><button type="button" class="primary" id="fightBtn">Engager le combat</button></div></div>`;
   }else{
     main=`<div class="choices">${(S.choices||[]).map((c,i)=>`<button type="button" data-choice="${i}">${esc(c)}</button>`).join('')}</div>
     <div class="say"><textarea id="sayBox" rows="2" maxlength="1200" placeholder="Ou écris ce que fait ou dit ${esc(S.hero.name)}…"></textarea><button type="button" class="primary" id="sayBtn">Agir</button></div>`;
@@ -1201,7 +1209,8 @@ function launchCombat(){
     eng='space';
     const player=c.type==='ship'?[{type:'freighter',name:S.res.ship,flag:true,hull:frac(S.res.shipHull),pilot:S.hero.skills.pilotage}]
       :S.res.fleet.slice(0,8).map((s,i)=>({type:s.type,name:s.name,flag:i===0,hull:frac(s.hull)}));
-    window.__CFG.space={title:c.title,solo:c.type==='ship',canFlee:!!c.fuite,decor:c.decor,player,enemy:c.enemies.map(x=>({type:x.type,name:x.name}))};
+    const cp=c.camps||{joueur:S.res.faction,ennemi:OPP[S.res.faction]||'pirate'};
+    window.__CFG.space={title:c.title,solo:c.type==='ship',canFlee:!!c.fuite,decor:c.decor,pStyle:c.type==='ship'?'own':cp.joueur,eStyle:cp.ennemi,player,enemy:c.enemies.map(x=>({type:x.type,name:x.name}))};
     if(!window.__CFG.space.enemy.length)window.__CFG.space.enemy=[{type:'fighters',name:'Chasseurs ennemis'}];
   }else{
     window.__CFG.ground={title:c.title,commander:S.hero.name,player:S.res.troops.slice(0,7).map(s=>({type:s.type,name:s.name,hp:frac(s.hp)})),

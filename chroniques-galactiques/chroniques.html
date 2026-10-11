@@ -910,13 +910,67 @@ new ResizeObserver(resize).observe(cv);resize();
 
 const TYPES={
   cruiser:{label:'Croiseur de ligne',elabel:'Croiseur ennemi',hull:140,sh:70,move:110,range:300,dmg:[20,28],r:52,bolts:3,cost:4},
-  frigate:{label:'Frégate d’escorte',elabel:'Frégate marteau',hull:70,sh:35,move:170,range:250,dmg:[12,17],r:34,bolts:2,cost:2},
+  frigate:{label:'Frégate d’escorte',elabel:'Frégate ennemie',hull:70,sh:35,move:170,range:250,dmg:[12,17],r:34,bolts:2,cost:2},
+  corvette:{label:'Corvette',elabel:'Corvette ennemie',hull:55,sh:30,move:230,range:220,dmg:[10,14],r:28,bolts:3,cost:2},
   fighters:{label:'Escadron de chasseurs',elabel:'Chasseurs ennemis',hull:36,sh:0,move:260,range:130,dmg:[9,13],r:28,bolts:4,cost:1},
+  interceptor:{label:'Escadron d’intercepteurs',elabel:'Intercepteurs ennemis',hull:28,sh:0,move:330,range:130,dmg:[8,12],r:26,bolts:4,cost:1},
+  bomber:{label:'Escadron de bombardiers',elabel:'Bombardiers ennemis',hull:44,sh:10,move:200,range:140,dmg:[16,22],r:28,bolts:2,cost:2},
   freighter:{label:'Cargo armé',elabel:'Cargo pirate',hull:90,sh:45,move:230,range:230,dmg:[12,17],r:30,bolts:2,cost:2}
 };
-const EVADES=t=>t==='fighters'||t==='freighter';
-const MULT={cruiser:{cruiser:1,frigate:1.3,fighters:1,freighter:1.1},frigate:{cruiser:.9,frigate:1,fighters:1.8,freighter:1.2},fighters:{cruiser:1.5,frigate:1.1,fighters:1,freighter:1.2},freighter:{cruiser:.9,frigate:1.1,fighters:1.4,freighter:1}};
-const CH={cruiser:{cruiser:.9,frigate:.88,fighters:.5,freighter:.6},frigate:{cruiser:.9,frigate:.88,fighters:.85,freighter:.78},fighters:{cruiser:.85,frigate:.82,fighters:.75,freighter:.8},freighter:{cruiser:.9,frigate:.88,fighters:.8,freighter:.82}};
+const SMALL=t=>t==='fighters'||t==='interceptor'||t==='bomber';
+const EVADES=t=>t==='fighters'||t==='interceptor'||t==='freighter';
+const MULT={
+  cruiser:{cruiser:1,frigate:1.3,corvette:1.2,fighters:1,interceptor:.8,bomber:1,freighter:1.1},
+  frigate:{cruiser:.9,frigate:1,corvette:1.2,fighters:1.8,interceptor:1.6,bomber:1.8,freighter:1.2},
+  corvette:{cruiser:.7,frigate:1,corvette:1,fighters:1.6,interceptor:1.5,bomber:1.7,freighter:1.1},
+  fighters:{cruiser:1.5,frigate:1.1,corvette:1.2,fighters:1,interceptor:.9,bomber:1.3,freighter:1.2},
+  interceptor:{cruiser:.6,frigate:.7,corvette:.8,fighters:1.5,interceptor:1.2,bomber:1.8,freighter:1},
+  bomber:{cruiser:1.9,frigate:1.6,corvette:1.4,fighters:.5,interceptor:.4,bomber:.6,freighter:1.2},
+  freighter:{cruiser:.9,frigate:1.1,corvette:1.1,fighters:1.4,interceptor:1.2,bomber:1.4,freighter:1}
+};
+const ACC={cruiser:.95,frigate:.97,corvette:.95,fighters:.9,interceptor:.92,bomber:.85,freighter:.92};
+const DODGE={cruiser:.05,frigate:.07,corvette:.12,fighters:.15,interceptor:.22,bomber:.1,freighter:.1};
+const baseChance=(a,t)=>ACC[a]-DODGE[t]-(a==='cruiser'&&SMALL(t)?.3:0);
+const PREF=MULT;
+/* Styles de faction : palette et silhouettes */
+const STEEL0=['#e1e6eb','#a7afb8','#7d8690','#4a525b'],SAND0=['#e3d6bf','#b9a98f','#93836c','#5a4e40'];
+const PAL={
+  own:{hull:STEEL0,eng:'120,185,255'},
+  imp:{hull:STEEL0,eng:'120,185,255'},
+  reb:{hull:SAND0,eng:'255,135,80',acc:'#b0402a'},
+  rep:{hull:['#f0eeea','#cfcac2','#a8a39a','#6a655e'],eng:'120,185,255',acc:'#b02a2a',stripe:true},
+  sep:{hull:['#d8c49a','#a8946a','#7d6c4c','#4a3f2c'],eng:'120,200,255',acc:'#6a5a8a'},
+  mando:{hull:['#a8b4bc','#6e7c86','#4e5a62','#2a3036'],eng:'255,170,90',acc:'#c9a227'},
+  pirate:{hull:['#c8a080','#94705a','#6e5040','#3e2c22'],eng:'255,135,80',acc:'#5a6a4a'},
+  vong:{hull:['#a87a5a','#7a4e36','#5a3424','#2e1a12'],eng:'255,90,160',acc:'#8a3a5a'},
+  chiss:{hull:['#7a828c','#4a5058','#30353c','#16191d'],eng:'140,200,255',acc:'#2a6aa8',stripe:true},
+  sith:{hull:['#6a6a70','#45454c','#2c2c32','#141416'],eng:'255,80,80',acc:'#a01818',stripe:true}
+};
+const SHAPESET={
+  own:{freighter:'saucer'},
+  imp:{cruiser:'wedge',frigate:'impFrig',corvette:'wedgeS',fighters:'tie',interceptor:'tieint',bomber:'tiebomb',freighter:'wedgeF'},
+  reb:{cruiser:'organic',frigate:'nebulon',corvette:'cr90',fighters:'xwing',interceptor:'awing',bomber:'ywing',freighter:'saucer'},
+  rep:{cruiser:'wedge',frigate:'impFrig',corvette:'cr90',fighters:'chevron',interceptor:'awing',bomber:'ywing',freighter:'saucer'},
+  sep:{cruiser:'ring',frigate:'sepFrig',corvette:'sepCorv',fighters:'vulture',interceptor:'vulture',bomber:'vulture',freighter:'wedgeF'},
+  mando:{cruiser:'hammer',frigate:'blockFrig',corvette:'blockCorv',fighters:'fang',interceptor:'fang',bomber:'fang',freighter:'wedgeF'},
+  pirate:{cruiser:'hammer',frigate:'blockFrig',corvette:'cr90',fighters:'chevron',interceptor:'chevron',bomber:'ywing',freighter:'wedgeF'},
+  vong:{cruiser:'rock',frigate:'rockS',corvette:'rockXS',fighters:'coral',interceptor:'coral',bomber:'coral',freighter:'rockXS'},
+  chiss:{cruiser:'wedge',frigate:'impFrig',corvette:'wedgeS',fighters:'fang',interceptor:'fang',bomber:'ywing',freighter:'wedgeF'},
+  sith:{cruiser:'wedge',frigate:'impFrig',corvette:'wedgeS',fighters:'tie',interceptor:'tieint',bomber:'tiebomb',freighter:'wedgeF'}
+};
+const SHIPNAMES={
+  imp:{cruiser:'Destroyer stellaire',frigate:'Frégate impériale',corvette:'Croiseur léger Raider',fighters:'Escadron de TIE',interceptor:'TIE Interceptor',bomber:'TIE Bomber',freighter:'Cargo impérial'},
+  reb:{cruiser:'Croiseur mon calamari',frigate:'Frégate Nebulon-B',corvette:'Corvette corellienne',fighters:'Escadron de X-wing',interceptor:'Escadron d’A-wing',bomber:'Escadron de Y-wing',freighter:'Cargo léger'},
+  rep:{cruiser:'Destroyer de la République',frigate:'Frégate de la République',corvette:'Corvette Hammerhead',fighters:'Chasseurs ARC',interceptor:'Intercepteurs Jedi',bomber:'Bombardiers Y-wing',freighter:'Cargo de la République'},
+  sep:{cruiser:'Vaisseau de contrôle droïde',frigate:'Frégate Munificent',corvette:'Corvette séparatiste',fighters:'Droïdes vautours',interceptor:'Tri-chasseurs droïdes',bomber:'Bombardiers Hyena',freighter:'Cargo séparatiste'},
+  mando:{cruiser:'Croiseur de clan',frigate:'Frégate mandalorienne',corvette:'Corvette mandalorienne',fighters:'Chasseurs Fang',interceptor:'Intercepteurs Fang',bomber:'Bombardiers mandaloriens',freighter:'Navette Kom’rk'},
+  pirate:{cruiser:'Croiseur pirate',frigate:'Frégate de contrebande',corvette:'Corvette pirate',fighters:'Chasseurs pirates',interceptor:'Intercepteurs pirates',bomber:'Bombardiers pirates',freighter:'Cargo pirate'},
+  vong:{cruiser:'Croiseur corallien',frigate:'Frégate vong',corvette:'Vaisseau d’abordage vong',fighters:'Coralskippers',interceptor:'Coralskippers rapides',bomber:'Coralskippers lourds',freighter:'Transport vong'},
+  chiss:{cruiser:'Croiseur chiss',frigate:'Frégate chiss',corvette:'Corvette chiss',fighters:'Chasseurs Clawcraft',interceptor:'Clawcraft rapides',bomber:'Bombardiers chiss',freighter:'Transport chiss'},
+  sith:{cruiser:'Croiseur sith',frigate:'Frégate sith',corvette:'Corvette sith',fighters:'Chasseurs Fury',interceptor:'Intercepteurs sith',bomber:'Bombardiers sith',freighter:'Transport sith'}
+};
+const styleOf=s=>s.style||(s.side==='p'?'imp':'reb');
+const shipLabel=s=>(SHIPNAMES[styleOf(s)]||{})[s.type]||(s.side==='p'?TYPES[s.type].label:TYPES[s.type].elabel);
 /* Décors : planète en bas de carte, espace profond, champ d'astéroïdes, nébuleuse */
 const SCENES={planete:{planet:true,fields:[2,3]},espace:{planet:false,fields:[1,2]},asteroides:{planet:false,fields:[5,6],wide:true},nebuleuse:{planet:false,fields:[1,2],neb:true}};
 let SCENE=SCENES.planete,canFlee=false,fled=false;
@@ -1001,10 +1055,10 @@ function newBattle(){
   });
   if(window.__CFG&&window.__CFG.space){const C=window.__CFG.space;ships=[];
     const PS=[[250,430],[210,650],[330,230],[380,560],[420,330],[440,460],[160,300],[150,560]];
-    (C.player||[]).slice(0,8).forEach((u,i)=>{const s=mkShip('p',u.type,u.name,PS[i][0],PS[i][1],!!u.flag);if(u.hull!=null&&u.hull<1)s.hull=Math.max(1,Math.round(s.hullMax*u.hull));if(u.pilot)s.ace=Math.max(-.1,Math.min(.2,(u.pilot-10)*.025));const p=settle(s,s.x,s.y);s.x=p.x;s.y=p.y;ships.push(s);});
+    (C.player||[]).slice(0,8).forEach((u,i)=>{const s=mkShip('p',u.type,u.name,PS[i][0],PS[i][1],!!u.flag);if(u.hull!=null&&u.hull<1)s.hull=Math.max(1,Math.round(s.hullMax*u.hull));if(u.pilot)s.ace=Math.max(-.1,Math.min(.2,(u.pilot-10)*.025));s.style=u.style||C.pStyle||'imp';const p=settle(s,s.x,s.y);s.x=p.x;s.y=p.y;ships.push(s);});
     if(!ships.some(s=>s.flag)&&ships[0])ships[0].flag=true;
     const en=(C.enemy||[]).slice(0,8),n=en.length;
-    en.forEach((u,i)=>{const y=n===1?430:140+i*(560/Math.max(1,n-1));const x=(u.type==='cruiser'?1400:u.type==='frigate'?1320:1240)+rnd(-30,30);const s=mkShip('e',u.type,u.name,x,y);const p=settle(s,s.x,s.y);s.x=p.x;s.y=p.y;ships.push(s);});
+    en.forEach((u,i)=>{const y=n===1?430:140+i*(560/Math.max(1,n-1));const x=(u.type==='cruiser'?1400:u.type==='frigate'?1320:1240)+rnd(-30,30);const s=mkShip('e',u.type,u.name,x,y);s.style=u.style||C.eStyle||'reb';const p=settle(s,s.x,s.y);s.x=p.x;s.y=p.y;ships.push(s);});
     comp.length=0;en.forEach(u=>comp.push(u.type));
   }
   initEnemyHull=ships.filter(s=>s.side==='e').reduce((a,s)=>a+s.hullMax+s.shMax,0);
@@ -1099,10 +1153,10 @@ function hullGrad(g,w,c){const gr=g.createLinearGradient(0,-w,0,w);gr.addColorSt
 const STEEL=['#e1e6eb','#a7afb8','#7d8690','#4a525b'];
 const SAND=['#e3d6bf','#b9a98f','#93836c','#5a4e40'];
 
-function drawPCruiser(g,now){
+function drawPCruiser(g,now,P){
   const n=62,b=-52,w=36;
   g.fillStyle='rgba(0,0,0,.35)';g.beginPath();g.moveTo(n+5,7);g.lineTo(b+5,-w+7);g.lineTo(b+5,w+7);g.closePath();g.fill();
-  g.fillStyle=hullGrad(g,w,STEEL);
+  g.fillStyle=hullGrad(g,w,P.hull);
   g.beginPath();g.moveTo(n,0);g.lineTo(b,-w);g.lineTo(b-7,-w*.7);g.lineTo(b-7,w*.7);g.lineTo(b,w);g.closePath();g.fill();
   g.strokeStyle='rgba(12,15,20,.9)';g.lineWidth=1.2;g.stroke();
   g.strokeStyle='rgba(25,30,38,.5)';g.lineWidth=1;
@@ -1115,12 +1169,13 @@ function drawPCruiser(g,now){
   g.fillStyle='#dbe0e5';g.fillRect(b+14,-4.5,11,9);
   g.strokeStyle='rgba(12,15,20,.8)';g.strokeRect(b+5,-12,32,24);
   g.fillStyle='#a4acb5';for(const y of[-9.5,9.5]){g.beginPath();g.arc(b+22,y,3.2,0,7);g.fill();}
-  engines(g,b-7,[-w*.45,0,w*.45],now,'120,185,255',7);
+  engines(g,b-7,[-w*.45,0,w*.45],now,P.eng,7);
+  if(P.stripe&&P.acc){g.fillStyle=P.acc;g.beginPath();g.moveTo(n-8,-2);g.lineTo(b+8,-5);g.lineTo(b+8,5);g.lineTo(n-8,2);g.closePath();g.fill();}
   g.fillStyle=Math.sin(now/400)>0?'rgba(255,90,80,.9)':'rgba(255,90,80,.25)';g.fillRect(n-4,-1,2,2);
 }
-function drawPFrigate(g,now){
+function drawPFrigate(g,now,P){
   g.fillStyle='rgba(0,0,0,.3)';g.fillRect(-34,-8,74,22);
-  g.fillStyle=hullGrad(g,14,STEEL);
+  g.fillStyle=hullGrad(g,14,P.hull);
   g.beginPath();g.moveTo(-30,-13);g.lineTo(-44,-24);g.lineTo(-36,-24);g.lineTo(-18,-13);g.closePath();g.fill();
   g.beginPath();g.moveTo(-30,13);g.lineTo(-44,24);g.lineTo(-36,24);g.lineTo(-18,13);g.closePath();g.fill();
   g.fillRect(-38,-14,24,28);
@@ -1129,19 +1184,7 @@ function drawPFrigate(g,now){
   g.strokeStyle='rgba(12,15,20,.85)';g.lineWidth=1;g.strokeRect(-38,-14,24,28);g.strokeRect(-16,-4.5,42,9);
   g.fillStyle='#d8dde2';g.fillRect(-32,-5,10,10);
   g.strokeStyle='rgba(25,30,38,.5)';g.beginPath();for(let x=-12;x<24;x+=7){g.moveTo(x,-4.5);g.lineTo(x,4.5);}g.stroke();
-  engines(g,-39,[-7,7],now,'120,185,255',5);
-}
-function drawPFighters(g,now){
-  for(const [ox,oy] of [[12,0],[-4,-15],[-4,15],[-20,0]]){
-    g.save();g.translate(ox,oy);
-    g.fillStyle='#2f353d';
-    g.beginPath();g.moveTo(-6,-8.5);g.lineTo(6,-8.5);g.lineTo(4,-6);g.lineTo(-4,-6);g.closePath();g.fill();
-    g.beginPath();g.moveTo(-6,8.5);g.lineTo(6,8.5);g.lineTo(4,6);g.lineTo(-4,6);g.closePath();g.fill();
-    g.fillStyle='#6e7781';g.fillRect(-.9,-6.5,1.8,13);
-    g.fillStyle='#aeb6bf';g.beginPath();g.arc(0,0,3.1,0,7);g.fill();
-    engines(g,-3.5,[0],now,'120,185,255',1.6);
-    g.restore();
-  }
+  engines(g,-39,[-7,7],now,P.eng,5);
 }
 function drawECruiser(g,now){
   const L=66;
@@ -1166,17 +1209,6 @@ function drawEFrigate(g,now){
   g.fillStyle='rgba(255,215,140,.8)';for(const y of[-15,-7,7,15])g.fillRect(29,y,2,2);
   engines(g,-38,[-5,5],now,'255,135,80',5);
 }
-function drawEFighters(g,now){
-  for(const [ox,oy] of [[12,0],[-4,-15],[-4,15],[-20,0]]){
-    g.save();g.translate(ox,oy);
-    g.strokeStyle='#c7b49a';g.lineWidth=2;g.lineCap='round';
-    g.beginPath();g.moveTo(-5,-7);g.lineTo(2,0);g.lineTo(-5,7);g.stroke();
-    g.fillStyle='#e3d6bf';g.beginPath();g.moveTo(8,0);g.lineTo(-5,-2);g.lineTo(-5,2);g.closePath();g.fill();
-    g.fillStyle='rgba(255,90,70,.9)';g.fillRect(-6,-7.5,1.6,1.6);g.fillRect(-6,6,1.6,1.6);
-    engines(g,-6,[0],now,'255,135,80',1.6);
-    g.restore();
-  }
-}
 function drawPFreighter(g,now){
   g.fillStyle='rgba(0,0,0,.33)';g.beginPath();g.ellipse(4,6,27,25,0,0,7);g.fill();
   g.fillStyle=hullGrad(g,10,STEEL);
@@ -1191,18 +1223,97 @@ function drawPFreighter(g,now){
   g.fillStyle='rgba(150,220,255,.85)';g.fillRect(16,21.5,3,4);
   engines(g,-24,[-8,0,8],now,'120,185,255',3.2);
 }
-function drawEFreighter(g,now){
+function drawEFreighter(g,now,P){
   g.fillStyle='rgba(0,0,0,.33)';g.beginPath();g.moveTo(40,6);g.lineTo(-26,-16);g.lineTo(-26,28);g.closePath();g.fill();
-  g.fillStyle=hullGrad(g,20,SAND);
+  g.fillStyle=hullGrad(g,20,P.hull);
   g.beginPath();g.moveTo(36,0);g.lineTo(-24,-21);g.lineTo(-30,-12);g.lineTo(-30,12);g.lineTo(-24,21);g.closePath();g.fill();
   g.strokeStyle='rgba(25,18,12,.85)';g.lineWidth=1.2;g.stroke();
   g.fillStyle='#7d6f5a';g.fillRect(-22,-9,22,18);g.strokeRect(-22,-9,22,18);
   g.strokeStyle='rgba(60,45,30,.45)';g.lineWidth=1;g.beginPath();g.moveTo(30,-1);g.lineTo(-20,-18);g.moveTo(30,1);g.lineTo(-20,18);g.stroke();
   g.fillStyle='rgba(255,200,120,.85)';g.fillRect(22,-2,5,4);
   g.fillStyle='#5a4e40';g.fillRect(-4,-25,10,6);g.fillRect(-4,19,10,6);
-  engines(g,-31,[-7,7],now,'255,135,80',4);
+  engines(g,-31,[-7,7],now,P.eng,4);
 }
-const ART={pcruiser:drawPCruiser,pfrigate:drawPFrigate,pfighters:drawPFighters,ecruiser:drawECruiser,efrigate:drawEFrigate,efighters:drawEFighters,pfreighter:drawPFreighter,efreighter:drawEFreighter};
+const SQ=[[12,0],[-4,-15],[-4,15],[-20,0]];
+function squad(g,now,P,craft){for(const [ox,oy] of SQ){g.save();g.translate(ox,oy);craft(g,now,P);g.restore();}}
+const CRAFT={
+  tie(g,now,P){g.fillStyle='#2f353d';g.beginPath();g.moveTo(-6,-8.5);g.lineTo(6,-8.5);g.lineTo(4,-6);g.lineTo(-4,-6);g.closePath();g.fill();g.beginPath();g.moveTo(-6,8.5);g.lineTo(6,8.5);g.lineTo(4,6);g.lineTo(-4,6);g.closePath();g.fill();
+    g.fillStyle=P.hull[2];g.fillRect(-.9,-6.5,1.8,13);g.fillStyle=P.hull[1];g.beginPath();g.arc(0,0,3.1,0,7);g.fill();engines(g,-3.5,[0],now,P.eng,1.6);},
+  tieint(g,now,P){g.fillStyle='#2f353d';for(const s of[-1,1]){g.beginPath();g.moveTo(-5,s*5.5);g.lineTo(9,s*9);g.lineTo(-1,s*10);g.lineTo(-7,s*7);g.closePath();g.fill();}
+    g.fillStyle=P.hull[1];g.beginPath();g.arc(0,0,3,0,7);g.fill();engines(g,-3.5,[0],now,P.eng,1.6);},
+  tiebomb(g,now,P){g.fillStyle='#2f353d';g.fillRect(-6,-10,9,3);g.fillRect(-6,7,9,3);g.fillStyle=P.hull[1];g.beginPath();g.ellipse(1,-2.5,6,2.6,0,0,7);g.fill();g.beginPath();g.ellipse(-1,2.8,7,2.6,0,0,7);g.fill();engines(g,-7,[-2.5,2.8],now,P.eng,1.4);},
+  xwing(g,now,P){g.fillStyle=P.hull[1];g.fillRect(-6,-1.4,15,2.8);g.fillStyle=P.hull[2];g.fillRect(-5,-9,4,18);if(P.acc){g.fillStyle=P.acc;g.fillRect(-5,-9,4,2);g.fillRect(-5,7,4,2);}g.fillStyle=P.hull[0];g.beginPath();g.moveTo(9,0);g.lineTo(13,0);g.lineTo(9,1.2);g.fill();engines(g,-6,[-6,6],now,P.eng,1.3);},
+  awing(g,now,P){g.fillStyle=P.hull[1];g.beginPath();g.moveTo(10,0);g.lineTo(-6,-7);g.lineTo(-4,0);g.lineTo(-6,7);g.closePath();g.fill();if(P.acc){g.fillStyle=P.acc;g.fillRect(-5,-6,3,2);g.fillRect(-5,4,3,2);}engines(g,-6,[-4,4],now,P.eng,1.4);},
+  ywing(g,now,P){g.fillStyle=P.hull[1];g.fillRect(-3,-1.6,13,3.2);g.fillStyle=P.hull[2];g.fillRect(-9,-7,10,2.6);g.fillRect(-9,4.4,10,2.6);g.fillRect(-2,-7,2,14);if(P.acc){g.fillStyle=P.acc;g.fillRect(4,-1.6,3,3.2);}engines(g,-9,[-5.7,5.7],now,P.eng,1.4);},
+  chevron(g,now,P){g.strokeStyle=P.hull[1];g.lineWidth=2;g.lineCap='round';g.beginPath();g.moveTo(-5,-7);g.lineTo(2,0);g.lineTo(-5,7);g.stroke();g.fillStyle=P.hull[0];g.beginPath();g.moveTo(8,0);g.lineTo(-5,-2);g.lineTo(-5,2);g.closePath();g.fill();
+    if(P.acc){g.fillStyle=P.acc;g.fillRect(-6,-7.5,1.6,1.6);g.fillRect(-6,6,1.6,1.6);}engines(g,-6,[0],now,P.eng,1.6);},
+  vulture(g,now,P){g.strokeStyle=P.hull[1];g.lineWidth=1.6;g.beginPath();g.moveTo(8,0);g.lineTo(-6,0);for(const s of[-1,1]){g.moveTo(-1,0);g.lineTo(4,s*8);g.moveTo(-3,0);g.lineTo(-8,s*7);}g.stroke();
+    g.fillStyle=P.hull[0];g.beginPath();g.arc(2,0,2.4,0,7);g.fill();g.fillStyle=P.acc||'#6a5a8a';g.fillRect(5,-1,2,2);engines(g,-6,[0],now,P.eng,1.3);},
+  coral(g,now,P){g.fillStyle=P.hull[1];g.beginPath();g.moveTo(9,0);g.lineTo(3,-6);g.lineTo(-6,-5);g.lineTo(-8,1);g.lineTo(-3,6);g.lineTo(5,5);g.closePath();g.fill();g.strokeStyle=P.hull[3];g.lineWidth=.8;g.stroke();
+    const p=.6+.4*Math.sin(now/200);g.fillStyle=`rgba(${P.eng},${p})`;g.beginPath();g.arc(2,0,1.6,0,7);g.fill();},
+  fang(g,now,P){g.fillStyle=P.hull[1];g.fillRect(-6,-1.5,15,3);g.fillStyle=P.hull[2];for(const s of[-1,1]){g.beginPath();g.moveTo(-4,s*1.5);g.quadraticCurveTo(0,s*9,8,s*7);g.lineTo(6,s*5);g.quadraticCurveTo(1,s*6,-1,s*1.5);g.closePath();g.fill();}
+    if(P.acc){g.fillStyle=P.acc;g.fillRect(2,-1.5,3,3);}engines(g,-6,[0],now,P.eng,1.5);}
+};
+function shRing(g,now,P){
+  const R=50;g.fillStyle='rgba(0,0,0,.35)';g.beginPath();g.arc(5,7,R,0,7);g.fill();
+  g.fillStyle=hullGrad(g,R,P.hull);g.beginPath();g.arc(0,0,R,.35,Math.PI*2-.35);g.arc(0,0,R-16,Math.PI*2-.45,.45,true);g.closePath();g.fill();g.strokeStyle='rgba(20,15,10,.8)';g.lineWidth=1.2;g.stroke();
+  const sg=g.createRadialGradient(-6,-6,2,0,0,18);sg.addColorStop(0,P.hull[0]);sg.addColorStop(1,P.hull[3]);g.fillStyle=sg;g.beginPath();g.arc(0,0,16,0,7);g.fill();g.stroke();
+  g.fillStyle='rgba(255,215,140,.7)';for(let a=.6;a<5.7;a+=.22){g.fillRect(Math.cos(a)*(R-8)-1,Math.sin(a)*(R-8)-1,2,2);}
+  engines(g,-R+2,[-14,0,14],now,P.eng,5);
+}
+function shRock(g,now,P,L=58,W=30){
+  g.fillStyle='rgba(0,0,0,.35)';g.beginPath();g.ellipse(5,7,L,W,0,0,7);g.fill();
+  const pts=[[L,0],[L*.6,-W*.8],[0,-W],[-L*.6,-W*.85],[-L,-W*.3],[-L*.9,W*.4],[-L*.4,W],[L*.3,W*.85],[L*.75,W*.5]];
+  g.fillStyle=hullGrad(g,W,P.hull);g.beginPath();pts.forEach(([x,y],i)=>i?g.lineTo(x,y):g.moveTo(x,y));g.closePath();g.fill();g.strokeStyle='rgba(20,8,6,.85)';g.lineWidth=1.2;g.stroke();
+  g.fillStyle='rgba(30,10,8,.45)';for(const [x,y,r] of [[-L*.3,-W*.3,W*.2],[L*.2,W*.2,W*.17],[-L*.6,W*.2,W*.13],[L*.45,-W*.3,W*.12]]){g.beginPath();g.arc(x,y,r,0,7);g.fill();}
+  const p=.6+.4*Math.sin(now/300);g.fillStyle=`rgba(${P.eng},${.5+.4*p})`;for(const [x,y] of [[L*.55,-2],[L*.1,-W*.55],[L*.1,W*.5]]){g.beginPath();g.arc(x,y,2.5,0,7);g.fill();}
+  engines(g,-L+4,[0],now,P.eng,W*.2);
+}
+function shHammer(g,now,P){
+  g.fillStyle='rgba(0,0,0,.35)';g.fillRect(-55,-14,115,40);
+  g.fillStyle=hullGrad(g,18,P.hull);g.fillRect(-56,-12,90,24);g.fillRect(28,-26,22,52);g.fillRect(-50,-22,30,44);
+  g.strokeStyle='rgba(15,12,10,.85)';g.lineWidth=1.2;g.strokeRect(-56,-12,90,24);g.strokeRect(28,-26,22,52);g.strokeRect(-50,-22,30,44);
+  if(P.acc){g.fillStyle=P.acc;g.fillRect(28,-26,22,6);g.fillRect(28,20,22,6);}
+  g.fillStyle='rgba(255,215,140,.7)';for(let x=-46;x<30;x+=7)g.fillRect(x,-1,2,2);
+  engines(g,-58,[-14,0,14],now,P.eng,6);
+}
+function shSepFrig(g,now,P){
+  g.fillStyle='rgba(0,0,0,.3)';g.fillRect(-36,-6,80,20);
+  g.fillStyle=hullGrad(g,10,P.hull);g.fillRect(-38,-5,62,10);
+  g.beginPath();g.moveTo(20,-26);g.lineTo(34,-22);g.lineTo(40,0);g.lineTo(34,22);g.lineTo(20,26);g.lineTo(26,0);g.closePath();g.fill();
+  g.strokeStyle='rgba(20,15,10,.85)';g.lineWidth=1;g.stroke();g.strokeRect(-38,-5,62,10);
+  g.fillRect(-30,-14,14,28);g.strokeRect(-30,-14,14,28);
+  if(P.acc){g.fillStyle=P.acc;g.fillRect(-30,-14,14,4);}
+  engines(g,-40,[-3,3],now,P.eng,4.5);
+}
+function shBlockFrig(g,now,P){
+  g.fillStyle='rgba(0,0,0,.3)';g.fillRect(-32,-10,72,26);
+  g.fillStyle=hullGrad(g,13,P.hull);g.fillRect(-34,-12,54,24);g.beginPath();g.moveTo(20,-10);g.lineTo(40,-4);g.lineTo(40,4);g.lineTo(20,10);g.closePath();g.fill();
+  g.strokeStyle='rgba(15,12,10,.85)';g.lineWidth=1;g.strokeRect(-34,-12,54,24);
+  if(P.acc){g.fillStyle=P.acc;g.fillRect(-34,-12,54,4);}
+  g.fillStyle='rgba(255,215,140,.7)';for(let x=-28;x<16;x+=6)g.fillRect(x,6,1.8,1.8);
+  engines(g,-36,[-6,6],now,P.eng,4.5);
+}
+function shCR90(g,now,P){
+  g.fillStyle='rgba(0,0,0,.3)';g.fillRect(-30,-8,64,20);
+  g.fillStyle=hullGrad(g,12,P.hull);g.fillRect(-14,-4,40,8);g.fillRect(22,-11,10,22);g.fillRect(-30,-13,18,26);
+  g.strokeStyle='rgba(15,12,10,.85)';g.lineWidth=1;g.strokeRect(-30,-13,18,26);g.strokeRect(22,-11,10,22);
+  if(P.acc){g.fillStyle=P.acc;g.fillRect(-14,-4,40,2);}
+  engines(g,-31,[-9,-3,3,9],now,P.eng,3);
+}
+const scaled=(fn,k)=>(g,now,P)=>{g.save();g.scale(k,k);fn(g,now,P);g.restore();};
+const SHAPES={
+  wedge:drawPCruiser,organic:(g,now)=>drawECruiser(g,now),ring:shRing,rock:shRock,hammer:shHammer,
+  impFrig:drawPFrigate,nebulon:(g,now)=>drawEFrigate(g,now),sepFrig:shSepFrig,blockFrig:shBlockFrig,rockS:(g,now,P)=>shRock(g,now,P,36,16),
+  wedgeS:scaled(drawPCruiser,.5),cr90:shCR90,sepCorv:scaled(shSepFrig,.75),blockCorv:scaled(shBlockFrig,.75),rockXS:(g,now,P)=>shRock(g,now,P,28,13),
+  saucer:(g,now)=>drawPFreighter(g,now),wedgeF:drawEFreighter
+};
+for(const k of Object.keys(CRAFT))SHAPES[k]=(g,now,P)=>squad(g,now,P,CRAFT[k]);
+function drawArt(g,s,now){
+  const st=styleOf(s),set=SHAPESET[st]||SHAPESET.imp,P=PAL[st]||PAL.imp;
+  const shape=set[s.type]||SHAPESET[s.side==='p'?'imp':'reb'][s.type]||'wedge';
+  (SHAPES[shape]||SHAPES.wedge)(g,now,P);
+}
 
 function drawShip(s,now){
   const g=ctx;
@@ -1217,7 +1328,7 @@ function drawShip(s,now){
   }
   if(s.evade){g.strokeStyle='rgba(120,200,255,.35)';g.setLineDash([3,5]);g.beginPath();g.arc(0,0,s.r+2,0,7);g.stroke();g.setLineDash([]);}
   g.rotate(s.a);
-  ART[s.side+s.type](g,now);
+  drawArt(g,s,now);
   const h=s.hull/s.hullMax;
   if(h<.55){
     s.dmgPts.forEach((p,i)=>{if(i===2&&h>.3)return;
@@ -1301,13 +1412,13 @@ function turnTo(s,ang,dur=260){
 /* ---------- Combat ---------- */
 function preview(a,t){
   const d=dist(a,t),T=TYPES[a.type];
-  let chance=CH[a.type][t.type];
+  let chance=baseChance(a.type,t.type);
   if(d>a.range*.75)chance-=.1;
   if(t.evade)chance-=.25;
   chance+=(a.ace||0)-(t.ace||0);
   chance=Math.max(.1,Math.min(.95,chance));
   const cover=inField(t.x,t.y)?.7:1,m=MULT[a.type][t.type]*cover;
-  return{inRange:d<=a.range,chance,min:Math.round(T.dmg[0]*m),max:Math.round(T.dmg[1]*m),bypass:a.type==='fighters',cover:cover<1};
+  return{inRange:d<=a.range,chance,min:Math.round(T.dmg[0]*m),max:Math.round(T.dmg[1]*m),bypass:a.type==='fighters'||a.type==='bomber',cover:cover<1};
 }
 function applyDamage(t,dmg,bypass){
   let toSh=0;if(!bypass){toSh=Math.min(t.sh,dmg);t.sh-=toSh;}
@@ -1317,10 +1428,10 @@ async function attack(a,t){
   a.acted=true;
   const p=preview(a,t);
   const ang=Math.atan2(t.y-a.y,t.x-a.x);
-  await turnTo(a,ang,a.type==='fighters'?150:280);
+  await turnTo(a,ang,SMALL(a.type)?150:280);
   const hit=Math.random()<p.chance;
   const col=a.side==='p'?'#8dffad':'#ff6a55';
-  const n=TYPES[a.type].bolts,dur=a.type==='fighters'?180:290;
+  const n=TYPES[a.type].bolts,dur=SMALL(a.type)?180:290;
   const px=-Math.sin(ang),py=Math.cos(ang);
   for(let i=0;i<n;i++){
     const sp=(i-(n-1)/2)*(a.type==='cruiser'?15:9);
@@ -1357,7 +1468,6 @@ function checkEnd(){
 }
 
 /* ---------- IA ennemie ---------- */
-const PREF={cruiser:{cruiser:1,frigate:1.1,fighters:.4,freighter:.8},frigate:{cruiser:.8,frigate:1,fighters:1.4,freighter:1.1},fighters:{cruiser:1.4,frigate:1.1,fighters:.6,freighter:1.1},freighter:{cruiser:.8,frigate:1,fighters:1.2,freighter:1}};
 function score(e,t){return PREF[e.type][t.type]*100-dist(e,t)*.12-(t.hull+t.sh)*.25+(t.flag?15:0);}
 function pickTarget(e,list){let best=null,bs=-1e9;for(const t of list){const s=score(e,t);if(s>bs){bs=s;best=t;}}return best;}
 async function enemyAct(e){
@@ -1373,7 +1483,7 @@ async function enemyAct(e){
   }else if(d>e.range*.9){
     const step=Math.min(e.move,d-e.range*.8);
     dest={x:e.x+(t.x-e.x)/d*step,y:e.y+(t.y-e.y)/d*step};
-    if(e.type!=='fighters'){
+    if(!SMALL(e.type)){
       let bestF=null,bd=1e9;
       for(const f of fields){const fd=dist(e,f);if(fd<=e.move&&dist(f,t)<=e.range*.95&&fd<bd){bd=fd;bestF=f;}}
       if(bestF)dest={x:bestF.x+rnd(-20,20),y:bestF.y+rnd(-20,20)};
@@ -1413,9 +1523,9 @@ function endBattle(win,text){
     `${(window.__CFG&&window.__CFG.space&&window.__CFG.space.title||'Bataille spatiale').toUpperCase()} — ${fled?'FUITE':win?'VICTOIRE':'DÉFAITE'} (tour ${turn})`,
     text,'',
     'Flotte du secteur :',
-    ...pl.map(s=>`- ${s.name} (${TYPES[s.type].label}) : ${status(s)}`),'',
+    ...pl.map(s=>`- ${s.name} (${shipLabel(s)}) : ${status(s)}`),'',
     `Forces ennemies : ${en.filter(s=>!s.alive).length}/${en.length} vaisseaux détruits`,
-    ...en.map(s=>`- ${s.name} (${TYPES[s.type].elabel}) : ${!s.alive?'détruit':'en fuite, '+status(s)}`)
+    ...en.map(s=>`- ${s.name} (${shipLabel(s)}) : ${!s.alive?'détruit':'en fuite, '+status(s)}`)
   ];
   document.getElementById('sp-rTitle').textContent=fled?'Fuite':win?'Victoire':'Défaite';
   document.getElementById('sp-rTitle').className=win?'win':'lose';
@@ -1438,7 +1548,7 @@ function renderUI(){
   if(sel){
     const T=TYPES[sel.type],h=sel.hull/sel.hullMax;
     card.innerHTML=`<div class="nm">${sel.name}${sel.flag?'<span class="flagtag">Amiral</span>':''}</div>
-      <div class="ty">${T.label}${inField(sel.x,sel.y)?' · à couvert dans les astéroïdes':''}</div>
+      <div class="ty">${shipLabel(sel)}${inField(sel.x,sel.y)?' · à couvert dans les astéroïdes':''}</div>
       <div class="bar"><span class="k">Coque</span><div class="track"><div class="fill" style="width:${h*100}%;background:${h>.6?'var(--imp)':h>.3?'var(--amber)':'var(--foe)'}"></div></div><span class="v">${sel.hull}/${sel.hullMax}</span></div>
       ${sel.shMax?`<div class="bar"><span class="k">Boucliers</span><div class="track"><div class="fill" style="width:${pct(sel.sh,sel.shMax)}%;background:var(--shield)"></div></div><span class="v">${sel.sh}/${sel.shMax}</span></div>`:''}
       <div class="stats"><div class="stat"><div class="k">Moteurs</div><div class="v">${sel.move}</div></div><div class="stat"><div class="k">Portée</div><div class="v">${sel.range}</div></div><div class="stat"><div class="k">Salve</div><div class="v">${T.dmg[0]}–${T.dmg[1]}</div></div></div>
@@ -3428,7 +3538,10 @@ const ERAS=[
 const SKILLS=[['sabre','Sabre / mêlée'],['tir','Tir'],['pilotage','Pilotage'],['commandement','Commandement'],['discretion','Discrétion'],['persuasion','Persuasion'],['intimidation','Intimidation'],['technique','Technique'],['perception','Perception'],['athletisme','Athlétisme'],['force','Force']];
 const SKL=Object.fromEntries(SKILLS);
 const POOL=26,BASE=8,MAXSK=16;
-const SHIP_T={cruiser:'Croiseur',frigate:'Frégate',fighters:'Escadron de chasseurs'};
+const SHIP_T={cruiser:'Croiseur',frigate:'Frégate',corvette:'Corvette',fighters:'Escadron de chasseurs',interceptor:'Escadron d’intercepteurs',bomber:'Escadron de bombardiers'};
+const FACTIONS={imp:'Empire galactique',reb:'Rébellion / Nouvelle République',rep:'République (clones, Ancienne République)',sep:'Séparatistes',mando:'Mandaloriens',pirate:'Pègre / pirates',vong:'Yuuzhan Vong',chiss:'Chiss',sith:'Empire Sith'};
+const OPP={imp:'reb',reb:'imp',rep:'sep',sep:'rep',mando:'pirate',pirate:'imp',vong:'reb',chiss:'pirate',sith:'rep'};
+const PATH_FACTION={sith:'sith',jedi:'rep',moff:'imp',crime:'pirate',smuggler:'pirate',hunter:'pirate',rebel:'reb',free:'pirate'};
 const DIFF={facile:{l:'Facile',k:.75},normal:{l:'Normale',k:1},difficile:{l:'Difficile',k:1.25},brutal:{l:'Brutale',k:1.5}};
 const DECOR_SPACE={planete:'Orbite planétaire',espace:'Espace profond',asteroides:'Champ d’astéroïdes',nebuleuse:'Nébuleuse'};
 const TERRAIN={tempere:'Plaines tempérées',desert:'Désert',neige:'Toundra enneigée',urbain:'Ruines urbaines',jungle:'Jungle',volcan:'Monde volcanique'};
@@ -3833,9 +3946,9 @@ const hullLabel=f=>f>=1?'intact':f>=.6?'endommagé':f>=.3?'lourdement endommagé
 const troopLabel=f=>f>=1?'au complet':f>=.6?'éprouvée':f>=.3?'décimée':'presque anéantie';
 const frac=v=>v==null?1:Math.max(0,Math.min(1,+v));
 const pct=f=>Math.round(frac(f)*100)+' %';
-const REPAIR={cruiser:8000,frigate:4000,fighters:2000,freighter:3000};
+const REPAIR={cruiser:8000,frigate:4000,corvette:3000,fighters:2000,interceptor:2000,bomber:2500,freighter:3000};
 const REINF={inf:3000,tank:6000,art:5000,speed:2000};
-const BUY_SHIP={cruiser:40000,frigate:15000,fighters:6000};
+const BUY_SHIP={cruiser:40000,frigate:15000,corvette:12000,fighters:6000,interceptor:6000,bomber:9000};
 const BUY_TROOP={inf:5000,tank:14000,art:10000,speed:4000};
 const MEDIC_PV=25,MEDIC_COMP=600;
 function medicCost(){const h=S.hero,m=derived(h).pv;return Math.max(0,m-heroHP())*MEDIC_PV+Math.round(S.res.companions.reduce((a,c)=>a+(1-frac(c.hp))*MEDIC_COMP,0));}
@@ -3908,12 +4021,13 @@ function migrate(s){
   if(!Array.isArray(s.chapters))s.chapters=[];if(s.playerNotes==null)s.playerNotes='';
   s.res.fleet.forEach(x=>{if(x.hull==null)x.hull=1;});s.res.troops.forEach(x=>{if(x.hp==null)x.hp=1;});s.res.companions.forEach(x=>{if(x.hp==null)x.hp=1;});
   if(!Array.isArray(s.hero.forms))s.hero.forms=['none',...(s.hero.form&&s.hero.form!=='none'?[s.hero.form]:[])];
+  if(!s.res.faction||!FACTIONS[s.res.faction])s.res.faction=PATH_FACTION[s.path]||'pirate';
   if(!s.zero.diff)s.zero.diff='normal';if(!s.zero.romance)s.zero.romance='discrete';if(!s.zero.longueur)s.zero.longueur='normale';if(!s.zero.style)s.zero.style='equilibre';if(s.res.ship&&s.res.shipHull==null)s.res.shipHull=1;
   if(s.xp==null)s.xp=0;if(s.destiny==null)s.destiny=3;if(s.bookPart==null)s.bookPart=0;return s;
 }
 
 /* ================= Équilibrage des combats ================= */
-const SHIP_COST={cruiser:4,frigate:2,fighters:1,freighter:2},TROOP_COST={cmd:2,inf:2,tank:4,art:3,speed:1},FOE_COST={einf:2,eat:2,eltank:3,eturret:3};
+const SHIP_COST={cruiser:4,frigate:2,corvette:2,fighters:1,interceptor:1,bomber:2,freighter:2},TROOP_COST={cmd:2,inf:2,tank:4,art:3,speed:1},FOE_COST={einf:2,eat:2,eltank:3,eturret:3};
 const diffK=()=>DIFF[(S.zero&&S.zero.diff)||'normal'].k;
 function trimTo(list,cost,target,fill,max){
   let E=list.reduce((a,x)=>a+cost(x),0);
@@ -3923,7 +4037,7 @@ function trimTo(list,cost,target,fill,max){
 function balanceFleet(c){
   const k=diffK();
   if(c.type==='space'||c.type==='ship'){
-    const ok=c.type==='ship'?['fighters','freighter','frigate']:Object.keys(SHIP_COST);
+    const ok=c.type==='ship'?['fighters','interceptor','bomber','freighter','corvette','frigate']:Object.keys(SHIP_COST);
     c.enemies=c.enemies.filter(x=>x&&ok.includes(x.type)).map(x=>({type:x.type,name:String(x.name||'Vaisseau ennemi').slice(0,30)}));
     const P=c.type==='ship'?2*(1+Math.max(0,(S.hero.skills.pilotage-10)*.05)):S.res.fleet.reduce((a,s)=>a+SHIP_COST[s.type],0);
     trimTo(c.enemies,x=>SHIP_COST[x.type],P*k,n=>({type:'fighters',name:`Renforts ${n}`}),c.type==='ship'?4:7);
@@ -3965,6 +4079,7 @@ function heroBlock(){
 function resBlock(){
   const r=S.res;
   return[`Crédits : ${r.credits}`,`Vaisseau personnel : ${r.ship?`${r.ship} (coque ${pct(r.shipHull)}) — combat "ship" possible`:'aucun'}`,
+    `Faction de tes forces : ${FACTIONS[r.faction]||'—'} (style de tes vaisseaux et de tes troupes)`,
     `Flotte : ${r.fleet.length?r.fleet.map(s=>`${s.name} (${s.type}, coque ${pct(s.hull)})`).join(', '):'aucune (pas de bataille spatiale possible)'}`,
     `Troupes : ${r.troops.length?r.troops.map(s=>`${s.name} (${s.type}, effectifs ${pct(s.hp)})`).join(', '):'aucune (pas de bataille terrestre possible)'}`,
     `Compagnons : ${r.companions.length?r.companions.map(c=>`${c.name} [modèle ${c.preset}, ${hurtLabel(frac(c.hp))}]${c.note?' — '+c.note:''}`).join(' ; '):'aucun'}`,
@@ -4007,10 +4122,11 @@ const FORMAT=`FORMAT DE RÉPONSE OBLIGATOIRE :
 - test : si l’action est risquée et incertaine : {"skill":"<clé>","mod":<entier de -6 à 2>,"why":"<raison courte>"}. Clés : sabre, tir, pilotage, commandement, discretion, persuasion, intimidation, technique, perception, athletisme, force (force seulement si le personnage est sensible à la Force). Dans ce cas, arrête la narration juste avant l’issue, ne la raconte pas, et mets "choices":[].
 - combat : si un affrontement doit être joué : {"type":"duel"|"ship"|"space"|"ground","title":"<titre court>","briefing":"<2 phrases>","allies":[…],"enemies":[…],"decor":"…"}. Arrête la narration au moment où le combat éclate et mets "choices":[]. Le jeu ajuste lui-même la force des ennemis à la difficulté choisie : décris l’adversité que l’histoire appelle.
   · duel : "allies" = noms de compagnons existants (3 au plus, présents dans la scène). "enemies" = 1 à 4 objets {"name":"…","preset":"<modèle>","blade":"#rrggbb (facultatif)","form":"<forme facultative>","pv":<facultatif 10-60>}. Modèles par faction : ${lookCatalog()}. Pour un PNJ que les modèles ne décrivent pas, pars du modèle le plus proche et ajoute "look":{"head":"…","outfit":"…","cloth":"#rrggbb","cloth2":"#…","skin":"#…","hair":"#…","stripe":"#…","eyes":"#…","cloak":"none|long|tattered"}, "weapon":"saber|dual|double|pistol|rifle|staff|vibro", "tech":[…] et "kind":"sith|jedi|none" si besoin. Têtes : ${Object.keys(HEADS).join(', ')}. Tenues : ${Object.keys(OUTFITS).join(', ')}. Techniques : ${Object.keys(TECHS).join(', ')}. Formes : shiicho, makashi, soresu, ataru, shien, niman, juyo. "decor" : toits, temple, desert, foret, vaisseau, glace ou lave.
-  · ship : le vaisseau personnel du joueur, seul, contre 1 à 4 objets {"type":"fighters"|"freighter"|"frigate","name":"…"} (chasseurs, cargo armé, frégate de patrouille). Poursuites, interceptions, pirates. Le joueur peut fuir en hyperespace. "decor" : planete, espace, asteroides ou nebuleuse.
-  · space : "enemies" = 2 à 7 objets {"type":"cruiser"|"frigate"|"fighters"|"freighter","name":"…"}. "decor" : planete, espace, asteroides ou nebuleuse. "fuite":true si la retraite est une option.
+  · Pour "ship", "space" et "ground", ajoute "camps":{"joueur":"<faction>","ennemi":"<faction>"} : ils donnent l’apparence des vaisseaux et des troupes. Factions : ${Object.entries(FACTIONS).map(([k,l])=>k+' ('+l+')').join(', ')}.
+  · ship : le vaisseau personnel du joueur, seul, contre 1 à 4 objets {"type":"fighters"|"interceptor"|"bomber"|"freighter"|"corvette"|"frigate","name":"…"}. Poursuites, interceptions, pirates. Le joueur peut fuir en hyperespace. "decor" : planete, espace, asteroides ou nebuleuse.
+  · space : "enemies" = 2 à 7 objets {"type":"cruiser"|"frigate"|"corvette"|"fighters"|"interceptor"|"bomber"|"freighter","name":"…"}. Les bombardiers ravagent les gros vaisseaux, les intercepteurs chassent chasseurs et bombardiers. "decor" : planete, espace, asteroides ou nebuleuse. "fuite":true si la retraite est une option.
   · ground : "enemies" = 2 à 6 objets {"type":"einf"|"eat"|"eltank"|"eturret","name":"…"} (fantassins, équipe antichar, char léger, tourelle). "terrain" : tempere, desert, neige, urbain, jungle ou volcan. "objectif" : assaut (prendre un générateur gardé), elimination (anéantir l’ennemi) ou defense (tenir 6 tours face à un ennemi plus nombreux).
-- updates : changements concrets, sinon null : {"credits":<±entier>,"addCompanions":[{"name":"…","preset":"<modèle>","note":"…"}],"removeCompanions":["nom"],"addFleet":[{"type":"cruiser|frigate|fighters","name":"…"}],"addTroops":[{"type":"inf|tank|art|speed","name":"…"}],"notes":["fait durable à retenir"],"xp":<0 à 3>,"heal":"repos"|<PV rendus au personnage>,"equipement":["beskar"|"jetpack"|"flamer"|"cortosis"|"grenades"],"perteEquipement":[…]}. Donne de l’équipement seulement quand l’histoire le met vraiment entre les mains du personnage (achat, butin, cadeau). "heal":"repos" soigne entièrement le personnage et ses compagnons.
+- updates : changements concrets, sinon null : {"credits":<±entier>,"addCompanions":[{"name":"…","preset":"<modèle>","note":"…"}],"removeCompanions":["nom"],"addFleet":[{"type":"cruiser|frigate|corvette|fighters|interceptor|bomber","name":"…"}],"addTroops":[{"type":"inf|tank|art|speed","name":"…"}],"notes":["fait durable à retenir"],"xp":<0 à 3>,"heal":"repos"|<PV rendus au personnage>,"equipement":["beskar"|"jetpack"|"flamer"|"cortosis"|"grenades"],"faction":"<clé de faction, si les forces du joueur changent de camp>","perteEquipement":[…]}. Donne de l’équipement seulement quand l’histoire le met vraiment entre les mains du personnage (achat, butin, cadeau). "heal":"repos" soigne entièrement le personnage et ses compagnons.
 - chronicle : 1 ou 2 phrases factuelles résumant ce qui vient de se passer (c’est ta mémoire).
 - codex : le carnet que le joueur consulte, uniquement les entrées nouvelles ou modifiées (elles sont fusionnées par nom), sinon null : {"pnj":[{"nom":"…","role":"…","relation":"allié|amical|neutre|méfiant|hostile","statut":"vivant|mort|disparu|captif","note":"ce que le joueur sait","voix":"façon de parler, tics, ce qu’il cache","lien":"nature du lien en 2-4 mots (ex. dette d’honneur, rivalité, confiance fragile)","affinite":<−5 à +5 envers le joueur>,"evenement":"ce qui vient de changer le lien, s’il a changé","romance":"aucune|attirance|flirt|liaison|amour|rupture"}],"quetes":[{"titre":"…","etat":"en cours|réussie|échouée|abandonnée","note":"…"}],"lieux":[{"nom":"…","note":"…"}],"factions":[{"nom":"…","attitude":"alliée|neutre|hostile|…","note":"…"}]}. Ajoute chaque PNJ nommé important, chaque objectif que le joueur poursuit, chaque lieu marquant. N’y mets jamais ce que le joueur ignore (c’est la place du carnet secret).
 - chapter : uniquement quand un nouveau chapitre commence, sinon null : {"title":"…","resume":"5 à 8 phrases factuelles résumant tout le chapitre qui s’achève : faits, choix du joueur, PNJ, conséquences"}. Ce résumé est ta seule mémoire à long terme du chapitre. Change de chapitre à la fin d’un arc ou d’une étape importante (toutes les 15 à 30 scènes environ).
@@ -4117,6 +4233,7 @@ function applyData(d){
     (u.addFleet||[]).forEach(s=>{if(s&&SHIP_T[s.type]&&r.fleet.length<8)r.fleet.push({type:s.type,name:String(s.name||'Nouveau vaisseau').slice(0,30),flag:!r.fleet.length,hull:1});});
     (u.addTroops||[]).forEach(s=>{if(s&&TROOP_T[s.type]&&r.troops.length<7)r.troops.push({type:s.type,name:String(s.name||'Nouvelle unité').slice(0,30),hp:1});});
     (u.notes||[]).forEach(n=>{r.notes=r.notes||[];r.notes.push(String(n).slice(0,200));if(r.notes.length>30)r.notes.shift();});
+    if(u.faction&&FACTIONS[u.faction])r.faction=u.faction;
     (Array.isArray(u.equipement)?u.equipement:[]).forEach(t=>{if(EQUIP.includes(t)&&!S.hero.tech.includes(t)){S.hero.tech.push(t);}});
     (Array.isArray(u.perteEquipement)?u.perteEquipement:[]).forEach(t=>{S.hero.tech=S.hero.tech.filter(x=>x!==t);});
     if(u.heal==='repos')healAll();else if(Number.isFinite(+u.heal)&&+u.heal>0)S.hero.hp=Math.min(derived(S.hero).pv,heroHP()+Math.round(+u.heal));
@@ -4135,6 +4252,7 @@ function applyData(d){
     const combat={type:c.type,title:String(c.title||'Affrontement').slice(0,60),briefing:String(c.briefing||'').slice(0,400),allies:(c.allies||[]).slice(0,3),
       enemies:(Array.isArray(c.enemies)?c.enemies:[]).slice(0,c.type==='space'?7:c.type==='ground'?6:4),decor:dec[dv]?dv:Object.keys(dec)[0],
       objectif:c.type==='ground'&&OBJECTIF[c.objectif]?c.objectif:'assaut',fuite:c.type==='ship'?c.fuite!==false:c.fuite===true};
+    if(c.type!=='duel'){const cp=c.camps||{},j=FACTIONS[cp.joueur]?cp.joueur:S.res.faction;combat.camps={joueur:j,ennemi:FACTIONS[cp.ennemi]?cp.ennemi:(OPP[j]||'pirate')};}
     balanceFleet(combat);
     S.pending={kind:'combat',combat};
   }
@@ -4172,7 +4290,7 @@ function renderAct(){
     const foes=c.type==='duel'?c.enemies.map(e=>esc(e.name||'?')):c.enemies.map(e=>esc(e.name||e.type));
     const mine=c.type==='duel'?[esc(S.hero.name),...(c.allies||[]).map(n=>esc(typeof n==='string'?n:n.name))]:c.type==='ship'?[`${esc(S.res.ship)} (${pct(S.res.shipHull)})`]:c.type==='space'?S.res.fleet.map(s=>esc(s.name)):[esc(S.hero.name)+' (commandement)',...S.res.troops.map(s=>esc(s.name))];
     const where=c.type==='ground'?`${TERRAIN[c.decor]} · ${OBJECTIF[c.objectif]}`:c.type==='duel'?DECOR_DUEL[c.decor]:DECOR_SPACE[c.decor];
-    main=`<div class="combatcard"><span class="kind">${kind}</span><span class="t">${esc(c.title)}</span><span class="kind">${esc(where||'')} · Difficulté ${DIFF[S.zero.diff||'normal'].l.toLowerCase()}${c.fuite?' · fuite possible':''}</span><span>${esc(c.briefing)}</span><ul><li>Ton camp : ${mine.join(', ')}</li><li>En face : ${foes.join(', ')}</li></ul><div><button type="button" class="primary" id="fightBtn">Engager le combat</button></div></div>`;
+    main=`<div class="combatcard"><span class="kind">${kind}</span><span class="t">${esc(c.title)}</span><span class="kind">${c.camps?esc(FACTIONS[c.camps.joueur]+' contre '+FACTIONS[c.camps.ennemi])+' · ':''}${esc(where||'')} · Difficulté ${DIFF[S.zero.diff||'normal'].l.toLowerCase()}${c.fuite?' · fuite possible':''}</span><span>${esc(c.briefing)}</span><ul><li>Ton camp : ${mine.join(', ')}</li><li>En face : ${foes.join(', ')}</li></ul><div><button type="button" class="primary" id="fightBtn">Engager le combat</button></div></div>`;
   }else{
     main=`<div class="choices">${(S.choices||[]).map((c,i)=>`<button type="button" data-choice="${i}">${esc(c)}</button>`).join('')}</div>
     <div class="say"><textarea id="sayBox" rows="2" maxlength="1200" placeholder="Ou écris ce que fait ou dit ${esc(S.hero.name)}…"></textarea><button type="button" class="primary" id="sayBtn">Agir</button></div>`;
@@ -4330,7 +4448,8 @@ function launchCombat(){
     eng='space';
     const player=c.type==='ship'?[{type:'freighter',name:S.res.ship,flag:true,hull:frac(S.res.shipHull),pilot:S.hero.skills.pilotage}]
       :S.res.fleet.slice(0,8).map((s,i)=>({type:s.type,name:s.name,flag:i===0,hull:frac(s.hull)}));
-    window.__CFG.space={title:c.title,solo:c.type==='ship',canFlee:!!c.fuite,decor:c.decor,player,enemy:c.enemies.map(x=>({type:x.type,name:x.name}))};
+    const cp=c.camps||{joueur:S.res.faction,ennemi:OPP[S.res.faction]||'pirate'};
+    window.__CFG.space={title:c.title,solo:c.type==='ship',canFlee:!!c.fuite,decor:c.decor,pStyle:c.type==='ship'?'own':cp.joueur,eStyle:cp.ennemi,player,enemy:c.enemies.map(x=>({type:x.type,name:x.name}))};
     if(!window.__CFG.space.enemy.length)window.__CFG.space.enemy=[{type:'fighters',name:'Chasseurs ennemis'}];
   }else{
     window.__CFG.ground={title:c.title,commander:S.hero.name,player:S.res.troops.slice(0,7).map(s=>({type:s.type,name:s.name,hp:frac(s.hp)})),

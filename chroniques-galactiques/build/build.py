@@ -76,10 +76,10 @@ js = re.sub(r"getElementById\('([^']+)'\)", lambda m: f"getElementById('sp-{m.gr
 js = must(js, 'function frame(now){', GATE % 'space')
 js = must(js, "  initEnemyHull=ships.filter(s=>s.side==='e')", """  if(window.__CFG&&window.__CFG.space){const C=window.__CFG.space;ships=[];
     const PS=[[250,430],[210,650],[330,230],[380,560],[420,330],[440,460],[160,300],[150,560]];
-    (C.player||[]).slice(0,8).forEach((u,i)=>{const s=mkShip('p',u.type,u.name,PS[i][0],PS[i][1],!!u.flag);if(u.hull!=null&&u.hull<1)s.hull=Math.max(1,Math.round(s.hullMax*u.hull));if(u.pilot)s.ace=Math.max(-.1,Math.min(.2,(u.pilot-10)*.025));const p=settle(s,s.x,s.y);s.x=p.x;s.y=p.y;ships.push(s);});
+    (C.player||[]).slice(0,8).forEach((u,i)=>{const s=mkShip('p',u.type,u.name,PS[i][0],PS[i][1],!!u.flag);if(u.hull!=null&&u.hull<1)s.hull=Math.max(1,Math.round(s.hullMax*u.hull));if(u.pilot)s.ace=Math.max(-.1,Math.min(.2,(u.pilot-10)*.025));s.style=u.style||C.pStyle||'imp';const p=settle(s,s.x,s.y);s.x=p.x;s.y=p.y;ships.push(s);});
     if(!ships.some(s=>s.flag)&&ships[0])ships[0].flag=true;
     const en=(C.enemy||[]).slice(0,8),n=en.length;
-    en.forEach((u,i)=>{const y=n===1?430:140+i*(560/Math.max(1,n-1));const x=(u.type==='cruiser'?1400:u.type==='frigate'?1320:1240)+rnd(-30,30);const s=mkShip('e',u.type,u.name,x,y);const p=settle(s,s.x,s.y);s.x=p.x;s.y=p.y;ships.push(s);});
+    en.forEach((u,i)=>{const y=n===1?430:140+i*(560/Math.max(1,n-1));const x=(u.type==='cruiser'?1400:u.type==='frigate'?1320:1240)+rnd(-30,30);const s=mkShip('e',u.type,u.name,x,y);s.style=u.style||C.eStyle||'reb';const p=settle(s,s.x,s.y);s.x=p.x;s.y=p.y;ships.push(s);});
     comp.length=0;en.forEach(u=>comp.push(u.type));
   }
   initEnemyHull=ships.filter(s=>s.side==='e')""")
