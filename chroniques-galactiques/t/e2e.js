@@ -6,7 +6,7 @@ const fake=()=>new Proxy(function(){},{get:(t,k)=>k==='measureText'?()=>({width:
 const prompts=[],saved=[];
 const R=(narr,data)=>narr+'\n@@DONNEES\n'+JSON.stringify(data);
 const answers=[
-  R('— Bienvenue, Moff. La station tremble.\nLes sirènes hurlent.',{choices:[],test:{skill:'perception',mod:-2,why:'Repérer le saboteur'},combat:null,updates:null,chronicle:'Ouverture sur la station.',chapter:{title:'L’ombre sur Kessaria'},codex:{pnj:[{nom:'Varek',role:'gouverneur',relation:'méfiant',note:'Sourit trop'}],quetes:[{titre:'Démasquer le saboteur',etat:'en cours'}],lieux:[{nom:'Station Kessaria',note:'Orbite basse'}]},secret:{arc:'Trahison',actes:['I','II','III'],antagonistes:[{nom:'Varek',but:'pouvoir',methode:'complot'}],factions:[],fils:[],prochaine_etape:'duel'}}),
+  R('— Bienvenue, Moff. La station tremble.\nLes sirènes hurlent.',{choices:[],test:{skill:'perception',mod:-2,why:'Repérer le saboteur'},combat:null,updates:null,chronicle:'Ouverture sur la station.',chapter:{title:'L’ombre sur Kessaria'},codex:{pnj:[{nom:'Varek',role:'gouverneur',relation:'méfiant',note:'Sourit trop',voix:'Parle bas, finit ses phrases par « n’est-ce pas »',lien:'méfiance polie',affinite:-1,evenement:'Il a menti sur les cargos'},{nom:'Lyss',role:'pilote',relation:'amical',affinite:2,romance:'attirance',evenement:'Elle t’a couvert'}],quetes:[{titre:'Démasquer le saboteur',etat:'en cours'}],lieux:[{nom:'Station Kessaria',note:'Orbite basse'}]},secret:{arc:'Trahison',actes:['I','II','III'],antagonistes:[{nom:'Varek',but:'pouvoir',methode:'complot'}],factions:[],fils:[],prochaine_etape:'duel'}}),
   R('Tu repères une silhouette. Elle dégaine.',{choices:[],test:null,combat:{type:'duel',title:'Le saboteur',decor:'temple',briefing:'Un assassin et un garde.',allies:['Capitaine Rhal'],enemies:[{name:'Vessk',preset:'assassin'},{name:'Garde rouge',preset:'guard',pv:18}]},updates:null,chronicle:'Le saboteur attaque.',chapter:null,secret:null}),
   R('Après le combat, la flotte ennemie surgit.',{choices:[],combat:{type:'space',title:'Raid sur l’orbite',briefing:'Deux frégates.',enemies:[{type:'frigate',name:'Brise-Lame'},{type:'fighters',name:'Escadron Vipère'}]},updates:{credits:-500,notes:['Varek a payé le saboteur'],xp:1},chronicle:'Raid spatial.',chapter:null,secret:null}),
   R('Les troupes débarquent.',{choices:[],combat:{type:'ground',title:'Prise du relais',terrain:'neige',objectif:'defense',briefing:'Le relais est tenu.',enemies:[{type:'einf',name:'Rebelles'},{type:'eat',name:'Antichar'},{type:'eturret',name:'Tourelle'}]},updates:null,chronicle:'Assaut au sol.',chapter:{title:'Chapitre deux',resume:'Le saboteur Vessk a frappé la station ; la flotte a été repoussée.'},codex:{pnj:[{nom:'varek',relation:'hostile',note:'A payé le saboteur'}],quetes:[{titre:'Démasquer le saboteur',etat:'réussie'}]},secret:null}),
@@ -98,11 +98,17 @@ async function finishEngine(name,flee){
   ok(/PV (\d+)\/\1 \(en forme\)/.test(prompts[4]),'repos de nouveau chapitre : héros soigné');
   // Étape 2 : mémoire longue
   ok(prompts[4].includes('Ch. 1 — L’ombre sur Kessaria : Le saboteur Vessk'),'résumé du chapitre 1 dans le prompt');
-  ok(/Varek \(gouverneur\) \[hostile\][^;]*A payé le saboteur/.test(prompts[4]),'PNJ fusionné par nom (casse ignorée)');
+  ok(/- Varek \(gouverneur\) \[hostile[^\n]*A payé le saboteur/.test(prompts[4]),'PNJ fusionné par nom (casse ignorée)');
   ok(prompts[4].includes('Démasquer le saboteur [réussie]'),'quête mise à jour');
   ok(!prompts[4].includes('Ouverture sur la station.'),'chronique limitée au chapitre en cours');
   click(d.querySelector('[data-tab="carnet"]'));
   ok($('sheet').textContent.includes('Station Kessaria'),'onglet Carnet affiche les lieux');
+  // Couche récit
+  ok(/- Varek \(gouverneur\) \[hostile, affinité -1, méfiance polie\][^\n]*Voix : Parle bas[^\n]*Récemment : Il a menti sur les cargos/.test(prompts[4]),'relation, voix et historique transmis au MJ');
+  ok(prompts[4].includes('romance : attirance')&&prompts[4].includes('Romance : une romance peut naître'),'romance suivie et règle de romance');
+  ok(prompts[4].includes('3 à 6 paragraphes courts'),'longueur normale par défaut');
+  ok($('sheet').textContent.includes('« Parle bas')&&d.querySelector('.chip.love'),'Carnet : voix et romance affichées');
+  click(d.querySelector('[data-zset="longueur:longue"]'));click(d.querySelector('[data-zset="romance:developpee"]'));
   // Progression
   click(d.querySelector('[data-tab="prog"]'));
   const xpBtn=d.querySelector('[data-xp="sk"][data-k="perception"]');ok(xpBtn&&!xpBtn.disabled,'bouton +1 Perception actif avec 4 XP');
@@ -116,6 +122,7 @@ async function finishEngine(name,flee){
   click(d.querySelector('[data-choice="0"]'));
   await waitFor(()=>prompts.length===6,5000,'free act');
   ok(prompts[5].includes('PROGRESSION : Perception passe à 12'),'progression signalée au MJ');
+  ok(prompts[5].includes('5 à 9 paragraphes')&&prompts[5].includes('les romances sont un fil majeur'),'réglages de narration modifiés en cours de partie');
   ok(prompts[5].includes('INTENDANCE : Recrutement'),'intendance signalée au MJ');
   // Étape 3 : confort solo
   const nFeed=$('feed').children.length;

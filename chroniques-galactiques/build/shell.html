@@ -169,6 +169,16 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
 .campb{display:flex;gap:6px}
 .imp summary{cursor:pointer;color:var(--dim);font-size:13px}
 .impbody{display:grid;gap:8px;margin-top:8px;max-width:620px}
+.sheet .chip.love{color:#ff9ad5;border-color:rgba(255,120,200,.4)}
+.aff{position:relative;height:5px;background:#2a252c;margin:4px 0 2px;max-width:220px}
+.aff::after{content:'';position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--dim)}
+.aff i{position:absolute;top:0;bottom:0}
+.codex p.voix{font-style:italic;color:#cfc6cf}
+.codex .k{font-weight:600;color:var(--steel);font-size:12px}
+.hist{margin:4px 0 0;padding-left:16px;color:var(--dim);font-size:12px}
+.hist b{color:var(--steel);font-weight:600}
+.zset{display:grid;gap:4px;font-size:12.5px;color:var(--dim)}
+.zset .chipset button{font-size:12px;padding:5px 9px}
 .sheet .chip{display:inline-block;font-family:var(--f-mono);font-size:10.5px;letter-spacing:.04em;padding:1px 6px;border:1px solid var(--line);border-radius:3px;color:var(--dim)}
 .sheet .chip.good{color:var(--ok);border-color:rgba(141,255,173,.35)}
 .sheet .chip.bad{color:#ff8f8f;border-color:rgba(255,74,74,.4)}
@@ -344,6 +354,9 @@ const PATHS={
 };
 const THEMES=['Pègre et empire criminel','Guerre et rébellion','Intrigues politiques','Quête de la Force','Vengeance','Survie','Exploration et mystères','Romance et liens','Chasse à l’homme','Conquête et pouvoir'];
 const TONES=[['aventure','Aventure'],['sombre','Sombre'],['adulte','Adulte et brutal']];
+const ROMANCE=[['non','Pas de romance'],['discrete','Discrète, si elle naît'],['developpee','Arcs romantiques développés']];
+const LONGUEUR=[['courte','Courte'],['normale','Normale'],['longue','Longue']];
+const STYLE=[['direct','Direct'],['equilibre','Équilibré'],['litteraire','Littéraire']];
 const CANON=[['oui','Croiser des personnages connus'],['discret','Quelques apparitions'],['non','Coins inédits de la galaxie']];
 
 /* ================= Sauvegarde : plusieurs campagnes et livre de campagne ================= */
@@ -445,7 +458,7 @@ function trimState(s){const c=clone(s);if(c.feed.length>140)c.feed=c.feed.slice(
 let S=null,draft=null,step=0,busyMJ=false,abortCtl=null;
 function newDraft(){
   const d={era:'dark',year:'',path:null,hero:{name:'',species:'Humain',age:'',origin:'',trait:'',flaw:'',secret:'',force:false,side:'sith',skills:{},rolled:false,lookKey:'smuggler',weapon:'pistol',blade1:'#ff2b2b',blade2:'#ff2b2b',bolt:'#ff4a3a',form:'none',tech:[],look:null},
-    res:{credits:0,ship:'',fleet:[],troops:[],companions:[]},zero:{themes:[],ambition:'',tone:'sombre',dosage:50,canon:'discret',free:'',diff:'normal'}};
+    res:{credits:0,ship:'',fleet:[],troops:[],companions:[]},zero:{themes:[],ambition:'',tone:'sombre',dosage:50,canon:'discret',free:'',diff:'normal',romance:'discrete',longueur:'normale',style:'equilibre'}};
   SKILLS.forEach(([k])=>d.hero.skills[k]=BASE);
   return d;
 }
@@ -539,6 +552,10 @@ function renderStep(){
         <div class="fld"><span>Ton</span><div class="chipset">${TONES.map(([k,l])=>`<button type="button" data-tone="${k}" class="${z.tone===k?'on':''}">${l}</button>`).join('')}</div></div>
         <div class="fld"><span>Le canon</span><div class="chipset">${CANON.map(([k,l])=>`<button type="button" data-canon="${k}" class="${z.canon===k?'on':''}">${l}</button>`).join('')}</div></div>
       </div>
+      <div class="grid2">
+        <div class="fld"><span>Romance</span><div class="chipset">${ROMANCE.map(([k,l])=>`<button type="button" data-romance="${k}" class="${(z.romance||'discrete')===k?'on':''}">${l}</button>`).join('')}</div></div>
+        <div class="fld"><span>Narration</span><div class="chipset">${LONGUEUR.map(([k,l])=>`<button type="button" data-longueur="${k}" class="${(z.longueur||'normale')===k?'on':''}">${l}</button>`).join('')}</div><div class="chipset">${STYLE.map(([k,l])=>`<button type="button" data-style="${k}" class="${(z.style||'equilibre')===k?'on':''}">${l}</button>`).join('')}</div></div>
+      </div>
       <div class="fld"><span>Difficulté des combats</span><div class="chipset">${Object.entries(DIFF).map(([k,d])=>`<button type="button" data-diff="${k}" class="${(z.diff||'normal')===k?'on':''}">${d.l}</button>`).join('')}</div></div>
       <label class="fld"><span>Dosage : <b id="zDoseL">${doseLabel(z.dosage)}</b></span><input type="range" id="zDose" min="0" max="100" step="10" value="${z.dosage}" style="accent-color:var(--amber)"></label>
       <label class="fld"><span>Raconte en quelques lignes ce que tu imagines (facultatif)</span><textarea id="zFree" rows="3" maxlength="1200">${esc(z.free)}</textarea></label>`;
@@ -594,6 +611,9 @@ $('stepBody').addEventListener('click',e=>{
   else if(t.dataset.tone){readStep();draft.zero.tone=t.dataset.tone;renderStep();}
   else if(t.dataset.canon){readStep();draft.zero.canon=t.dataset.canon;renderStep();}
   else if(t.dataset.diff){readStep();draft.zero.diff=t.dataset.diff;renderStep();}
+  else if(t.dataset.romance){readStep();draft.zero.romance=t.dataset.romance;renderStep();}
+  else if(t.dataset.longueur){readStep();draft.zero.longueur=t.dataset.longueur;renderStep();}
+  else if(t.dataset.style){readStep();draft.zero.style=t.dataset.style;renderStep();}
 });
 $('stepBody').addEventListener('change',e=>{
   if(step===1&&(e.target.id==='cForce'||e.target.id==='cSide')){readStep();renderStep();}
@@ -669,7 +689,7 @@ function manage(kind,key,name){
 }
 /* ================= Mémoire longue : carnet et résumés de chapitres ================= */
 const CODEX={pnj:{key:'nom',max:60,l:'Personnages'},quetes:{key:'titre',max:30,l:'Quêtes'},lieux:{key:'nom',max:40,l:'Lieux'},factions:{key:'nom',max:20,l:'Factions'}};
-const CODEX_F={pnj:['nom','role','relation','statut','note'],quetes:['titre','etat','note'],lieux:['nom','note'],factions:['nom','attitude','note']};
+const CODEX_F={pnj:['nom','role','relation','statut','note','voix','lien','romance'],quetes:['titre','etat','note'],lieux:['nom','note'],factions:['nom','attitude','note']};
 function mergeCodex(cx){
   if(!cx||typeof cx!=='object')return;
   for(const k of Object.keys(CODEX)){
@@ -678,7 +698,11 @@ function mergeCodex(cx){
       if(!e||!e[K])return;const id=String(e[K]).trim().slice(0,60);if(!id)return;
       let cur=list.find(x=>x[K].toLowerCase()===id.toLowerCase());
       if(!cur){cur={[K]:id};list.push(cur);}
-      CODEX_F[k].forEach(f=>{if(f!==K&&e[f]!=null&&String(e[f]).trim())cur[f]=String(e[f]).trim().slice(0,f==='note'?200:40);});
+      CODEX_F[k].forEach(f=>{if(f!==K&&e[f]!=null&&String(e[f]).trim())cur[f]=String(e[f]).trim().slice(0,f==='note'||f==='voix'?200:40);});
+      if(k==='pnj'){
+        if(Number.isFinite(+e.affinite)&&e.affinite!==''&&e.affinite!==null)cur.affinite=Math.max(-5,Math.min(5,Math.round(+e.affinite)));
+        if(e.evenement&&String(e.evenement).trim()){cur.hist=cur.hist||[];cur.hist.push({ch:S.chapter.n,t:String(e.evenement).trim().slice(0,160)});if(cur.hist.length>6)cur.hist.shift();}
+      }
       cur.ch=S.chapter.n;
       if(list.length>CODEX[k].max){const i=list.findIndex(x=>x!==cur&&(k!=='quetes'||x.etat!=='en cours'));list.splice(i<0?0:i,1);}
     });
@@ -687,7 +711,7 @@ function mergeCodex(cx){
 function codexBlock(){
   const c=S.codex,o=[];
   if(c.quetes.length)o.push('Quêtes : '+c.quetes.map(q=>`${q.titre} [${q.etat||'en cours'}]${q.note?' — '+q.note:''}`).join(' ; '));
-  if(c.pnj.length)o.push('Personnages : '+c.pnj.map(n=>`${n.nom}${n.role?' ('+n.role+')':''} [${[n.relation,n.statut&&n.statut!=='vivant'?n.statut:''].filter(Boolean).join(', ')||'?'}]${n.note?' — '+n.note:''}`).join(' ; '));
+  if(c.pnj.length)o.push('Personnages :\n'+c.pnj.map(n=>`- ${n.nom}${n.role?' ('+n.role+')':''} [${[n.relation,n.affinite!=null?'affinité '+(n.affinite>0?'+':'')+n.affinite:'',n.lien,n.romance&&n.romance!=='aucune'?'romance : '+n.romance:'',n.statut&&n.statut!=='vivant'?n.statut:''].filter(Boolean).join(', ')||'?'}]${n.note?' — '+n.note:''}${n.voix?' · Voix : '+n.voix:''}${n.hist&&n.hist.length?' · Récemment : '+n.hist.slice(-2).map(h=>h.t).join(' / '):''}`).join('\n'));
   if(c.factions.length)o.push('Factions : '+c.factions.map(f=>`${f.nom} [${f.attitude||'?'}]${f.note?' — '+f.note:''}`).join(' ; '));
   if(c.lieux.length)o.push('Lieux : '+c.lieux.map(l=>`${l.nom}${l.note?' — '+l.note:''}`).join(' ; '));
   if(S.playerNotes)o.push('Notes personnelles du joueur (pour info) : '+S.playerNotes.slice(0,800));
@@ -703,7 +727,7 @@ function migrate(s){
   if(!Array.isArray(s.chapters))s.chapters=[];if(s.playerNotes==null)s.playerNotes='';
   s.res.fleet.forEach(x=>{if(x.hull==null)x.hull=1;});s.res.troops.forEach(x=>{if(x.hp==null)x.hp=1;});s.res.companions.forEach(x=>{if(x.hp==null)x.hp=1;});
   if(!Array.isArray(s.hero.forms))s.hero.forms=['none',...(s.hero.form&&s.hero.form!=='none'?[s.hero.form]:[])];
-  if(!s.zero.diff)s.zero.diff='normal';if(s.res.ship&&s.res.shipHull==null)s.res.shipHull=1;
+  if(!s.zero.diff)s.zero.diff='normal';if(!s.zero.romance)s.zero.romance='discrete';if(!s.zero.longueur)s.zero.longueur='normale';if(!s.zero.style)s.zero.style='equilibre';if(s.res.ship&&s.res.shipHull==null)s.res.shipHull=1;
   if(s.xp==null)s.xp=0;if(s.destiny==null)s.destiny=3;if(s.bookPart==null)s.bookPart=0;return s;
 }
 
@@ -765,7 +789,7 @@ function resBlock(){
     `Compagnons : ${r.companions.length?r.companions.map(c=>`${c.name} [modèle ${c.preset}, ${hurtLabel(frac(c.hp))}]${c.note?' — '+c.note:''}`).join(' ; '):'aucun'}`,
     `Notes : ${(r.notes||[]).slice(-20).join(' | ')||'—'}`].join('\n');
 }
-function zeroBlock(){const z=S.zero;return[`Thèmes voulus : ${z.themes.join(', ')}`,`Ambition : ${z.ambition||'—'}`,`Ton : ${TONES.find(t=>t[0]===z.tone)[1]}`,`Dosage : ${doseLabel(z.dosage)}`,`Canon : ${CANON.find(c=>c[0]===z.canon)[1]}`,`Difficulté des combats : ${DIFF[z.diff||'normal'].l} (le jeu ajuste lui-même la force des ennemis)`,`Ce que le joueur imagine : ${z.free||'—'}`].join('\n');}
+function zeroBlock(){const z=S.zero;return[`Thèmes voulus : ${z.themes.join(', ')}`,`Ambition : ${z.ambition||'—'}`,`Ton : ${TONES.find(t=>t[0]===z.tone)[1]}`,`Dosage : ${doseLabel(z.dosage)}`,`Canon : ${CANON.find(c=>c[0]===z.canon)[1]}`,`Difficulté des combats : ${DIFF[z.diff||'normal'].l} (le jeu ajuste lui-même la force des ennemis)`,`Romance : ${ROMANCE.find(r=>r[0]===(z.romance||'discrete'))[1]}`,`Ce que le joueur imagine : ${z.free||'—'}`].join('\n');}
 function recentBlock(){
   const out=[];let n=0;
   for(let i=S.feed.length-1;i>=0&&n<9;i--){const e=S.feed[i];
@@ -787,9 +811,14 @@ Principes :
 - Après un rapport de combat ou un résultat de jet, raconte les conséquences en restant exactement fidèle au résultat.
 - Les blessures et les dégâts durent : un personnage blessé, une flotte abîmée ou des troupes décimées le restent jusqu’à des soins, des réparations ou des renforts. Tiens-en compte dans le récit et dans la difficulté. Le joueur paie lui-même soins, réparations et recrues depuis sa fiche (lignes INTENDANCE) ; accorde "heal" seulement quand le récit apporte vraiment du repos ou des soins.
 - Expérience : 0 pour une scène ordinaire (la plupart), 1 pour un accomplissement notable ou une belle idée du joueur, 2 ou 3 pour une grande victoire ou la fin d’un arc. Les lignes PROGRESSION indiquent ce que le joueur a appris.
+- Le récit est le cœur du jeu : les mécaniques (combats, intendance, progression) servent l’histoire et y reviennent toujours.
+- Chaque PNJ important a sa voix : vocabulaire, tics, accent, ce qu’il veut et ce qu’il cache. Garde-la constante d’une scène à l’autre et note-la dans "codex" ("voix").
+- Les relations vivent : les compagnons et PNJ ont leurs opinions, leurs désaccords, une loyauté qui se gagne et se perd selon les actes du joueur. Quand un moment change un lien, mets à jour "affinite" (−5 à +5) et décris-le dans "evenement".
+- Romance : __ROMANCE__
+- Respiration : après un combat, une épreuve ou une fin de chapitre, ménage des scènes calmes (soins, repas, confidences, silences partagés) où les dialogues s’épanouissent. Quand c’est pertinent, l’un des choix proposés ouvre un moment avec un compagnon. Ne force rien : le joueur décide.
 - Ne révèle jamais le carnet secret au joueur.`;
 const FORMAT=`FORMAT DE RÉPONSE OBLIGATOIRE :
-1) La narration, en français, 3 à 6 paragraphes courts, à la deuxième personne du singulier. Les répliques commencent par « — ». Pas de titre, pas de liste, pas de méta-commentaire.
+1) La narration, en français, __LONGUEUR__, à la deuxième personne du singulier. __STYLE__ Les répliques commencent par « — ». Pas de titre, pas de liste, pas de méta-commentaire.
 2) Puis une ligne contenant uniquement : @@DONNEES
 3) Puis un objet JSON valide, sans bloc de code, avec exactement ces clés :
 {"choices":["…","…","…"],"test":null,"combat":null,"updates":null,"codex":null,"chronicle":"…","chapter":null,"secret":null}
@@ -802,12 +831,21 @@ const FORMAT=`FORMAT DE RÉPONSE OBLIGATOIRE :
   · ground : "enemies" = 2 à 6 objets {"type":"einf"|"eat"|"eltank"|"eturret","name":"…"} (fantassins, équipe antichar, char léger, tourelle). "terrain" : tempere, desert, neige, urbain, jungle ou volcan. "objectif" : assaut (prendre un générateur gardé), elimination (anéantir l’ennemi) ou defense (tenir 6 tours face à un ennemi plus nombreux).
 - updates : changements concrets, sinon null : {"credits":<±entier>,"addCompanions":[{"name":"…","preset":"<modèle>","note":"…"}],"removeCompanions":["nom"],"addFleet":[{"type":"cruiser|frigate|fighters","name":"…"}],"addTroops":[{"type":"inf|tank|art|speed","name":"…"}],"notes":["fait durable à retenir"],"xp":<0 à 3>,"heal":"repos"|<PV rendus au personnage>}. "heal":"repos" soigne entièrement le personnage et ses compagnons.
 - chronicle : 1 ou 2 phrases factuelles résumant ce qui vient de se passer (c’est ta mémoire).
-- codex : le carnet que le joueur consulte, uniquement les entrées nouvelles ou modifiées (elles sont fusionnées par nom), sinon null : {"pnj":[{"nom":"…","role":"…","relation":"allié|amical|neutre|méfiant|hostile","statut":"vivant|mort|disparu|captif","note":"ce que le joueur sait"}],"quetes":[{"titre":"…","etat":"en cours|réussie|échouée|abandonnée","note":"…"}],"lieux":[{"nom":"…","note":"…"}],"factions":[{"nom":"…","attitude":"alliée|neutre|hostile|…","note":"…"}]}. Ajoute chaque PNJ nommé important, chaque objectif que le joueur poursuit, chaque lieu marquant. N’y mets jamais ce que le joueur ignore (c’est la place du carnet secret).
+- codex : le carnet que le joueur consulte, uniquement les entrées nouvelles ou modifiées (elles sont fusionnées par nom), sinon null : {"pnj":[{"nom":"…","role":"…","relation":"allié|amical|neutre|méfiant|hostile","statut":"vivant|mort|disparu|captif","note":"ce que le joueur sait","voix":"façon de parler, tics, ce qu’il cache","lien":"nature du lien en 2-4 mots (ex. dette d’honneur, rivalité, confiance fragile)","affinite":<−5 à +5 envers le joueur>,"evenement":"ce qui vient de changer le lien, s’il a changé","romance":"aucune|attirance|flirt|liaison|amour|rupture"}],"quetes":[{"titre":"…","etat":"en cours|réussie|échouée|abandonnée","note":"…"}],"lieux":[{"nom":"…","note":"…"}],"factions":[{"nom":"…","attitude":"alliée|neutre|hostile|…","note":"…"}]}. Ajoute chaque PNJ nommé important, chaque objectif que le joueur poursuit, chaque lieu marquant. N’y mets jamais ce que le joueur ignore (c’est la place du carnet secret).
 - chapter : uniquement quand un nouveau chapitre commence, sinon null : {"title":"…","resume":"5 à 8 phrases factuelles résumant tout le chapitre qui s’achève : faits, choix du joueur, PNJ, conséquences"}. Ce résumé est ta seule mémoire à long terme du chapitre. Change de chapitre à la fin d’un arc ou d’une étape importante (toutes les 15 à 30 scènes environ).
 - secret : le carnet secret complet mis à jour, uniquement s’il change vraiment, sinon null.`;
+const ROMANCE_RULE={
+  non:'le joueur ne veut pas de romance. N’en initie jamais ; si le joueur en amorce une lui-même, suis-le avec retenue.',
+  discrete:'une romance peut naître si les personnages s’y prêtent, lentement et sans la forcer. Les PNJ ont leur volonté propre et peuvent dire non. Les scènes intimes restent suggérées (fondu au noir).',
+  developpee:'les romances sont un fil majeur. Fais-les grandir par étapes (attirance, tension, aveu, liaison, crise), avec jalousies, malentendus, choix difficiles et conséquences sur la loyauté. Les PNJ ont leur propre volonté et peuvent refuser, hésiter ou partir. Les scènes intimes restent suggérées (fondu au noir).'
+};
+const LONG_RULE={courte:'2 à 3 paragraphes courts',normale:'3 à 6 paragraphes courts',longue:'5 à 9 paragraphes, plus amples, en prenant le temps des dialogues et des atmosphères'};
+const STYLE_RULE={direct:'Style direct : phrases nettes, rythme rapide.',equilibre:'',litteraire:'Style littéraire : prose travaillée, images fortes, rythme soigné, sans lourdeur.'};
+function rulesNow(){const z=S.zero;return RULES.replace('__ROMANCE__',ROMANCE_RULE[z.romance||'discrete']);}
+function formatNow(){const z=S.zero;return FORMAT.replace('__LONGUEUR__',LONG_RULE[z.longueur||'normale']).replace('__STYLE__',STYLE_RULE[z.style||'equilibre']);}
 function buildPrompt(entry,opening){
   const era=ERAS.find(e=>e.k===S.era);
-  return[RULES,'',`## Époque\n${era.l} (${S.year||era.y}) — ${era.d}`,`## Personnage\n${heroBlock()}`,`## Ressources\n${resBlock()}`,`## Session zéro\n${zeroBlock()}`,
+  return[rulesNow(),'',`## Époque\n${era.l} (${S.year||era.y}) — ${era.d}`,`## Personnage\n${heroBlock()}`,`## Ressources\n${resBlock()}`,`## Session zéro\n${zeroBlock()}`,
     `## Carnet secret du MJ (ne jamais le révéler)\n${S.secret?JSON.stringify(S.secret):'(à créer)'}`,
     `## Chapitres précédents (résumés)\n${S.chapters.map(c=>`Ch. ${c.n} — ${c.title} : ${c.summary}`).join('\n')||'(aucun)'}`,
     `## Carnet de campagne (ce que le joueur sait)\n${codexBlock()||'(vide)'}`,
@@ -816,7 +854,7 @@ function buildPrompt(entry,opening){
     `## Dernières scènes\n${recentBlock()||'(aucune)'}`,
     `## Nouvelle entrée\n${entry}`,'',
     opening?`C’est le DÉBUT DE LA CAMPAGNE. Crée le carnet secret dans "secret" : {"arc":"…","actes":["Acte I : …","Acte II : …","Acte III : …"],"antagonistes":[{"nom":"…","but":"…","methode":"…"}],"factions":[{"nom":"…","veut":"…"}],"fils":["fils narratifs tirés de la fiche (secret, faiblesse, liens)"],"prochaine_etape":"…"}. Donne aussi "chapter":{"title":"…"} et remplis "codex" avec les premiers PNJ, lieux et l’objectif de départ. Puis écris une scène d’ouverture forte qui plonge directement le personnage dans l’action ou une tension.`:'',
-    FORMAT].join('\n\n');
+    formatNow()].join('\n\n');
 }
 function parseMJ(text){
   const i=text.indexOf('@@DONNEES');
@@ -984,10 +1022,18 @@ function renderSheet(){
     const c=S.codex,rel=v=>/alli|amic/i.test(v||'')?'good':/hostile|ennemi/i.test(v||'')?'bad':/méfi/i.test(v||'')?'warn':'';
     const qs=[...c.quetes].sort((a,b)=>((a.etat||'en cours')==='en cours'?0:1)-((b.etat||'en cours')==='en cours'?0:1));
     body=`<section><span class="label">Quêtes</span><div class="codex">${qs.map(q=>`<div class="${(q.etat||'en cours')==='en cours'?'':'done'}"><b>${esc(q.titre)}</b> <span class="chip ${q.etat==='réussie'?'good':q.etat==='échouée'?'bad':''}">${esc(q.etat||'en cours')}</span>${q.note?`<p>${esc(q.note)}</p>`:''}</div>`).join('')||'<div class="sub">Aucune pour l’instant.</div>'}</div></section>
-    <section><span class="label">Personnages</span><div class="codex">${[...c.pnj].reverse().map(n=>`<div class="${n.statut&&n.statut!=='vivant'?'done':''}"><b>${esc(n.nom)}</b>${n.role?` <span class="sub">${esc(n.role)}</span>`:''} ${n.relation?`<span class="chip ${rel(n.relation)}">${esc(n.relation)}</span>`:''}${n.statut&&n.statut!=='vivant'?` <span class="chip">${esc(n.statut)}</span>`:''}${n.note?`<p>${esc(n.note)}</p>`:''}</div>`).join('')||'<div class="sub">Personne pour l’instant.</div>'}</div></section>
+    <section><span class="label">Personnages</span><div class="codex">${[...c.pnj].reverse().map(n=>{const a=n.affinite;
+      return`<div class="${n.statut&&n.statut!=='vivant'?'done':''}"><b>${esc(n.nom)}</b>${n.role?` <span class="sub">${esc(n.role)}</span>`:''} ${n.relation?`<span class="chip ${rel(n.relation)}">${esc(n.relation)}</span>`:''}${n.romance&&n.romance!=='aucune'?` <span class="chip love">${esc(n.romance)}</span>`:''}${n.statut&&n.statut!=='vivant'?` <span class="chip">${esc(n.statut)}</span>`:''}
+      ${a!=null?`<div class="aff" title="Affinité ${a>0?'+':''}${a}"><i style="left:${a<0?50+a*10:50}%;width:${Math.abs(a)*10}%;background:${a>=0?'var(--ok)':'var(--sith)'}"></i></div>`:''}
+      ${n.lien?`<p><b class="k">Lien</b> ${esc(n.lien)}</p>`:''}${n.note?`<p>${esc(n.note)}</p>`:''}${n.voix?`<p class="voix">« ${esc(n.voix)} »</p>`:''}
+      ${n.hist&&n.hist.length?`<ul class="hist">${n.hist.slice().reverse().map(h=>`<li><b>Ch. ${h.ch}</b> ${esc(h.t)}</li>`).join('')}</ul>`:''}</div>`;}).join('')||'<div class="sub">Personne pour l’instant.</div>'}</div></section>
     ${c.factions.length?`<section><span class="label">Factions</span><div class="codex">${c.factions.map(f=>`<div><b>${esc(f.nom)}</b> ${f.attitude?`<span class="chip ${rel(f.attitude)}">${esc(f.attitude)}</span>`:''}${f.note?`<p>${esc(f.note)}</p>`:''}</div>`).join('')}</div></section>`:''}
     ${c.lieux.length?`<section><span class="label">Lieux</span><div class="codex">${[...c.lieux].reverse().map(l=>`<div><b>${esc(l.nom)}</b>${l.note?`<p>${esc(l.note)}</p>`:''}</div>`).join('')}</div></section>`:''}
     ${S.chapters.length?`<section><span class="label">Chapitres précédents</span><div class="codex">${[...S.chapters].reverse().map(x=>`<div><b>Ch. ${x.n} · ${esc(x.title)}</b><p>${esc(x.summary)}</p></div>`).join('')}</div></section>`:''}
+    <section><span class="label">Narration</span>
+      <div class="zset"><span>Romance</span><div class="chipset">${ROMANCE.map(([k,l])=>`<button type="button" data-zset="romance:${k}" class="${S.zero.romance===k?'on':''}">${l}</button>`).join('')}</div></div>
+      <div class="zset"><span>Longueur</span><div class="chipset">${LONGUEUR.map(([k,l])=>`<button type="button" data-zset="longueur:${k}" class="${S.zero.longueur===k?'on':''}">${l}</button>`).join('')}</div></div>
+      <div class="zset"><span>Style</span><div class="chipset">${STYLE.map(([k,l])=>`<button type="button" data-zset="style:${k}" class="${S.zero.style===k?'on':''}">${l}</button>`).join('')}</div></div></section>
     <section><span class="label">Mes notes</span><textarea id="pNotes" rows="4" maxlength="800" placeholder="Tes propres notes. Le MJ les lit, sans les prendre pour des actions.">${esc(S.playerNotes)}</textarea></section>`;
   }else if(sheetTab==='prog'){
     const lock=!canManage(),blade=!isRangedW(h.weapon),F=knownForms(h);
@@ -1051,6 +1097,7 @@ $('feed').addEventListener('click',e=>{const b=e.target.closest('[data-retry]');
 $('sheet').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b||b.disabled)return;
   if(b.dataset.tab){sheetTab=b.dataset.tab;renderSheet();return;}
+  if(b.dataset.zset){const [k,v]=b.dataset.zset.split(':');if(['romance','longueur','style'].includes(k)){S.zero[k]=v;saveCampaign();renderSheet();}return;}
   if(b.dataset.xp){spendXP(b.dataset.xp,b.dataset.k);return;}
   if(b.dataset.mg){const m=b.dataset.mg;manage(m,m==='buyship'?$('bShipT').value:m==='buytroop'?$('bTroopT').value:b.dataset.k,m==='buyship'?$('bShipN').value:m==='buytroop'?$('bTroopN').value:'');return;}
   if(b.id==='expBtn'){const box=$('saveBox');box.hidden=false;box.value=JSON.stringify(trimState(S));box.select();try{navigator.clipboard.writeText(box.value).then(()=>{b.textContent='Copiée';},()=>{});}catch(err){}}
