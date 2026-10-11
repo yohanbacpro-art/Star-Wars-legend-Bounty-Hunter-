@@ -393,7 +393,7 @@ function mkFighter(fc){
   f.techs=new Set((f.tech||[]).filter(t=>TECH[t]&&(f.ranged?TECH[t].ranged:TECH[t].melee)&&(!TECH[t].needs||f.weapon===TECH[t].needs)));
   f.blades=f.weapon==='dual'?[f.blade1,f.blade2]:f.weapon==='double'?[f.blade1,f.blade1]:f.ranged?[]:[f.blade1];
   f.bladeOn=f.blades.map(()=>1);f.btw=[];
-  f.pvMax=f.pv;f.endMax=f.pv<20?4:6;f.end=f.endMax;f.fpMax=f.fp;f.grenades=f.techs.has('grenades')?2:0;
+  f.pvMax=Math.max(f.pv,fc.pvMax||0);f.endMax=f.pvMax<20?4:6;f.end=f.endMax;f.fpMax=f.fp;f.grenades=f.techs.has('grenades')?2:0;
   f.dir=f.side==='p'?1:-1;f.cur={...POSES[G(f)]};f.tw=null;f.xtw=null;
   f.act=null;f.target=null;f.alive=true;f.cancelled=false;f.acted=false;f.med=0;f.medNext=0;f.offBal=false;f.offBalNext=false;f.disarmed=false;f.disarmT=0;f.parryBroken=false;f.tag=null;f.seed=Math.random()*10;
   return f;

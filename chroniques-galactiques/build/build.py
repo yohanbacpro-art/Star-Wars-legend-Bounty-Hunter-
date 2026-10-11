@@ -76,7 +76,7 @@ js = re.sub(r"getElementById\('([^']+)'\)", lambda m: f"getElementById('sp-{m.gr
 js = must(js, 'function frame(now){', GATE % 'space')
 js = must(js, "  initEnemyHull=ships.filter(s=>s.side==='e')", """  if(window.__CFG&&window.__CFG.space){const C=window.__CFG.space;ships=[];
     const PS=[[250,430],[210,650],[330,230],[380,560],[420,330],[440,460],[160,300],[150,560]];
-    (C.player||[]).slice(0,8).forEach((u,i)=>{const s=mkShip('p',u.type,u.name,PS[i][0],PS[i][1],!!u.flag);const p=settle(s,s.x,s.y);s.x=p.x;s.y=p.y;ships.push(s);});
+    (C.player||[]).slice(0,8).forEach((u,i)=>{const s=mkShip('p',u.type,u.name,PS[i][0],PS[i][1],!!u.flag);if(u.hull!=null&&u.hull<1)s.hull=Math.max(1,Math.round(s.hullMax*u.hull));const p=settle(s,s.x,s.y);s.x=p.x;s.y=p.y;ships.push(s);});
     if(!ships.some(s=>s.flag)&&ships[0])ships[0].flag=true;
     const en=(C.enemy||[]).slice(0,8),n=en.length;
     en.forEach((u,i)=>{const y=n===1?430:140+i*(560/Math.max(1,n-1));const x=(u.type==='cruiser'?1400:u.type==='frigate'?1320:1240)+rnd(-30,30);const s=mkShip('e',u.type,u.name,x,y);const p=settle(s,s.x,s.y);s.x=p.x;s.y=p.y;ships.push(s);});
@@ -90,7 +90,7 @@ js = must(js, "L’orbite de Kessaria IV est à vous.", "L’espace est à vous.
 js = must(js, "vaisseaux insurgés sortent de l’hyperespace au-dessus de Kessaria IV.", "vaisseaux ennemis sortent de l’hyperespace.")
 js = must(js, "`BATAILLE DE KESSARIA IV — ", "`${" + (TITLE % ('space', 'space', 'Bataille spatiale')) + ".toUpperCase()} — ")
 js = must(js, "document.getElementById('sp-over').hidden=false;\n  renderUI();\n}",
-          "document.getElementById('sp-over').hidden=false;\n  window.__engineEnd&&window.__engineEnd('space',{win,text,report:lines.join('\\n'),lost:pl.filter(s=>!s.alive).map(s=>s.name)});\n  renderUI();\n}")
+          "document.getElementById('sp-over').hidden=false;\n  window.__engineEnd&&window.__engineEnd('space',{win,text,report:lines.join('\\n'),lost:pl.filter(s=>!s.alive).map(s=>s.name),state:pl.map(s=>({name:s.name,alive:s.alive,hull:s.alive?s.hull/s.hullMax:0}))});\n  renderUI();\n}")
 js = must(js, "newBattle();\nrequestAnimationFrame(frame);\n})();", """newBattle();
 requestAnimationFrame(frame);
 window.ENGINES=window.ENGINES||{};
@@ -111,7 +111,7 @@ js = must(js, "  initEnemy=units.filter(u=>u.side==='e'&&!u.T.static)", """  if(
     units=units.filter(u=>u.side==='e'&&u.T.static).slice(0,C.turrets==null?1:C.turrets);
     const PP=[[170,500],[300,370],[300,640],[230,250],[90,690],[330,505],[200,800],[400,220]];
     const pl=[{type:'cmd',name:C.commander||'Commandement'},...(C.player||[]).filter(u=>u.type!=='cmd').slice(0,7)];
-    pl.forEach((u,i)=>{const m=mkUnit('p',u.type,u.name,PP[i][0],PP[i][1],i===0);const p=settle(m,m.x,m.y);m.x=p.x;m.y=p.y;units.push(m);});
+    pl.forEach((u,i)=>{const m=mkUnit('p',u.type,u.name,PP[i][0],PP[i][1],i===0);if(u.hp!=null&&u.hp<1)m.hp=Math.max(1,Math.round(m.hpMax*u.hp));const p=settle(m,m.x,m.y);m.x=p.x;m.y=p.y;units.push(m);});
     (C.enemy||[]).slice(0,6).forEach((t,i)=>{const guard=i%2===0;const x=guard?OBJ.x+rnd(-170,-60):rnd(1000,1200),y=guard?OBJ.y+rnd(-200,200):rnd(120,880);const u=mkUnit('e',t.type,t.name,x,y);u.role=guard?'guard':'assault';const p=settle(u,u.x,u.y);u.x=p.x;u.y=p.y;units.push(u);});
     orbital=C.orbital?1:0;
   }
@@ -121,7 +121,7 @@ js = must(js, "  sel=units[0];\n  log(`Les barges ont touché le sol. ${comp.len
 js = must(js, "'L’Inexorable ouvre le feu depuis l’orbite.'", "'Votre flotte ouvre le feu depuis l’orbite.'")
 js = must(js, "`ASSAUT SUR KESSARIA IV — ", "`${" + (TITLE % ('ground', 'ground', 'Bataille terrestre')) + ".toUpperCase()} — ")
 js = must(js, "  document.getElementById('gr-over').hidden=false;\n  renderUI();\n}",
-          "  document.getElementById('gr-over').hidden=false;\n  window.__engineEnd&&window.__engineEnd('ground',{win,text,report:lines.join('\\n'),lost:pl.filter(u=>!u.alive).map(u=>u.name)});\n  renderUI();\n}")
+          "  document.getElementById('gr-over').hidden=false;\n  window.__engineEnd&&window.__engineEnd('ground',{win,text,report:lines.join('\\n'),lost:pl.filter(u=>!u.alive&&u.type!=='cmd').map(u=>u.name),state:pl.map(u=>({name:u.name,type:u.type,alive:u.alive,hp:u.alive?u.hp/u.hpMax:0}))});\n  renderUI();\n}")
 js = must(js, "newBattle();\nrequestAnimationFrame(frame);\n})();", """newBattle();
 requestAnimationFrame(frame);
 window.ENGINES=window.ENGINES||{};
@@ -146,7 +146,7 @@ js = must(js, "debout sur le toit détrempé.`", "debout.`")
 js = must(js, "sous la pluie de Nar Shaddaa.`", "au combat.`")
 js = must(js, "`COMBAT SUR LES TOITS DE NAR SHADDAA — ", "`${" + (TITLE % ('duel', 'duel', 'Combat')) + ".toUpperCase()} — ")
 js = must(js, "  setTimeout(()=>{$('over').hidden=false;},900);log(text,'kill');renderCombat();",
-          "  setTimeout(()=>{$('over').hidden=false;},900);log(text,'kill');renderCombat();\n  window.__engineEnd&&window.__engineEnd('duel',{win,text,report:lines.join('\\n'),lost:fighters.filter(f=>f.side==='p'&&!f.alive).map(f=>f.name)});")
+          "  setTimeout(()=>{$('over').hidden=false;},900);log(text,'kill');renderCombat();\n  window.__engineEnd&&window.__engineEnd('duel',{win,text,report:lines.join('\\n'),lost:fighters.filter(f=>f.side==='p'&&!f.alive).map(f=>f.name),state:fighters.filter(f=>f.side==='p').map(f=>({name:f.name,hero:!!f.hero,alive:f.alive,pv:Math.max(0,f.pv),pvMax:f.pvMax}))});")
 js = must(js, "showView('setup');\nrequestAnimationFrame(frame);\n})();", """showView('setup');
 requestAnimationFrame(frame);
 window.ENGINES=window.ENGINES||{};

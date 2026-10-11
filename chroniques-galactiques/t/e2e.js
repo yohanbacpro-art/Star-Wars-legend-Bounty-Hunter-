@@ -10,7 +10,7 @@ const answers=[
   R('Tu repères une silhouette. Elle dégaine.',{choices:[],test:null,combat:{type:'duel',title:'Le saboteur',briefing:'Un assassin et un garde.',allies:['Capitaine Rhal'],enemies:[{name:'Vessk',preset:'assassin'},{name:'Garde rouge',preset:'guard',pv:18}]},updates:null,chronicle:'Le saboteur attaque.',chapter:null,secret:null}),
   R('Après le combat, la flotte ennemie surgit.',{choices:[],combat:{type:'space',title:'Raid sur l’orbite',briefing:'Deux frégates.',enemies:[{type:'frigate',name:'Brise-Lame'},{type:'fighters',name:'Escadron Vipère'}]},updates:{credits:-500,notes:['Varek a payé le saboteur'],xp:1},chronicle:'Raid spatial.',chapter:null,secret:null}),
   R('Les troupes débarquent.',{choices:[],combat:{type:'ground',title:'Prise du relais',briefing:'Le relais est tenu.',enemies:[{type:'einf',name:'Rebelles'},{type:'eat',name:'Antichar'},{type:'eturret',name:'Tourelle'}]},updates:null,chronicle:'Assaut au sol.',chapter:{title:'Chapitre deux'},secret:null}),
-  R('Le calme revient.',{choices:['Interroger le prisonnier','Rentrer au QG','Faire rapport'],test:null,combat:null,updates:{addCompanions:[{name:'Lyra',preset:'smuggler',note:'pilote'}]},chronicle:'Calme.',chapter:null,secret:null})
+  R('Le calme revient.',{choices:['Interroger le prisonnier','Rentrer au QG','Faire rapport'],test:null,combat:null,updates:{addCompanions:[{name:'Lyra',preset:'smuggler',note:'pilote'}],xp:3},chronicle:'Calme.',chapter:null,secret:null})
 ];
 const dom=new JSDOM(page,{runScripts:'dangerously',pretendToBeVisual:true,url:'https://example.org/',
   beforeParse(w){
@@ -71,7 +71,25 @@ async function finishEngine(name){
   console.log('sheet has Lyra:',$('sheet').textContent.includes('Lyra'),'fleet:',JSON.stringify(w.eval('1')));
   console.log('feed entries:',$('feed').children.length,'prompts:',prompts.length,'last prompt has report:',prompts[3].includes('RAPPORT DE COMBAT'));
   console.log('chapter now:',$('chapNo').textContent,$('chapTitle').textContent);
+  // Étape 1 : blessures et dégâts transmis au MJ
+  const ok=(c,m)=>{if(!c)throw new Error('ÉCHEC : '+m);console.log('ok -',m);};
+  ok(/PV 1\/\d+ \(gravement blessé\)/.test(prompts[2]),'héros vaincu en duel : 1 PV dans le prompt suivant');
+  ok(/coque \d+ %/.test(prompts[3]),'état de coque de la flotte transmis');
+  ok(/effectifs \d+ %/.test(prompts[4]),'effectifs des troupes transmis');
+  ok(/PV (\d+)\/\1 \(en forme\)/.test(prompts[4]),'repos de nouveau chapitre : héros soigné');
+  // Progression
+  click(d.querySelector('[data-tab="prog"]'));
+  const xpBtn=d.querySelector('[data-xp="sk"][data-k="perception"]');ok(xpBtn&&!xpBtn.disabled,'bouton +1 Perception actif avec 4 XP');
+  click(xpBtn);
+  ok($('sheet').textContent.includes('2 XP'),'XP déduite');
+  // Intendance
+  click(d.querySelector('[data-tab="inten"]'));
+  $('bTroopN').value='Escouade Cresh';click(d.querySelector('[data-mg="buytroop"]'));
+  click(d.querySelector('[data-tab="fiche"]'));
+  ok($('sheet').textContent.includes('Escouade Cresh'),'troupe recrutée visible');
   click(d.querySelector('[data-choice="0"]'));
   await waitFor(()=>prompts.length===6,5000,'free act');
+  ok(prompts[5].includes('PROGRESSION : Perception passe à 12'),'progression signalée au MJ');
+  ok(prompts[5].includes('INTENDANCE : Recrutement'),'intendance signalée au MJ');
   console.log('prompt bytes',Buffer.byteLength(prompts[4]));fs.writeFileSync('p4.txt',prompts[4]);console.log('E2E OK');process.exit(0);
 })().catch(e=>{console.log('FAIL',e.message);process.exit(1);});
