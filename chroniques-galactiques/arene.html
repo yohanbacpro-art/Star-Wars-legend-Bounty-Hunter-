@@ -30,6 +30,7 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(22px,3vw,32px);l
 h1 span{color:var(--sith)}
 .hright{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .turn{font-family:var(--f-display);font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.turn span{margin-left:12px;font-size:11px;color:#e8ab52}
 .turn b{font-family:var(--f-mono);font-size:26px;color:var(--steel);font-weight:500;margin-left:6px;font-variant-numeric:tabular-nums}
 .stage{display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:12px;align-items:start}
 @media (max-width:980px){.stage{grid-template-columns:minmax(0,1fr)}}
@@ -151,7 +152,7 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
       <h1>Arène de <span>Nar Shaddaa</span></h1>
     </div>
     <div class="hright">
-      <div class="turn" id="turnBox" hidden>Échange<b id="roundNo">01</b></div>
+      <div class="turn" id="turnBox" hidden>Échange<b id="roundNo">01</b><span id="waveInfo" hidden></span></div>
     </div>
   </header>
 
@@ -860,6 +861,7 @@ function drawFx(now){
 }
 
 /* ---------- État du combat ---------- */
+let reserve=[],waveFrom=2;
 let view='setup',fighters=[],lineup=[],round=1,phase='orders',activeIdx=0,pendingAct=null,busy=false,over=false,logs=[],rolls=[],hover=null,lastP={};
 const team=s=>fighters.filter(f=>f.side===s&&f.alive);
 const players=()=>team('p');
@@ -1137,11 +1139,26 @@ function endRound(){
     if(f.disarmT>0){f.disarmT--;if(!f.disarmT){f.disarmed=false;f.bladeOn=f.bladeOn.map(()=>0);f.bladeOn.forEach((_,i)=>bladeTo(f,i,1,260));log(`${short(f.name)} rallume sa lame.`,f.side);}}
     goHome(f);setPose(f,G(f),350);
   }
-  round++;phase='orders';busy=false;activeIdx=0;renderCombat();
+  round++;arrive(false);phase='orders';busy=false;activeIdx=0;renderCombat();
+}
+/* ---------- Renforts ---------- */
+const WAVE_SLOTS=[{x:680,z:0},{x:540,z:1},{x:400,z:0},{x:260,z:1}];
+function arrive(force){
+  if(!reserve.length||(!force&&round<waveFrom))return 0;
+  const n=Math.min(reserve.length,4-team('e').length,2);let k=0;
+  for(let i=0;i<n;i++){
+    const s=WAVE_SLOTS.find(s=>!team('e').some(o=>Math.abs(o.homeX-(W-s.x))<60));if(!s)break;
+    const f=mkFighter(reserve.shift());f.homeX=W-s.x;f.zOff=s.z?30:0;f.depth=s.z?.9:1;f.x=W+90;
+    fighters.filter(o=>o.side==='e'&&!o.alive&&Math.abs(o.x-f.homeX)<60).forEach(o=>{o.gone=true;});
+    fighters.push(f);moveTo(f,f.homeX,700);k++;
+  }
+  if(k){log(`Renforts : ${k===1?short(fighters[fighters.length-1].name)+' entre':k+' adversaires entrent'} dans le combat${reserve.length?` (${reserve.length} encore en approche)`:''}.`,'kill');window.SFX&&window.SFX.play('alarm');}
+  return k;
 }
 function checkEnd(){
   if(over)return true;
   if(!team('p').length){endCombat(false);return true;}
+  if(!team('e').length&&reserve.length){arrive(true);renderCombat();return false;}
   if(!team('e').length){endCombat(true);return true;}
   return false;
 }
@@ -1151,7 +1168,7 @@ function endCombat(win){
   const pNames=roster.p.map(f=>short(f.display||f.name)).join(' et ');
   const text=win?`${pNames} ${roster.p.length>1?'restent':'reste'} debout sur le toit détrempé.`:`${pNames} ${roster.p.length>1?'tombent':'tombe'} sous la pluie de Nar Shaddaa.`;
   const st=f=>f.alive?`${f.pv}/${f.pvMax} PV`:'hors de combat';
-  const lines=[`COMBAT SUR LES TOITS DE NAR SHADDAA — ${win?'VICTOIRE':'DÉFAITE'} (${round} échanges)`,text,'','Ton camp :',...fighters.filter(f=>f.side==='p').map(f=>`- ${f.name} : ${st(f)}`),'','Adversaires :',...fighters.filter(f=>f.side==='e').map(f=>`- ${f.name} : ${st(f)}`)];
+  const lines=[`COMBAT SUR LES TOITS DE NAR SHADDAA — ${win?'VICTOIRE':'DÉFAITE'} (${round} échanges)`,text,'','Ton camp :',...fighters.filter(f=>f.side==='p').map(f=>`- ${f.name} : ${st(f)}`),'','Adversaires :',...fighters.filter(f=>f.side==='e').map(f=>`- ${f.name} : ${st(f)}`),...(reserve.length?['',`Renforts ennemis jamais engagés : ${reserve.map(f=>f.display||f.name).join(', ')}`]:[])];
   $('rTitle').textContent=win?'Victoire':'Défaite';$('rTitle').className=win?'win':'lose';$('rText').textContent=text;$('rBox').value=lines.join('\n');
   setTimeout(()=>{$('over').hidden=false;},900);log(text,'kill');renderCombat();
 }
@@ -1181,7 +1198,8 @@ function showView(v){
   if(v==='setup'){$('over').hidden=true;renderSetup();buildLineup();}
 }
 function startCombat(){
-  numberDupes(roster.p);numberDupes(roster.e);
+  reserve=(roster.r||[]).map(f=>({...clone(f),side:'e'}));
+  numberDupes(roster.p);numberDupes([...roster.e,...reserve]);
   fighters=[...roster.p,...roster.e].map(mkFighter);layout(fighters);
   fx=[];floats=[];logs=[];rolls=[];round=1;phase='orders';busy=false;over=false;pendingAct=null;lastP={};activeIdx=0;
   log(`${roster.p.map(f=>short(f.display||f.name)).join(', ')} face à ${roster.e.map(f=>short(f.display||f.name)).join(', ')}.`,'kill');
@@ -1194,6 +1212,7 @@ function renderDice(){
 }
 function renderCombat(){
   $('roundNo').textContent=String(round).padStart(2,'0');
+  {const w=$('waveInfo');w.hidden=!reserve.length;w.textContent=reserve.length?`Renforts ${reserve.length}${round<waveFrom?' · échange '+waveFrom:''}`:'';}
   const pl=players();if(activeIdx>=pl.length)activeIdx=Math.max(0,pl.length-1);
   const act=phase==='orders'?pl[activeIdx]:null;
   $('fighters').innerHTML=fighters.map(f=>{const h=f.pv/f.pvMax;
@@ -1325,7 +1344,7 @@ function drawCover(f){
   ctx.strokeStyle='rgba(255,255,255,.08)';ctx.beginPath();ctx.moveTo(x-26*s,y-31*s);ctx.lineTo(x+26*s,y-31*s);ctx.stroke();
 }
 function drawScene(list,now,reflect){
-  const order=[...list].sort((a,b)=>(b.zOff||0)-(a.zOff||0));
+  const order=list.filter(f=>!f.gone).sort((a,b)=>(b.zOff||0)-(a.zOff||0));
   const act=view==='combat'&&phase==='orders'?players()[activeIdx]:null;
   const hov=hover?fighterAt(list,hover):null;
   for(const f of order){

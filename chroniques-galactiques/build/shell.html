@@ -299,6 +299,7 @@ window.SFX=(()=>{
     force:(c,t)=>burst(c,t,.55,.14,'bandpass',300,1400),
     zap:(c,t)=>{for(let i=0;i<5;i++)tone(c,t+i*.06,'square',300+Math.random()*900,120,.08,.05);},
     flame:(c,t)=>burst(c,t,.7,.16,'highpass',900,2600),
+    alarm:(c,t)=>{tone(c,t,'square',620,600,.2,.045);tone(c,t+.24,'square',470,450,.2,.045);},
     dice:(c,t)=>{for(let i=0;i<4;i++)burst(c,t+i*.09+Math.random()*.03,.04,.12,'highpass',2500,0);}
   };
   return{play(n){if(!on||!P[n])return;const now=performance.now();if(last[n]&&now-last[n]<45)return;last[n]=now;const c=ac();if(!c)return;try{P[n](c,c.currentTime);}catch(e){}},
@@ -870,10 +871,11 @@ function balanceFleet(c){
   }
 }
 const fPow=f=>(f.pvMax||f.pv)*Math.max(1,Math.max(f.sabre,f.tir)-6)*(1+(f.fp||0)*.08);
-function balanceDuel(p,e){
-  const P=p.reduce((a,f)=>a+fPow(f),0),E=e.reduce((a,f)=>a+fPow(f),0);if(!E)return;
+function balanceDuel(p,e,r=[]){
+  // les renforts arrivent par vagues : ils pèsent moitié moins qu'un adversaire présent dès le début
+  const P=p.reduce((a,f)=>a+fPow(f),0),E=e.reduce((a,f)=>a+fPow(f),0)+r.reduce((a,f)=>a+fPow(f),0)/2;if(!E)return;
   const m=Math.max(.6,Math.min(1.5,P*diffK()/E));
-  e.forEach(f=>{f.pv=Math.max(8,Math.min(70,Math.round(f.pv*m)));});
+  [...e,...r].forEach(f=>{f.pv=Math.max(8,Math.min(70,Math.round(f.pv*m)));});
 }
 
 /* ================= Le MJ ================= */
@@ -940,7 +942,7 @@ const FORMAT=`FORMAT DE RÉPONSE OBLIGATOIRE :
 - choices : 3 actions courtes (moins de 12 mots) que le joueur pourrait tenter maintenant.
 - test : si l’action est risquée et incertaine : {"skill":"<clé>","mod":<entier de -6 à 2>,"why":"<raison courte>"}. Clés : sabre, tir, pilotage, commandement, discretion, persuasion, intimidation, technique, perception, athletisme, force (force seulement si le personnage est sensible à la Force). Dans ce cas, arrête la narration juste avant l’issue, ne la raconte pas, et mets "choices":[].
 - combat : si un affrontement doit être joué : {"type":"duel"|"ship"|"space"|"ground","title":"<titre court>","briefing":"<2 phrases>","allies":[…],"enemies":[…],"decor":"…"}. Arrête la narration au moment où le combat éclate et mets "choices":[]. Le jeu ajuste lui-même la force des ennemis à la difficulté choisie : décris l’adversité que l’histoire appelle.
-  · duel : "allies" = noms de compagnons existants (3 au plus, présents dans la scène). "enemies" = 1 à 4 objets {"name":"…","preset":"<modèle>","blade":"#rrggbb (facultatif)","form":"<forme facultative>","pv":<facultatif 10-60>}. Modèles par faction : ${lookCatalog()}. Pour un PNJ que les modèles ne décrivent pas, pars du modèle le plus proche et ajoute "look":{"head":"…","outfit":"…","cloth":"#rrggbb","cloth2":"#…","skin":"#…","hair":"#…","stripe":"#…","eyes":"#…","cloak":"none|long|tattered"}, "weapon":"saber|dual|double|pistol|rifle|staff|vibro", "tech":[…] et "kind":"sith|jedi|none" si besoin. Têtes : ${Object.keys(HEADS).join(', ')}. Tenues : ${Object.keys(OUTFITS).join(', ')}. Techniques : ${Object.keys(TECHS).join(', ')}. Formes : shiicho, makashi, soresu, ataru, shien, niman, juyo. "decor" : toits, temple, desert (sable : tirs −1), foret (arbres : tirs −1), vaisseau, glace (sol glissant) ou lave (la lave jaillit).
+  · duel : "allies" = noms de compagnons existants (3 au plus, présents dans la scène). "enemies" = 1 à 4 objets {"name":"…","preset":"<modèle>","blade":"#rrggbb (facultatif)","form":"<forme facultative>","pv":<facultatif 10-60>}. Si la scène oppose plus de 4 adversaires (une patrouille de 10 stormtroopers, une horde de droïdes), mets les 4 premiers dans "enemies" et les autres dans "renforts" (8 au plus, même format), avec "arrivee":<numéro de l'échange où arrivent les premiers renforts, 2 par défaut>. Les renforts entrent au fil des échanges, 2 au plus à la fois, à mesure que des places se libèrent ; annonce-les dans la narration. Modèles par faction : ${lookCatalog()}. Pour un PNJ que les modèles ne décrivent pas, pars du modèle le plus proche et ajoute "look":{"head":"…","outfit":"…","cloth":"#rrggbb","cloth2":"#…","skin":"#…","hair":"#…","stripe":"#…","eyes":"#…","cloak":"none|long|tattered"}, "weapon":"saber|dual|double|pistol|rifle|staff|vibro", "tech":[…] et "kind":"sith|jedi|none" si besoin. Têtes : ${Object.keys(HEADS).join(', ')}. Tenues : ${Object.keys(OUTFITS).join(', ')}. Techniques : ${Object.keys(TECHS).join(', ')}. Formes : shiicho, makashi, soresu, ataru, shien, niman, juyo. "decor" : toits, temple, desert (sable : tirs −1), foret (arbres : tirs −1), vaisseau, glace (sol glissant) ou lave (la lave jaillit).
   · Pour "ship", "space" et "ground", ajoute "camps":{"joueur":"<faction>","ennemi":"<faction>"} : ils donnent l’apparence des vaisseaux et des troupes. Factions : ${Object.entries(FACTIONS).map(([k,l])=>k+' ('+l+')').join(', ')}.
   · ship : le vaisseau personnel du joueur, seul, contre 1 à 4 objets {"type":"fighters"|"interceptor"|"bomber"|"freighter"|"corvette"|"frigate","name":"…"}. Poursuites, interceptions, pirates. Le joueur peut fuir en hyperespace. "decor" : planete, espace, asteroides ou nebuleuse.
   · space : "enemies" = 2 à 7 objets {"type":"cruiser"|"frigate"|"corvette"|"fighters"|"interceptor"|"bomber"|"freighter","name":"…"}. Les bombardiers ravagent les gros vaisseaux, les intercepteurs chassent chasseurs et bombardiers. "decor" : planete, espace, asteroides ou nebuleuse. "fuite":true si la retraite est une option. "mission" : bataille, escorte (protéger un convoi 6 tours), blocus (amener le vaisseau amiral à la zone de saut) ou station (détruire une station de combat). "meteo" : calme ou ionique (boucliers affaiblis).
@@ -1077,6 +1079,8 @@ function applyData(d){
       objectif:c.type==='ground'&&OBJECTIF[c.objectif]?c.objectif:'assaut',fuite:c.type==='ship'?c.fuite!==false:c.fuite===true,
       carte:c.type==='ground'&&CARTES[c.carte]?c.carte:'plaine',meteo:c.type==='ground'?(METEO[c.meteo]?c.meteo:'clair'):(c.meteo==='ionique'?'ionique':'calme'),
       mission:c.type==='space'&&MISSION_SP[c.mission]?c.mission:'bataille'};
+    if(c.type==='duel'){const all=Array.isArray(c.enemies)?c.enemies:[];combat.renforts=[...all.slice(4),...(Array.isArray(c.renforts)?c.renforts:[])].filter(x=>x&&typeof x==='object').slice(0,8);
+      if(combat.renforts.length)combat.arrivee=Math.max(1,Math.min(8,parseInt(c.arrivee,10)||2));}
     if(c.type!=='duel'){const cp=c.camps||{},j=FACTIONS[cp.joueur]?cp.joueur:S.res.faction;combat.camps={joueur:j,ennemi:FACTIONS[cp.ennemi]?cp.ennemi:(OPP[j]||'pirate')};}
     balanceFleet(combat);
     S.pending={kind:'combat',combat};
@@ -1112,7 +1116,7 @@ function renderAct(){
       :`<div class="dd" id="rollDice"><i>?</i><i>?</i><i>?</i></div><div><button type="button" class="primary" id="rollBtn">Lancer les dés</button></div>`}</div>`;
   }else if(S.pending&&S.pending.kind==='combat'){
     const c=S.pending.combat;const kind={duel:'Combat rapproché',ship:'Combat de vaisseau',space:'Bataille spatiale',ground:'Bataille terrestre'}[c.type];
-    const foes=c.type==='duel'?c.enemies.map(e=>esc(e.name||'?')):c.enemies.map(e=>esc(e.name||e.type));
+    const foes=c.type==='duel'?[...c.enemies.map(e=>esc(e.name||'?')),...((c.renforts||[]).length?[`puis ${c.renforts.length} en renfort${c.renforts.length>1?'s':''} (dès l’échange ${c.arrivee||2})`]:[])]:c.enemies.map(e=>esc(e.name||e.type));
     const mine=c.type==='duel'?[esc(S.hero.name),...(c.allies||[]).map(n=>esc(typeof n==='string'?n:n.name))]:c.type==='ship'?[`${esc(S.res.ship)} (${pct(S.res.shipHull)})`]:c.type==='space'?S.res.fleet.map(s=>esc(s.name)):[esc(S.hero.name)+' (commandement)',...S.res.troops.map(s=>esc(s.name))];
     const where=c.type==='ground'?`${TERRAIN[c.decor]} · ${CARTES[c.carte||'plaine']}${c.meteo&&c.meteo!=='clair'?' · '+METEO[c.meteo]:''} · ${OBJECTIF[c.objectif]}`:c.type==='duel'?DECOR_DUEL[c.decor]:`${DECOR_SPACE[c.decor]}${c.type==='space'&&c.mission&&c.mission!=='bataille'?' · '+MISSION_SP[c.mission]:''}${c.meteo==='ionique'?' · Tempête ionique':''}`;
     main=`<div class="combatcard"><span class="kind">${kind}</span><span class="t">${esc(c.title)}</span><span class="kind">${c.camps?esc(FACTIONS[c.camps.joueur]+' contre '+FACTIONS[c.camps.ennemi])+' · ':''}${esc(where||'')} · Difficulté ${DIFF[S.zero.diff||'normal'].l.toLowerCase()}${c.fuite?' · fuite possible':''}</span><span>${esc(c.briefing)}</span><ul><li>Ton camp : ${mine.join(', ')}</li><li>En face : ${foes.join(', ')}</li></ul><div><button type="button" class="primary" id="fightBtn">Engager le combat</button></div></div>`;
@@ -1277,8 +1281,9 @@ function launchCombat(){
     const p=[heroFiche()];
     for(const a of (c.allies||[])){const n=typeof a==='string'?a:a&&a.name;const comp=S.res.companions.find(x=>x.name===n);if(comp&&p.length<4)p.push(presetFiche(comp.preset,comp.name,'p',null,frac(comp.hp)));}
     const e=c.enemies.slice(0,4).map(x=>presetFiche(LOOKS[x.preset]?x.preset:'thug',String(x.name||'Adversaire').slice(0,30),'e',x));
-    balanceDuel(p,e);
-    window.__CFG.duel={title:c.title,p,e,decor:c.decor};
+    const r=(c.renforts||[]).map(x=>presetFiche(LOOKS[x.preset]?x.preset:'thug',String(x.name||'Renfort').slice(0,30),'e',x));
+    balanceDuel(p,e,r);
+    window.__CFG.duel={title:c.title,p,e,r,arrivee:c.arrivee||2,decor:c.decor};
   }else if(c.type==='space'||c.type==='ship'){
     eng='space';
     const player=c.type==='ship'?[{type:'freighter',name:S.res.ship,flag:true,hull:frac(S.res.shipHull),pilot:S.hero.skills.pilotage}]

@@ -175,7 +175,7 @@ window.ENGINES=window.ENGINES||{};
 window.ENGINES.duel={start(){const C=window.__CFG&&window.__CFG.duel;const sec=document.getElementById('eng-duel');
     if(!C)return;sec.querySelector('h1').textContent=C.title||'Combat';sec.querySelector('.eyebrow').textContent='Combat rapproché';
     DSC=DUEL_SCENES[C.decor]?C.decor:'toits';renderBG();
-    roster={p:C.p.map(f=>({...clone(f),side:'p'})),e:C.e.map(f=>({...clone(f),side:'e'}))};startCombat();resize();},
+    roster={p:C.p.map(f=>({...clone(f),side:'p'})),e:C.e.map(f=>({...clone(f),side:'e'})),r:(C.r||[]).map(f=>({...clone(f),side:'e'}))};waveFrom=C.arrivee||2;startCombat();resize();},
   preview(canvas,get){let f=null,last='';const g=canvas.getContext('2d');
     function loop(now){if(!canvas.isConnected)return;let fc=null;try{fc=get();}catch(e){}
       if(fc){const k=JSON.stringify(fc);if(k!==last){last=k;f=mkFighter({...clone(fc),side:'p'});f.dir=1;f.x=0;f.zOff=0;f.depth=1;}}
