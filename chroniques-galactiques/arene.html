@@ -1165,8 +1165,9 @@ function checkEnd(){
 function endCombat(win){
   over=true;busy=false;phase='over';
   fighters.forEach(f=>{f.tag=null;if(f.alive)setPose(f,win===(f.side==='p')?(f.ranged?'gvictory':'victory'):'hurt',500);});
-  const pNames=roster.p.map(f=>short(f.display||f.name)).join(' et ');
-  const text=win?`${pNames} ${roster.p.length>1?'restent':'reste'} debout sur le toit détrempé.`:`${pNames} ${roster.p.length>1?'tombent':'tombe'} sous la pluie de Nar Shaddaa.`;
+  const who=fighters.filter(f=>f.side==='p'&&(!win||f.alive)).map(f=>short(f.name));
+  const pNames=who.length>1?who.slice(0,-1).join(', ')+' et '+who[who.length-1]:who.join('');
+  const text=win?`${pNames} ${who.length>1?'restent':'reste'} debout sur le toit détrempé.`:`${pNames} ${who.length>1?'tombent':'tombe'} sous la pluie de Nar Shaddaa.`;
   const st=f=>f.alive?`${f.pv}/${f.pvMax} PV`:'hors de combat';
   const lines=[`COMBAT SUR LES TOITS DE NAR SHADDAA — ${win?'VICTOIRE':'DÉFAITE'} (${round} échanges)`,text,'','Ton camp :',...fighters.filter(f=>f.side==='p').map(f=>`- ${f.name} : ${st(f)}`),'','Adversaires :',...fighters.filter(f=>f.side==='e').map(f=>`- ${f.name} : ${st(f)}`),...(reserve.length?['',`Renforts ennemis jamais engagés : ${reserve.map(f=>f.display||f.name).join(', ')}`]:[])];
   $('rTitle').textContent=win?'Victoire':'Défaite';$('rTitle').className=win?'win':'lose';$('rText').textContent=text;$('rBox').value=lines.join('\n');
