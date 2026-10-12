@@ -80,6 +80,8 @@ async function finishEngine(name,flee){
   ok($('actZone').textContent.includes('Temple ancien · Difficulté normale'),'carte de combat : décor et difficulté');
   ok($('actZone').textContent.includes('Vessk, Garde rouge, Stormtrooper, Stormtrooper, puis 3 en renforts (dès l’échange 2)'),'au-delà de 4 adversaires, le surplus passe en renfort');
   ok(prompts[1].includes('"renforts"')&&prompts[1].includes('arrivee'),'le MJ connaît les vagues de renforts');
+  ok(prompts[1].includes('"sbire"')&&prompts[1].includes('"chef"'),'le MJ connaît sbires et chefs');
+  ok(/Chances : (favorable|équilibré|risqué|désespéré)/.test($('actZone').textContent),'chances affichées sur la carte de combat');
   const ally=()=>[...d.querySelectorAll('#actZone [data-ally]')].find(b=>b.textContent.includes('Krrasantan Le Noir'));
   ok(ally()&&ally().getAttribute('aria-pressed')==='true','compagnon reconnu malgré la casse et l’espace finale');
   click(ally());ok(ally().getAttribute('aria-pressed')==='false','le joueur peut retirer un compagnon du combat');
@@ -87,6 +89,8 @@ async function finishEngine(name,flee){
   click($('fightBtn'));
   await waitFor(()=>!$('eng-duel').hidden,5000,'duel shown');
   ok($('ar-fighters').textContent.includes('Krrasantan Le Noir'),'le compagnon combat aux côtés du héros');
+  {const card=n=>[...$('ar-fighters').querySelectorAll('.fc')].find(x=>x.textContent.includes(n)).textContent;
+   ok(card('Stormtrooper').includes('Sbire')&&!card('Vessk').includes('Sbire'),'les soldats de base sont des sbires, pas l’assassin nommé');}
   ok(!$('ar-waveInfo').hidden&&$('ar-waveInfo').textContent==='Renforts 3 · échange 2','compteur de renforts affiché');
   await finishEngine('duel');
   ok(/Stormtrooper 5/.test(prompts[2]),'les renforts figurent dans le rapport de combat');
@@ -108,7 +112,7 @@ async function finishEngine(name,flee){
   console.log('feed entries:',$('feed').children.length,'prompts:',prompts.length,'last prompt has report:',prompts[3].includes('RAPPORT DE COMBAT'));
   console.log('chapter now:',$('chapNo').textContent,$('chapTitle').textContent);
   // Étape 1 : blessures et dégâts transmis au MJ
-  ok(/PV 1\/\d+ \(gravement blessé\)/.test(prompts[2]),'héros vaincu en duel : 1 PV dans le prompt suivant');
+  ok(/PV \d+\/\d+ \(gravement blessé, −2 à tous ses jets/.test(prompts[2]),'héros vaincu en duel : gravement blessé (malus −2) dans le prompt suivant');
   ok(/coque \d+ %/.test(prompts[3]),'état de coque de la flotte transmis');
   ok(/effectifs \d+ %/.test(prompts[4]),'effectifs des troupes transmis');
   ok(/PV (\d+)\/\1 \(en forme\)/.test(prompts[4]),'repos de nouveau chapitre : héros soigné');

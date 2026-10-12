@@ -22,6 +22,7 @@ Toute évolution du jeu doit respecter ce principe.
 - **Mémoire** : carnet de campagne (PNJ, quêtes, lieux, factions), résumé de chaque chapitre, livre de campagne exportable.
 - **Relations** : affinité, nature du lien, voix et historique de chaque PNJ ; romances par étapes selon le réglage de la session zéro ; scènes de respiration ; longueur et style de narration réglables en cours de partie.
 - **Combats** : duel (7 décors qui comptent : glace, lave, sable, forêt… ; au-delà de 4 adversaires, les autres arrivent en **vagues de renforts** au fil des échanges), combat du vaisseau personnel avec fuite en hyperespace, bataille spatiale (4 décors ; missions bataille, escorte, blocus, station ; tempête ionique), bataille terrestre (6 terrains, 5 cartes dont ville, canyon, base fortifiée et rivière ; 6 météos dont nuit et brouillard ; 7 objectifs). La force des ennemis est ajustée à la difficulté choisie en session zéro.
+- **Équilibrage des combats rapprochés** : la difficulté compare la force réelle des camps (PV × dégâts par échange : le nombre compte au carré) et ajuste PV et précision des adversaires ordinaires. Un Sith ou un Jedi ennemi n'est jamais affaibli face à un camp sans la Force : la carte de combat annonce honnêtement les chances (favorable, équilibré, risqué, désespéré). Les **sbires** tombent en un ou deux coups ; quand leur **chef** tombe ou que la moitié du groupe est à terre, ils peuvent **fuir**. Un héros blessé entre au combat avec la moitié de ses PV au moins, mais subit −1 (blessé) ou −2 (gravement blessé) à tous ses jets jusqu'à ses soins. Les Mandaloriens (beskar, jetpack, lance-flammes, roquettes) sont les rares à pouvoir tenir tête à un utilisateur de la Force.
 - **Factions** : 9 styles (Empire, Rébellion, République, Séparatistes, Mandaloriens, pirates, Vong, Chiss, Empire Sith) pour les vaisseaux et les troupes ; 47 modèles de personnages pour toutes les époques ; le MJ peut composer un PNJ inédit (tête, tenue, couleurs, arme, capacités).
 - **Systèmes débloqués par l’histoire** : tableau des contrats (si le personnage se lance dans la chasse aux primes), réputation par faction, jauge de la Force pour les personnages sensibles à la Force.
 - **Son** : effets synthétisés dans le navigateur, bouton pour couper le son.
@@ -36,6 +37,7 @@ Toute évolution du jeu doit respecter ce principe.
 - `assaut-kessaria.html` — moteur de bataille terrestre (jouable seul).
 - `arene.html` — moteur de combat rapproché (sabres + blasters, éditeur de combattants, jouable seul).
 - `t/e2e.js` — test de bout en bout avec un faux MJ (`cd t && npm i jsdom@24 && node e2e.js`) : création, jets et Destin, les trois combats, blessures, carnet, progression, intendance, régénérer/annuler, hors-jeu, export, multi-campagnes, reprise d’une ancienne sauvegarde.
+- `t/sim.js` — simulateur d'équilibrage : joue des centaines de combats rapprochés avec le vrai moteur, sans animation (`node sim.js 30`, filtres `DIFFS`, `TEAMS`, `FOES`), et compare victoires réelles et chances annoncées.
 
 ## Comment ça s'assemble
 

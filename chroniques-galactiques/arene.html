@@ -322,7 +322,7 @@ const TECH={
   cortosis:{label:'Gantelets de cortosis',d:'Une parade réussie peut court-circuiter la lame adverse.',melee:true},
   rapid:{label:'Tir rapide',d:'Deux tirs à −2 en une seule action.',ranged:true},
   grenades:{label:'Grenades (2)',d:'Explosion sur la cible et ses voisins, ignore le couvert.',ranged:true},
-  beskar:{label:'Armure en beskar',d:'Les sabres font 40 % de dégâts en moins, les tirs −2.',melee:true,ranged:true},
+  beskar:{label:'Armure en beskar',d:'Résiste aux sabres (55 % de dégâts en moins) et disperse la moitié des éclairs de Force. Tirs et flammes −2.',melee:true,ranged:true},
   jetpack:{label:'Jetpack',d:'Assaut aérien : +2, ignore le couvert, gêne les parades.',melee:true,ranged:true},
   flamer:{label:'Lance-flammes (2)',d:'Gerbe de feu : impossible à dévier, peut toucher un voisin.',melee:true,ranged:true},
   brute:{label:'Force brute',d:'+2 dégâts au corps à corps.',melee:true},
@@ -372,7 +372,7 @@ const PRESETS={
   thug:{name:'Homme de main',kind:'none',weapon:'pistol',blade1:'#ff2b2b',blade2:'#ff2b2b',bolt:'#ff5a3a',form:'none',tech:[],pv:16,sabre:10,tir:11,force:6,fp:0,ref:11,
     look:{h:1.04,build:1.15,outfit:'jacket',cloak:'none',head:'horns',skin:'#7a6a9a',hair:'#222',cloth:'#3a3030',cloth2:'#5a4a40',legs:'#262222',cloakC:'#222',glove:'#222',bare:true,tattoo:false}}
 };
-PRESETS.mando={name:'Guerrier mandalorien',kind:'none',weapon:'pistol',blade1:'#ff2b2b',blade2:'#ff2b2b',bolt:'#ff6a3a',form:'none',tech:['beskar','jetpack','rapid'],pv:32,sabre:12,tir:15,force:6,fp:0,ref:14,
+PRESETS.mando={name:'Guerrier mandalorien',kind:'none',weapon:'pistol',blade1:'#ff2b2b',blade2:'#ff2b2b',bolt:'#ff6a3a',form:'none',tech:['beskar','jetpack','rapid','grenades','flamer'],pv:32,sabre:12,tir:15,force:6,fp:0,ref:14,
   look:{h:1.0,build:1.05,outfit:'beskar',cloak:'none',head:'mando',skin:'#b98a6a',hair:'#222',cloth:'#5d7a8c',cloth2:'#2b2f33',legs:'#2b2f33',cloakC:'#222',glove:'#3a3d40',bare:false,tattoo:false,stripe:'#c9a227'}};
 PRESETS.clone={name:'Soldat clone',kind:'none',weapon:'rifle',blade1:'#ff2b2b',blade2:'#ff2b2b',bolt:'#4aa8ff',form:'none',tech:['grenades'],pv:18,sabre:9,tir:12,force:6,fp:0,ref:12,
   look:{h:1.0,build:1.0,outfit:'trooper',cloak:'none',head:'clone',skin:'#a87c5c',hair:'#111',cloth:'#eef0f2',cloth2:'#1c1e22',legs:'#eef0f2',cloakC:'#222',glove:'#1c1e22',bare:false,tattoo:false,stripe:'#2f6fd6'}};
@@ -414,6 +414,7 @@ function mkFighter(fc){
   f.bladeOn=f.blades.map(()=>1);f.btw=[];
   f.pvMax=Math.max(f.pv,fc.pvMax||0);f.endMax=f.pvMax<20?4:6;f.end=f.endMax;f.fpMax=f.fp;f.grenades=f.techs.has('grenades')?2:0;f.fuel=f.techs.has('flamer')?2:0;
   f.dir=f.side==='p'?1:-1;f.cur={...POSES[G(f)]};f.tw=null;f.xtw=null;
+  f.malus=Math.min(0,Math.round(fc.malus||0));f.sbire=!!fc.sbire;f.chef=!!fc.chef&&!fc.sbire;f.fled=false;
   f.act=null;f.target=null;f.alive=true;f.cancelled=false;f.acted=false;f.med=0;f.medNext=0;f.offBal=false;f.offBalNext=false;f.disarmed=false;f.disarmT=0;f.parryBroken=false;f.tag=null;f.seed=Math.random()*10;
   return f;
 }
@@ -898,7 +899,7 @@ function formMod(f,what){
 /* ---------- Dés ---------- */
 function roll3d6(){const d=[rint(1,6),rint(1,6),rint(1,6)];return{d,sum:d[0]+d[1]+d[2]};}
 function test(f,what,score){
-  const r=roll3d6();score=Math.round(score);
+  const r=roll3d6();score=Math.round(score+(f.malus||0));
   const crit=r.sum<=4,fumble=r.sum>=(DSC==='glace'?16:17),ok=crit||(!fumble&&r.sum<=score);
   const res={...r,score,ok,crit,fumble,margin:score-r.sum,who:f.name,what};
   rolls.unshift(res);if(rolls.length>4)rolls.pop();
@@ -921,7 +922,7 @@ function damage(t,n,src){
 }
 function dmgSaber(a,r,t){
   let n=(rint(5,8)+Math.floor(Math.max(0,r.margin)/2)+(a.saberW&&a.form==='juyo'?2:0)+(a.weapon==='vibro'?-1:0)+(a.techs.has('brute')?2:0))*(r.crit?1.5:1);
-  if(t&&a.saberW&&t.techs.has('beskar')){n*=.6;const c=chestWorld(t);floatT(c.x,c.y-60,'Beskar !','#c9d4e0',16);}
+  if(t&&a.saberW&&t.techs.has('beskar')){n*=.45;const c=chestWorld(t);floatT(c.x,c.y-60,'Beskar !','#c9d4e0',16);}
   return n;
 }
 async function strike(a,t,mod,bladeIdx,isFeint,opts){
@@ -997,12 +998,12 @@ async function fire(a,t,mod,dmgBonus,label,opts){
     const parrying=isParrying(t);
     const hb=handWorld(t,true);
     shot(mz.x,mz.y,hb.x,hb.y-30,a.bolt,200);await wait(200);
-    const dr=test(t,'Renvoi',t.sabre+(parrying?0:-4)+formMod(t,'deflect'));
+    const dr=test(t,'Renvoi',t.sabre+(parrying?0:-4)+(opts&&opts.air?-2:0)+formMod(t,'deflect'));
     if(dr.ok){
       flash(hb.x,hb.y-30,50,'255,230,200');sparks(hb.x,hb.y-30,14);
       if(!parrying)setPose(t,'parry',90);
       const back=parrying&&dr.margin>=(t.form==='shien'?1:t.form==='soresu'?3:4);
-      if(back){const ac=chestWorld(a);shot(hb.x,hb.y-30,ac.x,ac.y,a.bolt,200);await wait(200);burn(a);damage(a,rint(4,7),t);floatT(hb.x,hb.y-60,'Renvoyé !','#a8d8ff',20);log(`${short(t.name)} renvoie le tir sur ${short(a.name)} !`,t.side);}
+      if(back){const ac=chestWorld(a);shot(hb.x,hb.y-30,ac.x,ac.y,a.bolt,200);await wait(200);burn(a);damage(a,rint(4,7)-(a.techs.has('beskar')?2:0),t);floatT(hb.x,hb.y-60,'Renvoyé !','#a8d8ff',20);log(`${short(t.name)} renvoie le tir sur ${short(a.name)} !`,t.side);}
       else{shot(hb.x,hb.y-30,hb.x+t.dir*rnd(-200,-80),hb.y-rnd(120,260),a.bolt,200);floatT(hb.x,hb.y-60,'Dévié','#a8d8ff',18);log(`${short(t.name)} dévie le tir de ${short(a.name)}.`,t.side);}
       setTimeout(()=>{if(t.alive&&!t.tw)setPose(t,restPose(t),250);},300);
       await wait(260);return;
@@ -1056,7 +1057,8 @@ async function perform(f){
       setPose(f,'force',200);await wait(200);
       const r=test(f,'Poussée de Force',f.force+formMod(f,'force'));
       const h=handWorld(f,false);wave(h.x,h.y,f.dir);await wait(180);
-      if(r.ok){t.end=Math.max(0,t.end-2);t.parryBroken=true;moveTo(t,clamp(t.x+f.dir*120,160,W-160),300);setPose(t,'down',260);
+      if(r.ok&&t.techs.has('jetpack')&&Math.random()<.5){t.air=0;liftTo&&liftTo(t,60,180);await wait(260);liftTo&&liftTo(t,0,260);floatT(headWorld(t).x,headWorld(t).y-40,'Rattrapé au jetpack','#c9d4e0',16);log(`${short(t.name)} est soulevé mais se rattrape au jetpack.`,t.side);}
+      else if(r.ok){t.end=Math.max(0,t.end-2);t.parryBroken=true;moveTo(t,clamp(t.x+f.dir*120,160,W-160),300);setPose(t,'down',260);
         if(!t.acted){t.cancelled=true;log(`${short(t.name)} est projeté au sol et perd son action.`,f.side);}else{t.offBalNext=true;log(`${short(t.name)} est projeté au sol.`,f.side);}
         floatT(headWorld(t).x,headWorld(t).y-40,'Renversé !','#c9b4ff',18);await wait(520);if(t.alive){setPose(t,G(t),400);setTimeout(()=>goHome(t),200);}}
       else log(`${short(t.name)} résiste à la poussée de ${short(f.name)}.`,f.side);
@@ -1066,7 +1068,7 @@ async function perform(f){
       setPose(f,'force',200);await wait(200);
       const r=test(f,'Éclairs de Force',f.force+formMod(f,'force'));const parrying=isParrying(t);
       if(r.ok){boltsFx(f,()=>parrying?handWorld(t,true):chestWorld(t));await wait(500);let n=rint(6,9)+Math.floor(Math.max(0,r.margin)/2);
-        if(parrying){n/=2;log(`${short(t.name)} absorbe les éclairs sur sa lame.`,t.side);}else log(`Des éclairs frappent ${short(t.name)}.`,f.side);damage(t,n,f);}
+        if(parrying){n/=2;log(`${short(t.name)} absorbe les éclairs sur sa lame.`,t.side);}else if(t.techs.has('beskar')){n/=2;log(`Le beskar de ${short(t.name)} disperse les éclairs.`,t.side);}else log(`Des éclairs frappent ${short(t.name)}.`,f.side);damage(t,n,f);}
       else{boltsFx(f,()=>({x:chestWorld(t).x-f.dir*80,y:FLOOR-20}));log(`Les éclairs de ${short(f.name)} manquent leur cible.`,f.side);await wait(500);}
       await wait(250);break;}
     case'meditate':{
@@ -1090,9 +1092,11 @@ function aiChoose(e){
     Object.assign(w,{shoot:4,aimed:1.5,rapid:2,grenade:foes.length>=2?2.2:.6,cover:1.2,dodge:.6,recover:0});
     if(e.pv<e.pvMax*.45)w.cover+=2;
     if(foes.some(f=>!f.ranged))w.dodge+=1;
+    // face à une lame, mieux vaut ce qui ne se dévie pas
+    if(foes.some(f=>f.saberW)){w.shoot*=.4;w.aimed*=.4;w.rapid*=.4;w.grenade+=1.5;w.flame=1.5;w.jet=1.5;}
   }
   if(e.kind!=='none'&&e.fp>0){w.push=1.1;w.lightning=1.2;if(team(e.side).length>1&&!e.medNext)w.meditate=.9;if(e.disarmed)w.push+=2;}
-  if(e.techs.has('jetpack'))w.jet=1.6;if(e.techs.has('flamer'))w.flame=foes.length>=2?2.4:1.4;
+  if(e.techs.has('jetpack'))w.jet=(w.jet||0)+1.6;if(e.techs.has('flamer'))w.flame=(w.flame||0)+(foes.length>=2?2.4:1.4);
   if(e.end<=1)w.recover=(w.recover||0)+3.5;
   for(const k in w){if(!actAvail(e,k)||!actAfford(e,k))w[k]=0;}
   if(Object.values(w).every(v=>v<=0))w.recover=1;
@@ -1101,7 +1105,7 @@ function aiChoose(e){
   e.act=pick;
   if(ACTIONS[pick].target){
     const pool=foes.slice();
-    e.target=Math.random()<.35?pool[Math.floor(Math.random()*pool.length)]:pool.reduce((a,b)=>(a.pv<b.pv?a:b));
+    e.target=Math.random()<(e.sbire?.7:.45)?pool[Math.floor(Math.random()*pool.length)]:pool.reduce((a,b)=>(a.pv<b.pv?a:b));
   }else e.target=null;
 }
 async function resolveRound(){
@@ -1130,7 +1134,8 @@ async function resolveRound(){
   }
   endRound();
 }
-function endRound(){
+async function endRound(){
+  await morale();if(checkEnd())return;
   if(DSC==='lave'&&Math.random()<.3){const al=fighters.filter(f=>f.alive);if(al.length){const v=al[Math.floor(Math.random()*al.length)];boom(v.x,FLOOR-(v.zOff||0)-20,60);damage(v,rint(3,6),null);log(`Une gerbe de lave jaillit sous ${short(v.name)}.`,'kill');if(checkEnd())return;}}
   for(const f of fighters){
     if(!f.alive)continue;
@@ -1155,6 +1160,24 @@ function arrive(force){
   if(k){log(`Renforts : ${k===1?short(fighters[fighters.length-1].name)+' entre':k+' adversaires entrent'} dans le combat${reserve.length?` (${reserve.length} encore en approche)`:''}.`,'kill');window.SFX&&window.SFX.play('alarm');}
   return k;
 }
+/* ---------- Moral ---------- */
+let moraleBroken=false;
+async function morale(){
+  const foes=fighters.filter(f=>f.side==='e');
+  const total=foes.length+reserve.length,down=foes.filter(f=>!f.alive).length;
+  const chefDown=foes.some(f=>f.chef&&!f.alive&&!f.fled);
+  if(!moraleBroken&&(chefDown||down*2>=total)&&foes.some(f=>f.alive&&f.sbire)){
+    moraleBroken=true;log(chefDown?'Leur chef est tombé : les sbires hésitent.':'Les pertes ébranlent le moral adverse.','kill');
+    const n=reserve.length;reserve=reserve.filter(f=>!f.sbire);if(reserve.length<n)log(`Les renforts ${reserve.length?'les moins aguerris ':''}tournent les talons.`,'kill');
+  }
+  if(!moraleBroken)return;
+  for(const f of team('e')){
+    if(!f.sbire||Math.random()>=.45)continue;
+    f.fled=true;f.alive=false;f.tag=null;f.dir=1;setPose(f,G(f),200);moveTo(f,W+160,900).then(()=>{f.gone=true;});
+    log(`${short(f.name)} prend la fuite.`,'kill');
+  }
+  renderCombat();await wait(500);
+}
 function checkEnd(){
   if(over)return true;
   if(!team('p').length){endCombat(false);return true;}
@@ -1168,7 +1191,7 @@ function endCombat(win){
   const who=fighters.filter(f=>f.side==='p'&&(!win||f.alive)).map(f=>short(f.name));
   const pNames=who.length>1?who.slice(0,-1).join(', ')+' et '+who[who.length-1]:who.join('');
   const text=win?`${pNames} ${who.length>1?'restent':'reste'} debout sur le toit détrempé.`:`${pNames} ${who.length>1?'tombent':'tombe'} sous la pluie de Nar Shaddaa.`;
-  const st=f=>f.alive?`${f.pv}/${f.pvMax} PV`:'hors de combat';
+  const st=f=>f.alive?`${f.pv}/${f.pvMax} PV`:f.fled?'en fuite':'hors de combat';
   const lines=[`COMBAT SUR LES TOITS DE NAR SHADDAA — ${win?'VICTOIRE':'DÉFAITE'} (${round} échanges)`,text,'','Ton camp :',...fighters.filter(f=>f.side==='p').map(f=>`- ${f.name} : ${st(f)}`),'','Adversaires :',...fighters.filter(f=>f.side==='e').map(f=>`- ${f.name} : ${st(f)}`),...(reserve.length?['',`Renforts ennemis jamais engagés : ${reserve.map(f=>f.display||f.name).join(', ')}`]:[])];
   $('rTitle').textContent=win?'Victoire':'Défaite';$('rTitle').className=win?'win':'lose';$('rText').textContent=text;$('rBox').value=lines.join('\n');
   setTimeout(()=>{$('over').hidden=false;},900);log(text,'kill');renderCombat();
@@ -1202,7 +1225,7 @@ function startCombat(){
   reserve=(roster.r||[]).map(f=>({...clone(f),side:'e'}));
   numberDupes(roster.p);numberDupes([...roster.e,...reserve]);
   fighters=[...roster.p,...roster.e].map(mkFighter);layout(fighters);
-  fx=[];floats=[];logs=[];rolls=[];round=1;phase='orders';busy=false;over=false;pendingAct=null;lastP={};activeIdx=0;
+  moraleBroken=false;fx=[];floats=[];logs=[];rolls=[];round=1;phase='orders';busy=false;over=false;pendingAct=null;lastP={};activeIdx=0;
   log(`${roster.p.map(f=>short(f.display||f.name)).join(', ')} face à ${roster.e.map(f=>short(f.display||f.name)).join(', ')}.`,'kill');
   if(fighters.some(f=>f.saberW))window.SFX&&window.SFX.play('ignite');
   {const HZ={glace:'Le sol gelé est glissant : échec critique dès 16.',lave:'Le sol volcanique est instable : la lave peut jaillir à chaque échange.',desert:'Le sable gêne la visée : tous les tirs à −1.',foret:'Les arbres couvrent les combattants : tous les tirs à −1.'}[DSC];if(HZ)log(HZ,'kill');}
@@ -1216,8 +1239,8 @@ function renderCombat(){
   {const w=$('waveInfo');w.hidden=!reserve.length;w.textContent=reserve.length?`Renforts ${reserve.length}${round<waveFrom?' · échange '+waveFrom:''}`:'';}
   const pl=players();if(activeIdx>=pl.length)activeIdx=Math.max(0,pl.length-1);
   const act=phase==='orders'?pl[activeIdx]:null;
-  $('fighters').innerHTML=fighters.map(f=>{const h=f.pv/f.pvMax;
-    const chips=[f.disarmed&&'<span class="chip bad">Sans lame</span>',f.offBal&&'<span class="chip warn">Déséquilibré</span>',f.med&&'<span class="chip warn">Méditation +2</span>',f.tag&&phase!=='orders'&&`<span class="chip">${esc(f.tag)}</span>`].filter(Boolean).join('');
+  $('fighters').innerHTML=fighters.filter(f=>!f.fled).map(f=>{const h=f.pv/f.pvMax;
+    const chips=[f.chef&&'<span class="chip warn">Chef</span>',f.sbire&&'<span class="chip">Sbire</span>',f.malus&&`<span class="chip bad">${f.malus<=-2?'Gravement blessé':'Blessé'} −${-f.malus}</span>`,f.disarmed&&'<span class="chip bad">Sans lame</span>',f.offBal&&'<span class="chip warn">Déséquilibré</span>',f.med&&'<span class="chip warn">Méditation +2</span>',f.tag&&phase!=='orders'&&`<span class="chip">${esc(f.tag)}</span>`].filter(Boolean).join('');
     return `<div class="fc ${f.side==='e'?'e':''} ${f.alive?'':'down'} ${f===act?'active':''}"><div class="top"><span class="nm">${esc(f.name)}</span><span class="fm">${f.alive?'':'Hors de combat'}</span></div>
       <div class="fm">${esc(weaponSummary(f))} · ${f.ranged?'Tir '+f.tir:'Sabre '+f.sabre}${f.kind!=='none'?' · Force '+f.force:''}</div>
       <div class="meters"><span>PV ${f.pv}</span><div class="track"><div class="fill" style="width:${h*100}%;background:${h>.6?'var(--ok)':h>.3?'var(--amber)':'var(--sith)'}"></div></div><span>Endurance</span>${pips(f.end,f.endMax)}${f.fpMax?`<span>Force</span>${pips(f.fp,f.fpMax,'f')}`:''}</div>

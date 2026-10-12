@@ -2,3 +2,4 @@ dist/
 node_modules/
 chroniques-galactiques/t/p4.txt
 chroniques-galactiques/t/package*.json
+chroniques-galactiques/t/sim-out.json
