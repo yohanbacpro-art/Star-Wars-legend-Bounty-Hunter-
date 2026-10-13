@@ -38,6 +38,7 @@ Toute évolution du jeu doit respecter ce principe.
 - `kessaria.html` — moteur de bataille spatiale (jouable seul).
 - `assaut-kessaria.html` — moteur de bataille terrestre (jouable seul).
 - `arene.html` — moteur de combat rapproché (sabres + blasters, éditeur de combattants, jouable seul).
+- `fusillade.html` — prototype autonome de fusillade tactique au tour par tour (grille, couverts partiels et complets selon la direction, flanc, guet, tir visé et rapide, grenades, bidons explosifs, tables à renverser, IA qui cherche le couvert, moral des sbires). Pas encore branché au jeu.
 - `t/e2e.js` — test de bout en bout avec un faux MJ (`cd t && npm i jsdom@24 && node e2e.js`) : création, jets et Destin, les trois combats, blessures, carnet, progression, intendance, régénérer/annuler, hors-jeu, export, multi-campagnes, reprise d’une ancienne sauvegarde.
 - `t/sim.js` — simulateur d'équilibrage : joue des centaines de combats rapprochés avec le vrai moteur, sans animation (`node sim.js 30`, filtres `DIFFS`, `TEAMS`, `FOES`), et compare victoires réelles et chances annoncées.
 
