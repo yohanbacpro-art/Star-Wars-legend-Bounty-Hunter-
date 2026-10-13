@@ -212,6 +212,16 @@ async function finishEngine(name,flee){
    ok(d.querySelector('#pace .clock.full'),'horloge pleine affichée (fusion par nom)');
    answers.push(R('Ils sont là.',{choices:['Fuir'],chronicle:'x'}));click(d.querySelector('[data-choice="0"]'));await waitFor(()=>prompts.length===np3+3,5000,'after skip 2');
    ok(prompts[np3+2].includes('Les Jedi approchent : 4/4 — PLEINE'),'horloge pleine signalée au MJ');}
+  // Combat raconté
+  {await waitFor(()=>!d.querySelector('#stopMJ'),5000,'fin MJ');const np4=prompts.length;
+   answers.push(R('Des gardes surgissent.',{choices:[],combat:{type:'duel',title:'Rixe au bar',briefing:'Trois gardes.',enemies:[{name:'Garde',preset:'trooper'},{name:'Garde',preset:'trooper'}]},chronicle:'x'}));
+   click(d.querySelector('[data-choice="0"]'));await waitFor(()=>$('narrBtn'),5000,'narr card');
+   answers.push(R('Tu renverses une table.',{choices:['Tirer'],updates:{blessure:6},chronicle:'x'}));click($('narrBtn'));
+   await waitFor(()=>prompts.length===np4+2&&!d.querySelector('#stopMJ'),5000,'narr');await sleep(100);
+   ok(prompts[np4+1].includes('Le joueur préfère jouer le combat « Rixe au bar » dans le récit')&&prompts[np4+1].includes('Adversaires : Garde, Garde'),'« Raconter plutôt » confie le combat au récit');
+   ok(!d.querySelector('#fightBtn'),'plus de combat joué en attente');
+   answers.push(R('Suite.',{choices:['x'],chronicle:'x'}));click(d.querySelector('[data-choice="0"]'));await waitFor(()=>prompts.length===np4+3,5000,'after narr');
+   ok(/PV (\d+)\/(\d+) \(/.test(prompts[np4+2])&&(m=>+m[1]<+m[2])(prompts[np4+2].match(/PV (\d+)\/(\d+) \(/)),'une blessure racontée fait perdre des PV');}
   ok(!$('sheet').textContent.includes('Contrats'),'pas de contrats tant que l’histoire ne les ouvre pas');
   console.log('prompt bytes',Buffer.byteLength(prompts[4]));fs.writeFileSync('p4.txt',prompts[4]);console.log('E2E OK');process.exit(0);
 })().catch(e=>{console.log('FAIL',e.message);process.exit(1);});
