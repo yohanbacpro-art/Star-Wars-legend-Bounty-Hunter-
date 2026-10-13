@@ -187,15 +187,29 @@ window.ENGINES.duel={start(){const C=window.__CFG&&window.__CFG.duel;const sec=d
 })();""")
 ar_js = js
 
+# ---------- Fusillade tactique ----------
+css, dom, js = parts(os.path.join(SRC, 'fusillade.html'))
+css = css.replace('canvas#cv', 'canvas#fu-cv')
+fu_css = scope_css(css, '#eng-skirmish')
+fu_dom = prefix_dom(dom, 'fu')
+js = must(js, "const $=id=>document.getElementById(id);", "const $=id=>document.getElementById('fu-'+id);")
+js = must(js, 'function frame(now){', GATE % 'skirmish')
+js = must(js, "window.__fusEnd&&window.__fusEnd(", "window.__engineEnd&&window.__engineEnd('skirmish',")
+js = must(js, "newGame('cantina');\nrequestAnimationFrame(frame);\n})();", """requestAnimationFrame(frame);
+window.ENGINES=window.ENGINES||{};
+window.ENGINES.skirmish={start(){const C=window.__CFG&&window.__CFG.skirmish;if(!C)return;$('setupSect').hidden=true;$('eyebrow').textContent='Fusillade';start({...C,integrated:true});}};
+})();""")
+fu_js = js
+
 def section(name, dom):
     return (f'<section id="eng-{name}" class="engine" hidden>\n'
             f'<div class="engbar"><span>Combat en cours · le résultat reviendra dans le récit</span></div>\n'
             f'{dom}\n</section>\n')
 
 shell = open(os.path.join(D, 'shell.html'), encoding='utf-8').read()
-shell = must(shell, '/*ENGINE_CSS*/', sp_css + '\n' + gr_css + '\n' + ar_css)
-shell = must(shell, '<!--ENGINES-->', section('space', sp_dom) + section('ground', gr_dom) + section('duel', ar_dom))
-shell = must(shell, '/*ENGINE_JS*/', sp_js + '\n' + gr_js + '\n' + ar_js)
+shell = must(shell, '/*ENGINE_CSS*/', sp_css + '\n' + gr_css + '\n' + ar_css + '\n' + fu_css)
+shell = must(shell, '<!--ENGINES-->', section('space', sp_dom) + section('ground', gr_dom) + section('duel', ar_dom) + section('skirmish', fu_dom))
+shell = must(shell, '/*ENGINE_JS*/', sp_js + '\n' + gr_js + '\n' + ar_js + '\n' + fu_js)
 out = os.path.join(SRC, 'chroniques.html')
 open(out, 'w', encoding='utf-8').write(shell)
 print('OK', out, len(shell))

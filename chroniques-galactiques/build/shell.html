@@ -951,7 +951,7 @@ const saberShare=l=>l.length?l.filter(f=>['saber','dual','double'].includes(f.we
 // sur l'adversaire le plus affaibli, quatre ennemis au plus sont au contact et les renforts comblent les vides.
 // Chaque adversaire coûte au moins un coup au but. R > 1 : le joueur l'emporte (R = PV de départ / PV perdus) ;
 // R < 1 : il tombe (R = part des forces ennemies abattues).
-function duelRatio(p,e,r=[]){
+function duelRatio(p,e,r=[],cap=4){
   const avgHit=l=>l.length?l.reduce((a,f)=>a+dmgHit(f),0)/l.length:5,foes=[...e,...r];
   const sb=foes.filter(f=>f.sbire).length/Math.max(1,foes.length),Dp=avgHit(p),De=avgHit(foes);
   const besk=f=>(f.tech||[]).includes('beskar')?1.4:1;
@@ -961,9 +961,9 @@ function duelRatio(p,e,r=[]){
   const P0=P.reduce((a,x)=>a+x.hp,0),E0=E.reduce((a,x)=>a+x.hp,0);let lostP=0,lostE=0;
   const hit=(L,dmg,cap)=>{let lost=0;while(dmg>1e-9){const t=L.filter(x=>x.hp>0).slice(0,cap).sort((a,b)=>a.hp-b.hp)[0];if(!t)break;const d=Math.min(dmg,t.hp);t.hp-=d;dmg-=d;lost+=d;}return lost;};
   for(let t=0;t<60;t+=.25){
-    const pa=P.filter(x=>x.hp>0),field=E.filter(x=>x.hp>0).slice(0,4);if(!pa.length||!field.length)break;
+    const pa=P.filter(x=>x.hp>0),field=E.filter(x=>x.hp>0).slice(0,cap);if(!pa.length||!field.length)break;
     const dp=pa.reduce((a,x)=>a+x.dps,0)*.25,de=field.reduce((a,x)=>a+x.dps,0)*.25;
-    lostE+=hit(E,dp,4);lostP+=hit(P,de,9);
+    lostE+=hit(E,dp,cap);lostP+=hit(P,de,9);
   }
   return Math.min(20,(lostE/E0)/Math.max(.001,lostP/P0));
 }
@@ -971,7 +971,7 @@ function duelRatio(p,e,r=[]){
 const DUEL_TARGET={facile:2.02,normal:1.27,difficile:.9,brutal:.62};
 const DUEL_ODDS=[[.75,'favorable'],[.5,'équilibré'],[.3,'risqué'],[0,'désespéré']];
 const duelWinP=R=>1/(1+Math.exp(-(2.4*Math.log(R)+.05)));
-function balanceDuel(p,e,r=[],diff){
+function balanceDuel(p,e,r=[],diff,cap=4){
   if(!e.length&&!r.length)return{R:1,win:.5};
   // Un Sith ou un Jedi ennemi garde toute sa puissance face à un camp sans utilisateur de la Force :
   // l'équilibrage ne touche qu'aux adversaires ordinaires, et la carte de combat annonce honnêtement les chances.
@@ -983,11 +983,11 @@ function balanceDuel(p,e,r=[],diff){
   // Pour chaque cran de précision (−4 à +3), on cherche les PV qui atteignent la cible ; on garde le meilleur compromis.
   let best=0,bestH=1,bestErr=1e9;
   for(let d=-4;d<=3;d++){
-    let lo=.4,hi=2.2;for(let it=0;it<14;it++){const h=(lo+hi)/2;if(duelRatio(p,scaled(e,d,h),scaled(r,d,h))>Rt)lo=h;else hi=h;}
-    const h=(lo+hi)/2,err=Math.abs(Math.log(duelRatio(p,scaled(e,d,h),scaled(r,d,h))/Rt))+Math.abs(d)*.05+Math.abs(Math.log(h))*.02;
+    let lo=.4,hi=2.2;for(let it=0;it<14;it++){const h=(lo+hi)/2;if(duelRatio(p,scaled(e,d,h),scaled(r,d,h),cap)>Rt)lo=h;else hi=h;}
+    const h=(lo+hi)/2,err=Math.abs(Math.log(duelRatio(p,scaled(e,d,h),scaled(r,d,h),cap)/Rt))+Math.abs(d)*.05+Math.abs(Math.log(h))*.02;
     if(err<bestErr){bestErr=err;best=d;bestH=h;}}
   [...e,...r].filter(adj).forEach(f=>{f.tir=sk(f.tir+best);f.sabre=sk(f.sabre+best);f.pv=pvOf(f,bestH);f.pvMax=f.pv;});
-  const R=duelRatio(p,e,r);
+  const R=duelRatio(p,e,r,cap);
   return{R,win:duelWinP(R)};
 }
 const oddsLabel=w=>DUEL_ODDS.find(([t])=>w>=t)[1];
@@ -1006,11 +1006,11 @@ function refFiche(f){
   const gun=isGun(f),fr=f.pv/(f.pvMax||f.pv);
   return{...f,tir:gun?13:Math.min(f.tir,13),sabre:gun?Math.min(f.sabre,13):13,force:f.kind&&f.kind!=='none'?13:f.force,fp:Math.min(f.fp||0,3),tech:[],pvMax:30,pv:Math.round(30*fr)};
 }
-function prepDuel(c,p,diff){
-  const e=c.enemies.slice(0,4).map(x=>foeFiche(x,'Adversaire'));
+function prepDuel(c,p,diff,cap=4){
+  const e=c.enemies.slice(0,cap).map(x=>foeFiche(x,'Adversaire'));
   const r=(c.renforts||[]).map(x=>foeFiche(x,'Renfort'));
-  balanceDuel(p.map(f=>f.hero?refFiche(f):f),e,r,diff);
-  const R=duelRatio(p,e,r),b={R,win:duelWinP(R)};
+  balanceDuel(p.map(f=>f.hero?refFiche(f):f),e,r,diff,cap);
+  const R=duelRatio(p,e,r,cap),b={R,win:duelWinP(R)};
   return{p,e,r,win:b.win,R:b.R,np:p.length,sb:[...e,...r].filter(f=>f.sbire).length/Math.max(1,e.length+r.length)};
 }
 
@@ -1066,7 +1066,7 @@ Principes :
 - Ne décide jamais à la place du joueur de ses actions ou de ses paroles importantes. Termine chaque réponse sur une situation ouverte.
 - Dialogues vivants et incarnés (le joueur les adore), descriptions sensorielles courtes. Ton et dosage selon la session zéro.
 - Jets : système 3d6 sous la compétence. Modificateurs : facile +2, normal 0, difficile −2, très difficile −4, presque impossible −6. Ne demande un jet que si l’issue est incertaine ET qu’elle compte.
-- Combats : ne déclenche un combat jouable que si l’histoire y mène vraiment et que l’affrontement mérite d’être joué. Choisis le type selon la situation et les ressources : "duel" pour les affrontements à échelle humaine qui comptent vraiment (un duel au sabre, un face-à-face contre un rival, un chef, un Mandalorien ; de préférence 1 contre 1 ou 2 contre 2) ; les fusillades et rixes ordinaires se jouent plutôt en narration, avec des tests, où le joueur peut se mettre à couvert, renverser une table, ruser ou négocier ; "ship" pour un combat du vaisseau personnel du joueur (s’il en a un), "space" seulement si le joueur a une flotte, "ground" seulement s’il a des troupes. Choisis un décor et un objectif cohérents avec le lieu de la scène. Le jeu dose les adversaires ordinaires pour un héros de valeur moyenne : un héros aguerri les domine, un débutant souffre face à des élites (mercenaires réputés, Mandaloriens). Choisis l'adversité selon l'histoire et l'expérience du héros, et laisse des issues quand le combat serait perdu d'avance.
+- Combats : ne déclenche un combat jouable que si l’histoire y mène vraiment et que l’affrontement mérite d’être joué. Choisis le type selon la situation et les ressources : "duel" quand la Force ou un Mandalorien entre en jeu (un duel au sabre, un Jedi ou un Sith face à des tireurs, un chasseur mandalorien) ; "fusillade" pour les autres échanges de tirs et rixes à échelle humaine (pègre, soldats, pirates, droïdes), un combat tactique au tour par tour où l’on se met à couvert ; ou la narration, avec des tests, pour une escarmouche brève ou quand l’astuce compte plus que les tirs (le jeu bascule lui-même entre duel et fusillade selon les combattants) ; "ship" pour un combat du vaisseau personnel du joueur (s’il en a un), "space" seulement si le joueur a une flotte, "ground" seulement s’il a des troupes. Choisis un décor et un objectif cohérents avec le lieu de la scène. Le jeu dose les adversaires ordinaires pour un héros de valeur moyenne : un héros aguerri les domine, un débutant souffre face à des élites (mercenaires réputés, Mandaloriens). Choisis l'adversité selon l'histoire et l'expérience du héros, et laisse des issues quand le combat serait perdu d'avance.
 - Combat raconté : quand un affrontement se joue en narration (par ton choix ou parce que le joueur a choisi « Raconter plutôt »), découpe-le en moments décisifs. À chaque moment, laisse le joueur décider (choices) et demande un jet ("test") quand l’issue est risquée. Le nombre, le terrain et les compétences comptent ; la difficulté choisie en session zéro aussi. Traduis les coups reçus avec "blessure" et "compagnonsBlesses".
 - Après un rapport de combat ou un résultat de jet, raconte les conséquences en restant exactement fidèle au résultat.
 - Les blessures et les dégâts durent : un personnage blessé, une flotte abîmée ou des troupes décimées le restent jusqu’à des soins, des réparations ou des renforts. Tiens-en compte dans le récit et dans la difficulté. Le joueur paie lui-même soins, réparations et recrues depuis sa fiche (lignes INTENDANCE) ; accorde "heal" seulement quand le récit apporte vraiment du repos ou des soins.
@@ -1089,8 +1089,9 @@ const FORMAT=`FORMAT DE RÉPONSE OBLIGATOIRE :
 {"choices":["…","…","…"],"test":null,"combat":null,"updates":null,"codex":null,"chronicle":"…","objectif":null,"horloges":null,"chapter":null,"secret":null}
 - choices : 3 actions courtes (moins de 12 mots) que le joueur pourrait tenter maintenant.
 - test : si l’action est risquée et incertaine : {"skill":"<clé>","mod":<entier de -6 à 2>,"why":"<raison courte>"}. Clés : sabre, tir, pilotage, commandement, discretion, persuasion, intimidation, technique, perception, athletisme, force (force seulement si le personnage est sensible à la Force). Dans ce cas, arrête la narration juste avant l’issue, ne la raconte pas, et mets "choices":[].
-- combat : si un affrontement doit être joué : {"type":"duel"|"ship"|"space"|"ground","title":"<titre court>","briefing":"<2 phrases>","allies":[…],"enemies":[…],"decor":"…"}. Arrête la narration au moment où le combat éclate et mets "choices":[]. Le jeu ajuste lui-même la force des ennemis à la difficulté choisie : décris l’adversité que l’histoire appelle.
+- combat : si un affrontement doit être joué : {"type":"duel"|"fusillade"|"ship"|"space"|"ground","title":"<titre court>","briefing":"<2 phrases>","allies":[…],"enemies":[…],"decor":"…"}. Arrête la narration au moment où le combat éclate et mets "choices":[]. Le jeu ajuste lui-même la force des ennemis à la difficulté choisie : décris l’adversité que l’histoire appelle.
   · duel : "allies" = noms exacts des compagnons présents dans la scène (3 au plus). Un compagnon qui accompagne le joueur combat à ses côtés : ne l'oublie pas, sauf si l'histoire les a séparés. "enemies" = 1 à 4 objets {"name":"…","preset":"<modèle>","blade":"#rrggbb (facultatif)","form":"<forme facultative>","pv":<facultatif 10-60>,"sbire":true|false,"chef":true}. Les sbires (hommes de main, soldats de base, droïdes B1…) tombent en un ou deux coups et tirent moins juste ; le jeu les reconnaît d'après leur modèle, précise "sbire":false pour un soldat d'élite ou un adversaire nommé qui compte. Marque "chef":true le meneur du groupe : s'il tombe, ou si la moitié du groupe est à terre, les sbires peuvent fuir (le rapport l'indique, raconte-le). Un Sith ou un Jedi est une menace mortelle pour qui n'a pas la Force : le jeu ne l'affaiblit pas, alors ménage des issues (fuite, ruse, négociation) et réserve ces affrontements aux grands moments. Les Mandaloriens en beskar sont les rares à pouvoir tenir tête à un utilisateur de la Force. Si la scène oppose plus de 4 adversaires (une patrouille de 10 stormtroopers, une horde de droïdes), mets les 4 premiers dans "enemies" et les autres dans "renforts" (8 au plus, même format), avec "arrivee":<numéro de l'échange où arrivent les premiers renforts, 2 par défaut>. Les renforts entrent au fil des échanges, 2 au plus à la fois, à mesure que des places se libèrent ; annonce-les dans la narration. Modèles par faction : ${lookCatalog()}. Pour un PNJ que les modèles ne décrivent pas, pars du modèle le plus proche et ajoute "look":{"head":"…","outfit":"…","cloth":"#rrggbb","cloth2":"#…","skin":"#…","hair":"#…","stripe":"#…","eyes":"#…","cloak":"none|long|tattered"}, "weapon":"saber|dual|double|pistol|rifle|staff|vibro", "tech":[…] et "kind":"sith|jedi|none" si besoin. Têtes : ${Object.keys(HEADS).join(', ')}. Tenues : ${Object.keys(OUTFITS).join(', ')}. Techniques : ${Object.keys(TECHS).join(', ')}. Formes : shiicho, makashi, soresu, ataru, shien, niman, juyo. "decor" : toits, temple, desert (sable : tirs −1), foret (arbres : tirs −1), vaisseau, glace (sol glissant) ou lave (la lave jaillit).
+  · fusillade : mêmes "allies", "enemies" (1 à 8 cette fois, sbires et chef compris), "renforts" et "arrivee" que le duel, et "lieu" : cantina (bar, salle de jeu), hangar (docks, entrepôt), rue (ruelle, place, extérieur urbain) ou coursive (vaisseau, station). Les combattants s’abritent derrière tables, caisses et murets : c’est le terrain des groupes de sbires menés par un chef.
   · Pour "ship", "space" et "ground", ajoute "camps":{"joueur":"<faction>","ennemi":"<faction>"} : ils donnent l’apparence des vaisseaux et des troupes. Factions : ${Object.entries(FACTIONS).map(([k,l])=>k+' ('+l+')').join(', ')}.
   · ship : le vaisseau personnel du joueur, seul, contre 1 à 4 objets {"type":"fighters"|"interceptor"|"bomber"|"freighter"|"corvette"|"frigate","name":"…"}. Poursuites, interceptions, pirates. Le joueur peut fuir en hyperespace. "decor" : planete, espace, asteroides ou nebuleuse.
   · space : "enemies" = 2 à 7 objets {"type":"cruiser"|"frigate"|"corvette"|"fighters"|"interceptor"|"bomber"|"freighter","name":"…"}. Les bombardiers ravagent les gros vaisseaux, les intercepteurs chassent chasseurs et bombardiers. "decor" : planete, espace, asteroides ou nebuleuse. "fuite":true si la retraite est une option. "mission" : bataille, escorte (protéger un convoi 6 tours), blocus (amener le vaisseau amiral à la zone de saut) ou station (détruire une station de combat). "meteo" : calme ou ionique (boucliers affaiblis).
@@ -1231,21 +1232,22 @@ function applyData(d){
   S.choices=Array.isArray(d.choices)?d.choices.slice(0,4).map(c=>String(c).slice(0,120)):[];
   if(d.test&&SKL[d.test.skill]&&(d.test.skill!=='force'||S.hero.force)){
     S.pending={kind:'test',skill:d.test.skill,mod:Math.max(-6,Math.min(4,Math.round(+d.test.mod||0))),why:String(d.test.why||'').slice(0,160)};
-  }else if(d.combat&&['duel','ship','space','ground'].includes(d.combat.type)){
+  }else if(d.combat&&['duel','fusillade','ship','space','ground'].includes(d.combat.type)){
     const c=d.combat;
+    if(c.type==='duel'||c.type==='fusillade'){const all=[...(Array.isArray(c.enemies)?c.enemies:[]),...(Array.isArray(c.renforts)?c.renforts:[])].filter(x=>x&&typeof x==='object');c.type=duelWanted(all)?'duel':'fusillade';if(c.type==='fusillade'&&!LIEUX_F[c.lieu])c.lieu=c.decor==='vaisseau'?'coursive':'rue';}
     if(c.type==='space'&&!S.res.fleet.length)c.type=S.res.ship?'ship':'duel';
     if(c.type==='ship'&&!S.res.ship)c.type=S.res.fleet.length?'space':'duel';
     if(c.type==='ground'&&!S.res.troops.length)c.type='duel';
-    if(c.type==='duel'&&(!Array.isArray(c.enemies)||!c.enemies.length))c.enemies=[{name:'Adversaire',preset:'thug'}];
-    const dec={duel:DECOR_DUEL,ship:DECOR_SPACE,space:DECOR_SPACE,ground:TERRAIN}[c.type],dv=c.type==='ground'?c.terrain:c.decor;
+    if((c.type==='duel'||c.type==='fusillade')&&(!Array.isArray(c.enemies)||!c.enemies.length))c.enemies=[{name:'Adversaire',preset:'thug'}];
+    const dec={duel:DECOR_DUEL,fusillade:LIEUX_F,ship:DECOR_SPACE,space:DECOR_SPACE,ground:TERRAIN}[c.type],dv=c.type==='ground'?c.terrain:c.type==='fusillade'?c.lieu:c.decor;
     const combat={type:c.type,title:String(c.title||'Affrontement').slice(0,60),briefing:String(c.briefing||'').slice(0,400),allies:[...new Set((Array.isArray(c.allies)?c.allies:[]).map(findComp).filter(Boolean).map(x=>x.name))].slice(0,3),
-      enemies:(Array.isArray(c.enemies)?c.enemies:[]).slice(0,c.type==='space'?7:c.type==='ground'?6:4),decor:dec[dv]?dv:Object.keys(dec)[0],
+      enemies:(Array.isArray(c.enemies)?c.enemies:[]).slice(0,c.type==='space'?7:c.type==='ground'?6:c.type==='fusillade'?8:4),decor:dec[dv]?dv:Object.keys(dec)[0],
       objectif:c.type==='ground'&&OBJECTIF[c.objectif]?c.objectif:'assaut',fuite:c.type==='ship'?c.fuite!==false:c.fuite===true,
       carte:c.type==='ground'&&CARTES[c.carte]?c.carte:'plaine',meteo:c.type==='ground'?(METEO[c.meteo]?c.meteo:'clair'):(c.meteo==='ionique'?'ionique':'calme'),
       mission:c.type==='space'&&MISSION_SP[c.mission]?c.mission:'bataille'};
-    if(c.type==='duel'){const all=Array.isArray(c.enemies)?c.enemies:[];combat.renforts=[...all.slice(4),...(Array.isArray(c.renforts)?c.renforts:[])].filter(x=>x&&typeof x==='object').slice(0,8);
+    if(c.type==='duel'||c.type==='fusillade'){const all=Array.isArray(c.enemies)?c.enemies:[];combat.renforts=[...all.slice(cap4(c)),...(Array.isArray(c.renforts)?c.renforts:[])].filter(x=>x&&typeof x==='object').slice(0,8);
       if(combat.renforts.length)combat.arrivee=Math.max(1,Math.min(8,parseInt(c.arrivee,10)||2));}
-    if(c.type!=='duel'){const cp=c.camps||{},j=FACTIONS[cp.joueur]?cp.joueur:S.res.faction;combat.camps={joueur:j,ennemi:FACTIONS[cp.ennemi]?cp.ennemi:(OPP[j]||'pirate')};}
+    if(c.type!=='duel'&&c.type!=='fusillade'){const cp=c.camps||{},j=FACTIONS[cp.joueur]?cp.joueur:S.res.faction;combat.camps={joueur:j,ennemi:FACTIONS[cp.ennemi]?cp.ennemi:(OPP[j]||'pirate')};}
     balanceFleet(combat);
     S.pending={kind:'combat',combat};
   }
@@ -1279,11 +1281,11 @@ function renderAct(){
         <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="primary" id="rerollBtn">Relancer · 1 point de Destin (${S.destiny})</button><button type="button" id="acceptBtn">Accepter l’échec</button></div>`
       :`<div class="dd" id="rollDice"><i>?</i><i>?</i><i>?</i></div><div><button type="button" class="primary" id="rollBtn">Lancer les dés</button></div>`}</div>`;
   }else if(S.pending&&S.pending.kind==='combat'){
-    const c=S.pending.combat;const kind={duel:'Combat rapproché',ship:'Combat de vaisseau',space:'Bataille spatiale',ground:'Bataille terrestre'}[c.type];
-    const foes=c.type==='duel'?[...c.enemies.map(e=>esc(e.name||'?')),...((c.renforts||[]).length?[`puis ${c.renforts.length} en renfort${c.renforts.length>1?'s':''} (dès l’échange ${c.arrivee||2})`]:[])]:c.enemies.map(e=>esc(e.name||e.type));
-    const mine=c.type==='duel'?[esc(S.hero.name),...(c.allies||[]).map(n=>esc(typeof n==='string'?n:n.name))]:c.type==='ship'?[`${esc(S.res.ship)} (${pct(S.res.shipHull)})`]:c.type==='space'?S.res.fleet.map(s=>esc(s.name)):[esc(S.hero.name)+' (commandement)',...S.res.troops.map(s=>esc(s.name))];
-    const where=c.type==='ground'?`${TERRAIN[c.decor]} · ${CARTES[c.carte||'plaine']}${c.meteo&&c.meteo!=='clair'?' · '+METEO[c.meteo]:''} · ${OBJECTIF[c.objectif]}`:c.type==='duel'?DECOR_DUEL[c.decor]:`${DECOR_SPACE[c.decor]}${c.type==='space'&&c.mission&&c.mission!=='bataille'?' · '+MISSION_SP[c.mission]:''}${c.meteo==='ionique'?' · Tempête ionique':''}`;
-    main=`<div class="combatcard"><span class="kind">${kind}</span><span class="t">${esc(c.title)}</span><span class="kind">${c.camps?esc(FACTIONS[c.camps.joueur]+' contre '+FACTIONS[c.camps.ennemi])+' · ':''}${esc(where||'')} · Difficulté ${DIFF[S.zero.diff||'normal'].l.toLowerCase()}${c.type==='duel'?` · Chances : ${oddsLabel(prepDuel(c,duelParty(c),S.zero.diff||'normal').win)}`:''}${c.fuite?' · fuite possible':''}</span><span>${esc(c.briefing)}</span><ul><li>Ton camp : ${mine.join(', ')}</li><li>En face : ${foes.join(', ')}</li></ul>${c.type==='duel'&&S.res.companions.length?`<div class="allies"><span class="kind">Qui combat à tes côtés ? (3 au plus)</span>${S.res.companions.map((x,i)=>{const on=(c.allies||[]).includes(x.name);return`<button type="button" class="small" data-ally="${i}" aria-pressed="${on}" ${!on&&(c.allies||[]).length>=3?'disabled':''}>${on?'✓ ':''}${esc(x.name)}</button>`;}).join('')}</div>`:''}<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="primary" id="fightBtn">Engager le combat</button><button type="button" id="narrBtn" title="Le combat se joue dans le récit, avec des jets">Raconter plutôt</button></div></div>`;
+    const c=S.pending.combat;const kind={duel:'Duel',fusillade:'Fusillade',ship:'Combat de vaisseau',space:'Bataille spatiale',ground:'Bataille terrestre'}[c.type],hum=c.type==='duel'||c.type==='fusillade';
+    const foes=hum?[...c.enemies.map(e=>esc(e.name||'?')),...((c.renforts||[]).length?[`puis ${c.renforts.length} en renfort${c.renforts.length>1?'s':''} (dès l’échange ${c.arrivee||2})`]:[])]:c.enemies.map(e=>esc(e.name||e.type));
+    const mine=hum?[esc(S.hero.name),...(c.allies||[]).map(n=>esc(typeof n==='string'?n:n.name))]:c.type==='ship'?[`${esc(S.res.ship)} (${pct(S.res.shipHull)})`]:c.type==='space'?S.res.fleet.map(s=>esc(s.name)):[esc(S.hero.name)+' (commandement)',...S.res.troops.map(s=>esc(s.name))];
+    const where=c.type==='ground'?`${TERRAIN[c.decor]} · ${CARTES[c.carte||'plaine']}${c.meteo&&c.meteo!=='clair'?' · '+METEO[c.meteo]:''} · ${OBJECTIF[c.objectif]}`:c.type==='duel'?DECOR_DUEL[c.decor]:c.type==='fusillade'?LIEUX_F[c.decor]:`${DECOR_SPACE[c.decor]}${c.type==='space'&&c.mission&&c.mission!=='bataille'?' · '+MISSION_SP[c.mission]:''}${c.meteo==='ionique'?' · Tempête ionique':''}`;
+    main=`<div class="combatcard"><span class="kind">${kind}</span><span class="t">${esc(c.title)}</span><span class="kind">${c.camps?esc(FACTIONS[c.camps.joueur]+' contre '+FACTIONS[c.camps.ennemi])+' · ':''}${esc(where||'')} · Difficulté ${DIFF[S.zero.diff||'normal'].l.toLowerCase()}${hum?` · Chances : ${oddsLabel(prepDuel(c,duelParty(c),S.zero.diff||'normal',cap4(c)).win)}`:''}${c.fuite?' · fuite possible':''}</span><span>${esc(c.briefing)}</span><ul><li>Ton camp : ${mine.join(', ')}</li><li>En face : ${foes.join(', ')}</li></ul>${hum&&S.res.companions.length?`<div class="allies"><span class="kind">Qui combat à tes côtés ? (3 au plus)</span>${S.res.companions.map((x,i)=>{const on=(c.allies||[]).includes(x.name);return`<button type="button" class="small" data-ally="${i}" aria-pressed="${on}" ${!on&&(c.allies||[]).length>=3?'disabled':''}>${on?'✓ ':''}${esc(x.name)}</button>`;}).join('')}</div>`:''}<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="primary" id="fightBtn">Engager le combat</button><button type="button" id="narrBtn" title="Le combat se joue dans le récit, avec des jets">Raconter plutôt</button></div></div>`;
   }else{
     main=`<div class="choices">${(S.choices||[]).map((c,i)=>`<button type="button" data-choice="${i}">${esc(c)}</button>`).join('')}</div>
     <div class="say"><textarea id="sayBox" rows="2" maxlength="1200" placeholder="Ou écris ce que fait ou dit ${esc(S.hero.name)}…"></textarea><button type="button" class="primary" id="sayBtn">Agir</button></div>`;
@@ -1386,8 +1388,8 @@ function renderStory(){
 function narrateCombat(){
   const p=S.pending;if(busyMJ||!p||p.kind!=='combat')return;const c=p.combat;
   undoStack.push({...snapshot(),text:''});if(undoStack.length>10)undoStack.shift();
-  const foes=c.type==='duel'?[...c.enemies.map(e=>e.name||'?'),...((c.renforts||[]).length?[`${c.renforts.length} en renfort`]:[])]:c.enemies.map(e=>e.name||e.type);
-  const allies=c.type==='duel'?(c.allies||[]):[];
+  const hum=c.type==='duel'||c.type==='fusillade',foes=hum?[...c.enemies.map(e=>e.name||'?'),...((c.renforts||[]).length?[`${c.renforts.length} en renfort`]:[])]:c.enemies.map(e=>e.name||e.type);
+  const allies=hum?(c.allies||[]):[];
   addFeed({k:'me',text:'✎ Jouer ce combat dans le récit'});
   askMJ(`Le joueur préfère jouer le combat « ${c.title} » dans le récit plutôt qu’en combat joué. Ne lance pas de combat joué ("combat":null). Raconte l’affrontement en moments décisifs : à chacun, laisse le joueur choisir ce qu’il fait (se couvrir, viser le chef, renverser une table, ruser, fuir…) et demande un jet quand c’est risqué. Situation : ${c.briefing} Adversaires : ${foes.join(', ')||'?'}.${allies.length?` À ses côtés : ${allies.join(', ')}.`:''} Commence par le premier moment décisif.`);
 }
@@ -1466,10 +1468,17 @@ function finishRoll(r){
 /* ================= Combats ================= */
 let combatCtx=null;
 function showEngine(name){
-  $('shell').hidden=true;['space','ground','duel'].forEach(n=>{$('eng-'+n).hidden=n!==name;});
+  $('shell').hidden=true;['space','ground','duel','skirmish'].forEach(n=>{$('eng-'+n).hidden=n!==name;});
   window.__ENG=name;window.scrollTo(0,0);
 }
-function hideEngines(){['space','ground','duel'].forEach(n=>{$('eng-'+n).hidden=true;});window.__ENG=null;$('shell').hidden=false;}
+function hideEngines(){['space','ground','duel','skirmish'].forEach(n=>{$('eng-'+n).hidden=true;});window.__ENG=null;$('shell').hidden=false;}
+const LIEUX_F={cantina:'Cantina',hangar:'Hangar',rue:'Ruelle',coursive:'Coursive de vaisseau'};
+const MANDO_P=new Set(['mandoWarrior','mandoCommando','mandoChief','deathWatch']);
+const isForceFoe=x=>!!x&&(x.kind==='sith'||x.kind==='jedi'||(x.kind!=='none'&&LOOKS[x.preset]&&LOOKS[x.preset].kind!=='none'));
+const isMandoFoe=x=>!!x&&(MANDO_P.has(x.preset)||(x.look&&x.look.head==='mando')||(Array.isArray(x.tech)&&x.tech.includes('beskar')&&x.tech.includes('jetpack')));
+// Le duel accueille les combats où la Force ou un Mandalorien entre en jeu ; les autres échanges de tirs se jouent en fusillade.
+const duelWanted=foes=>heroFiche().kind!=='none'||foes.some(x=>isForceFoe(x)||isMandoFoe(x));
+const cap4=c=>c.type==='fusillade'?8:4;
 function duelParty(c){
   const p=[heroFiche()];
   for(const a of (c.allies||[])){const comp=findComp(a);if(comp&&p.length<4)p.push(presetFiche(comp.preset,comp.name,'p',null,frac(comp.hp)));}
@@ -1484,6 +1493,10 @@ function launchCombat(){
     const p=duelParty(c);
     const {e,r}=prepDuel(c,p,S.zero.diff||'normal');
     window.__CFG.duel={title:c.title,p,e,r,arrivee:c.arrivee||2,decor:c.decor};
+  }else if(c.type==='fusillade'){
+    eng='skirmish';const p=duelParty(c);
+    const {e,r}=prepDuel(c,p,S.zero.diff||'normal',8);
+    window.__CFG.skirmish={title:c.title,lieu:c.decor,p,e,r,arrivee:c.arrivee||2};
   }else if(c.type==='space'||c.type==='ship'){
     eng='space';
     const player=c.type==='ship'?[{type:'freighter',name:S.res.ship,flag:true,hull:frac(S.res.shipHull),pilot:S.hero.skills.pilotage}]
@@ -1512,7 +1525,7 @@ document.addEventListener('click',e=>{
   if(CC.type==='ship'){const x=(R.state||[])[0];if(x)S.res.shipHull=x.alive?x.hull:.05;}
   else if(R.engine==='space'){S.res.fleet=S.res.fleet.filter(s=>!(R.lost||[]).includes(s.name));S.res.fleet.forEach(s=>{const x=stOf(s.name);if(x)s.hull=x.hull;});}
   if(R.engine==='ground'){S.res.troops=S.res.troops.filter(s=>!(R.lost||[]).includes(s.name));S.res.troops.forEach(s=>{const x=stOf(s.name);if(x)s.hp=x.hp;});}
-  if(R.engine==='duel')(R.state||[]).forEach(x=>{
+  if(R.engine==='duel'||R.engine==='skirmish')(R.state||[]).forEach(x=>{
     if(x.hero){S.hero.hp=x.alive?Math.max(1,x.pv):Math.max(1,Math.round(x.pvMax*.2));return;}
     const c=findComp(x.name);if(c)c.hp=x.alive?x.pv/x.pvMax:.2;});
   if(S.res.fleet.length&&!S.res.fleet.some(s=>s.flag))S.res.fleet[0].flag=true;

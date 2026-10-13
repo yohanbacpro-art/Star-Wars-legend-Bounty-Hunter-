@@ -421,7 +421,7 @@ function onTile(x,y){
   if(mode==='grenade'){if(Math.hypot(x-s.x,y-s.y)>7.5)return;act(async()=>{await grenade(s,x,y);s.ap=0;await spend(s,0);});return;}
   if(mode==='flip'){if(t&&t.t==='table'&&adj(s,{x,y})){act(async()=>{grid[y][x]={t:'flipped',k:'flipped',v:t.v,dir:Math.atan2(y-s.y,x-s.x)};sfx('hit');log(`${s.name} renverse une table.`,'p');mode='move';await spend(s,1);});}return;}
   if(u&&u.side==='e'){
-    if(mode==='melee'||(!s.ranged&&adj(s,u))){if(adj(s,u))act(async()=>{await melee(s,u);s.ap=0;await spend(s,0);});return;}
+    if(mode==='melee'||!s.ranged){if(adj(s,u))act(async()=>{await melee(s,u);s.ap=0;await spend(s,0);});return;}
     if(!s.ranged)return;
     if(!los(s,u)){setHint('Pas de ligne de vue sur cette cible.');return;}
     const aim=mode==='aim',rapid=mode==='rapid'&&s.ap>=2;act(async()=>{if(rapid){await shoot(s,u,{rapid:1});if(u.alive)await shoot(s,u,{rapid:1});}else await shoot(s,u,{aim});s.ap=0;mode='move';await spend(s,0);});return;
@@ -463,6 +463,12 @@ function evalTile(e,x,y){
     if(e.ranged&&seen){const {s}=shotMods(me,p,{});const v=chance(s)/100*(1+(p.hp<10?.6:0)+(coverOf(p,me)===0?.4:0));best=Math.max(best,v);}}
   return best*3+cover*.9-exposed*(e.sbire?1.2:2.2)-(best===0?near*.25:0)+(e.sbire?rnd(0,1.4):rnd(0,.3));
 }
+// Meilleure chance de toucher depuis une case (0 à 1).
+function offenseAt(e,x,y){const me={...e,x,y};let b=0;for(const p of team('p'))if(los(me,p))b=Math.max(b,chance(shotMods(me,p,{}).s)/100);return b;}
+// Sans tir valable, manœuvrer : se rapprocher et chercher l'angle qui prend la cible à découvert.
+function evalFlank(e,x,y){const me={...e,x,y};let flank=0,cover=0,near=99;
+  for(const p of team('p')){near=Math.min(near,Math.hypot(p.x-x,p.y-y));if(los(me,p)){if(coverOf(p,me)===0)flank+=1.5;cover+=coverOf(me,p);}}
+  return flank+cover*.6-near*.3+rnd(0,.4);}
 async function aiTurn(e){
   if(e.fled)return;
   if(moraleBroken&&e.sbire&&Math.random()<.45){await flee(e);return;}
@@ -480,7 +486,12 @@ async function aiTurn(e){
       if(cl>=2&&Math.hypot(p.x-e.x,p.y-e.y)<=7){await grenade(e,p.x,p.y);e.ap=0;return;}}}
   const Rr=reach(e,MOV);let best=[e.x,e.y],bs=evalTile(e,e.x,e.y)+.4;
   for(const [k] of Rr.D){const x=k%COLS,y=(k-x)/COLS;if(!Rr.ok(x,y))continue;const v=evalTile(e,x,y);if(v>bs){bs=v;best=[x,y];}}
-  if(best[0]!==e.x||best[1]!==e.y){await moveAlong(e,Rr.path(best[0],best[1]));e.ap--;if(!e.alive)return;}
+  if(offenseAt(e,best[0],best[1])<.25){ // aucun tir valable même après un pas : sprint pour prendre à revers
+    const R2=reach(e,MOV*2);let fb=null,fs=evalFlank(e,e.x,e.y);
+    for(const [k] of R2.D){const x=k%COLS,y=(k-x)/COLS;if(!R2.ok(x,y))continue;const v=evalFlank(e,x,y);if(v>fs){fs=v;fb=[x,y];}}
+    if(fb){const c=R2.cost(fb[0],fb[1]);await moveAlong(e,R2.path(fb[0],fb[1]));e.ap-=c<=MOV?1:2;if(!e.alive)return;
+      if(e.ap<=0){e.ap=0;return;}}}
+  else if(best[0]!==e.x||best[1]!==e.y){await moveAlong(e,Rr.path(best[0],best[1]));e.ap--;if(!e.alive)return;}
   // tirer sur la meilleure cible, sinon guetter
   let tgt=null,tv=0;
   for(const p of team('p')){if(!los(e,p))continue;const {s}=shotMods(e,p,{});const v=chance(s)*(1+(p.hp<10?.5:0));if(v>tv){tv=v;tgt=p;}}
@@ -517,7 +528,7 @@ function finish(win){
   const lines=[`${TITLE.toUpperCase()} — ${win?'VICTOIRE':'DÉFAITE'} (${round} tours)`,text,'','Ton camp :',...units.filter(u=>u.side==='p').map(u=>`- ${u.name} : ${st(u)}`),'','Adversaires :',...units.filter(u=>u.side==='e').map(u=>`- ${u.name} : ${st(u)}`),...(reserve.length?['',`Renforts jamais engagés : ${reserve.map(f=>f.name).join(', ')}`]:[])];
   $('rTitle').textContent=win?'Victoire':'Défaite';$('rTitle').className=win?'win':'lose';$('rText').textContent=text;$('rBox').value=lines.join('\n');
   log(text,'kill');renderSide();setTimeout(()=>{$('over').hidden=false;},700);
-  window.__fusEnd&&window.__fusEnd({win,text,report:lines.join('\n'),state:units.filter(u=>u.side==='p').map(u=>({name:u.name,hero:!!u.hero,alive:u.alive,pv:Math.max(0,u.hp),pvMax:u.pvMax}))});
+  window.__fusEnd&&window.__fusEnd({win,text,report:lines.join('\n'),lost:units.filter(u=>u.side==='p'&&!u.alive).map(u=>u.name),state:units.filter(u=>u.side==='p').map(u=>({name:u.name,hero:!!u.hero,alive:u.alive,pv:Math.max(0,u.hp),pvMax:u.pvMax}))});
 }
 
 /* ---------- Dessin ---------- */
@@ -564,7 +575,7 @@ function drawOverlay(now){
     if(hover){ctx.fillStyle='rgba(255,120,60,.25)';ctx.fillRect((hover.x-1)*TS,(hover.y-1)*TS,TS*3,TS*3);}}
   if(sel&&sel.alive){ctx.strokeStyle=`rgba(232,171,82,${.6+.3*Math.sin(now/200)})`;ctx.lineWidth=2;ctx.beginPath();ctx.arc(sel.px,sel.py,21,0,7);ctx.stroke();}
 }
-const HELM={trooper:'#e8eaec',mando:null,droid:'#c9b48a',wookiee:null};
+const HELMS=new Set(['trooper','clone','scout','mando','droid','b2','hk','helm','mask','royal']);
 function drawUnit(u,now){
   if(!u.alive&&u.fled)return;
   const x=u.px,y=u.py,L=u.look;
@@ -583,10 +594,12 @@ function drawUnit(u,now){
   ctx.fillStyle=L.cloth;ctx.beginPath();ctx.ellipse(-1,0,8,12,0,0,7);ctx.fill();
   ctx.fillStyle=L.cloth2;ctx.beginPath();ctx.ellipse(-1,0,8,12,0,-.6,.6);ctx.fill();
   if(L.stripe){ctx.fillStyle=L.stripe;ctx.fillRect(-3,-11,3,22);}
-  const hc=L.head==='mando'?L.cloth:HELM[L.head]||L.skin;
+  const helm=HELMS.has(L.head),hc=helm?(L.head==='droid'?L.skin:L.cloth)||'#ccc':L.skin;
+  if(L.head==='lekku'||L.head==='montrals'){ctx.fillStyle=L.skin;ctx.beginPath();ctx.ellipse(-6,-4,5,2.5,.4,0,7);ctx.ellipse(-6,4,5,2.5,-.4,0,7);ctx.fill();}
   ctx.fillStyle=hc;ctx.beginPath();ctx.arc(1,0,7,0,7);ctx.fill();
-  if(L.head==='trooper'||L.head==='mando'){ctx.fillStyle='#111';ctx.fillRect(4,-3,3,6);}
-  else if(L.head==='hair'){ctx.fillStyle=L.hair;ctx.beginPath();ctx.arc(-1,0,6,Math.PI*.5,Math.PI*1.5);ctx.fill();}
+  if(helm){ctx.fillStyle='#111';ctx.fillRect(4,-3,3,6);if(L.stripe&&L.head==='mando'){ctx.fillStyle=L.stripe;ctx.fillRect(-2,-1,5,2);}}
+  else if(L.head==='hair'||L.head==='hairlong'||L.head==='beard'||L.head==='hood'){ctx.fillStyle=L.head==='hood'?L.cloth:L.hair;ctx.beginPath();ctx.arc(-1,0,L.head==='hood'?7.5:6,Math.PI*.5,Math.PI*1.5);ctx.fill();}
+  else if(L.head==='fur'){ctx.fillStyle=L.hair;ctx.beginPath();ctx.arc(0,0,8,0,7);ctx.fill();ctx.fillStyle='#2a1a10';ctx.fillRect(4,-3,3,6);}
   else if(L.head==='horns'){ctx.fillStyle='#d8ccb8';ctx.beginPath();ctx.arc(-1,-6,2,0,7);ctx.arc(-1,6,2,0,7);ctx.fill();}
   else if(L.head==='wookiee'){ctx.fillStyle=L.hair;ctx.beginPath();ctx.arc(0,0,8,0,7);ctx.fill();ctx.fillStyle='#2a1a10';ctx.fillRect(4,-3,3,6);}
   else if(L.head==='cap'){ctx.fillStyle=L.cloth;ctx.beginPath();ctx.arc(0,0,6.5,Math.PI*.4,Math.PI*1.6);ctx.fill();}
@@ -664,7 +677,7 @@ $('fighters').addEventListener('click',ev=>{const b=ev.target.closest('[data-uni
 $('endBtn').addEventListener('click',()=>{if(!busy&&phase==='p'&&!over)endPlayerPhase();});
 $('nextBtn').addEventListener('click',()=>{if(!busy&&phase==='p')nextUnit();});
 $('copyBtn').addEventListener('click',()=>{const b=$('rBox');b.select();try{navigator.clipboard.writeText(b.value);}catch(e){}$('copyBtn').textContent='Rapport copié';});
-$('againBtn').addEventListener('click',()=>{if(!window.__CFG||!window.__CFG.fusillade)newGame(LIEU);});
+$('againBtn').addEventListener('click',()=>{if(!(window.__CFG&&window.__CFG.skirmish))newGame(LIEU);});
 document.addEventListener('keydown',ev=>{if(ev.key==='Escape'&&mode!=='move'){mode='move';renderSide();}});
 
 /* ---------- Partie ---------- */
@@ -676,7 +689,7 @@ function start(cfg){
   numberDupes([...e,...r]);units=[];placeSide(p,'p');placeSide(e,'e');units=[...p,...e];reserve=r;waveFrom=cfg.arrivee||2;
   TITLE=cfg.title||LIEUX[LIEU].titre.join(' ');
   const t=cfg.title?[cfg.title,'']:LIEUX[LIEU].titre;$('title').innerHTML=`${esc(t[0])}${t[1]?` <span>${esc(t[1])}</span>`:''}`;
-  $('over').hidden=true;$('copyBtn').textContent='Copier le rapport';
+  $('over').hidden=true;$('copyBtn').textContent='Copier le rapport';$('againBtn').textContent=cfg.integrated?'Retour au récit':'Rejouer';
   log(`${p.map(u=>u.name).join(', ')} face à ${e.length+r.length} adversaires.`,'kill');renderDice();
   startPlayerPhase();
 }

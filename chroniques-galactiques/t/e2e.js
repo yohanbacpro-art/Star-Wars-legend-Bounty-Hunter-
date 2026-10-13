@@ -35,7 +35,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const click=el=>{if(!el)throw new Error('missing element');el.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));};
 async function waitFor(fn,ms=60000,label=''){const t=Date.now();while(Date.now()-t<ms){try{if(fn())return;}catch(e){}await sleep(50);}throw new Error('timeout '+label);}
 async function finishEngine(name,flee){
-  const pre={space:'sp',ground:'gr',duel:'ar'}[name];
+  const pre={space:'sp',ground:'gr',duel:'ar',skirmish:'fu'}[name];
   await waitFor(()=>!$('eng-'+name).hidden,5000,'engine shown '+name);
   let n=0;
   while($(pre+'-over').hidden&&n++<400){if(n%25===0)console.log(name,'turn',($(pre+'-turnNo')||$(pre+'-roundNo')).textContent,($(pre+'-fleet')||{}).textContent?.slice(0,80));
@@ -238,7 +238,24 @@ async function finishEngine(name,flee){
    ok(prompts[np5+1].includes('[PENDANT CE TEMPS] On retrouve Darth Test')&&prompts[np5+1].includes('Nom : Darth Test')&&prompts[np5+1].includes('Agent Vey (Commandant rebelle'),'retour au premier fil, le second en pause');
    ok(prompts[np5+1].includes('[Agent Vey] Vey arrive sur Corellia.'),'chronique étiquetée par personnage');
    ok(!$('pace').textContent.includes('Infiltrer le QG impérial'),'chaque fil garde son objectif');
-   click($('menuNew'));ok($('campZone').textContent.includes('Darth Test & Agent Vey'),'la campagne porte les deux noms');}
+   // Fusillade : un héros sans la Force contre des soldats
+   const fz=n=>R('Des stormtroopers bloquent le hangar.',{choices:[],combat:{type:'duel',title:'Hangar 7',briefing:'Une patrouille.',lieu:'hangar',enemies:[{name:'Lieutenant',preset:'officer',chef:true},{name:'Stormtrooper',preset:'trooper'},{name:'Stormtrooper',preset:'trooper'}]},chronicle:n});
+   answers.push(fz('Darth Test tombe sur une patrouille.'));click(d.querySelector('[data-choice="0"]'));await waitFor(()=>$('fightBtn'),5000,'sith card');
+   ok(d.querySelector('#actZone .combatcard .kind').textContent==='Duel','un héros Sith affronte les soldats en duel');
+   answers.push(R('Pendant ce temps.',{choices:['Avancer'],chronicle:'x'}));click($('narrBtn'));await waitFor(()=>!d.querySelector('#stopMJ')&&d.querySelector('[data-tool="switch"]')&&!d.querySelector('[data-tool="switch"]').disabled,5000,'narr2');
+   {const n0=prompts.length;answers.push(R('Vey reprend.',{choices:['Avancer'],chronicle:'x'}));click(d.querySelector('[data-tool="switch"]'));await waitFor(()=>prompts.length===n0+1&&!d.querySelector('#stopMJ')&&d.querySelector('[data-choice="0"]'),5000,'to vey');}
+   answers.push(fz('Vey tombe sur une patrouille.'));const np6=prompts.length;click(d.querySelector('[data-choice="0"]'));await waitFor(()=>$('fightBtn'),5000,'fus card');
+   const fc=$('actZone').textContent;
+   ok(d.querySelector('#actZone .combatcard .kind').textContent==='Fusillade'&&fc.includes('Hangar')&&/Chances : /.test(fc),'sans la Force ni Mandalorien, le combat devient une fusillade');
+   ok(prompts[np6].includes('"fusillade"')&&prompts[np6].includes('cantina (bar, salle de jeu)'),'le MJ connaît la fusillade');
+   click($('fightBtn'));
+   ok(!$('eng-skirmish').hidden&&$('fu-setupSect').hidden&&$('fu-title').textContent.includes('Hangar 7'),'moteur de fusillade lancé');
+   ok(/Agent Vey/.test($('fu-fighters').textContent)&&/Lieutenant/.test($('fu-fighters').textContent),'les combattants du récit sont sur la carte');
+   await finishEngine('skirmish');
+   await waitFor(()=>prompts.length>=np6+2,8000,'after fus');
+   ok(/HANGAR 7 — (VICTOIRE|DÉFAITE) \(\d+ tours\)/.test(prompts[np6+1])&&prompts[np6+1].includes('- Agent Vey :'),'rapport de fusillade transmis au MJ');
+   await waitFor(()=>!d.querySelector('#stopMJ'),5000,'fin MJ');
+   click($('menuNew'));ok(/Agent Vey & Darth Test|Darth Test & Agent Vey/.test($('campZone').textContent),'la campagne porte les deux noms');}
   ok(!$('sheet').textContent.includes('Contrats'),'pas de contrats tant que l’histoire ne les ouvre pas');
   console.log('prompt bytes',Buffer.byteLength(prompts[4]));fs.writeFileSync('p4.txt',prompts[4]);console.log('E2E OK');process.exit(0);
 })().catch(e=>{console.log('FAIL',e.message);process.exit(1);});
