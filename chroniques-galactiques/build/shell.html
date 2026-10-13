@@ -957,7 +957,8 @@ function duelRatio(p,e,r=[],cap=4){
   const besk=f=>(f.tech||[]).includes('beskar')?1.4:1;
   // les sbires visent mal et fuient quand le moral cède
   const P=p.map(f=>({hp:Math.max(f.pv,De)*besk(f),dps:fDps(f,saberShare(foes),beskarShare(foes))}));
-  const E=foes.map(f=>({hp:Math.max(f.pv,Dp)*besk(f),dps:fDps(f,saberShare(p),beskarShare(p))*(1-.27*sb)}));
+  // en fusillade (cap 8), un tireur aguerri bien abrité pèse plus lourd qu'en duel
+  const E=foes.map(f=>({hp:Math.max(f.pv,Dp)*besk(f)*(cap>4&&!f.sbire&&isGun(f)?1.3:1),dps:fDps(f,saberShare(p),beskarShare(p))*(1-.27*sb)*(cap>4&&!f.sbire&&isGun(f)?1.3:1)}));
   const P0=P.reduce((a,x)=>a+x.hp,0),E0=E.reduce((a,x)=>a+x.hp,0);let lostP=0,lostE=0;
   const hit=(L,dmg,cap)=>{let lost=0;while(dmg>1e-9){const t=L.filter(x=>x.hp>0).slice(0,cap).sort((a,b)=>a.hp-b.hp)[0];if(!t)break;const d=Math.min(dmg,t.hp);t.hp-=d;dmg-=d;lost+=d;}return lost;};
   for(let t=0;t<60;t+=.25){
@@ -982,7 +983,7 @@ function balanceDuel(p,e,r=[],diff,cap=4){
   const Rt=DUEL_TARGET[diff]||DUEL_TARGET.normal;
   // Pour chaque cran de précision (−4 à +3), on cherche les PV qui atteignent la cible ; on garde le meilleur compromis.
   let best=0,bestH=1,bestErr=1e9;
-  for(let d=-4;d<=3;d++){
+  for(let d=-4;d<=(cap>4?1:3);d++){
     let lo=.4,hi=2.2;for(let it=0;it<14;it++){const h=(lo+hi)/2;if(duelRatio(p,scaled(e,d,h),scaled(r,d,h),cap)>Rt)lo=h;else hi=h;}
     const h=(lo+hi)/2,err=Math.abs(Math.log(duelRatio(p,scaled(e,d,h),scaled(r,d,h),cap)/Rt))+Math.abs(d)*.05+Math.abs(Math.log(h))*.02;
     if(err<bestErr){bestErr=err;best=d;bestH=h;}}
