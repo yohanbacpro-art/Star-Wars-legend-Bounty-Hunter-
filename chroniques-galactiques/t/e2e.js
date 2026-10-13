@@ -222,6 +222,23 @@ async function finishEngine(name,flee){
    ok(!d.querySelector('#fightBtn'),'plus de combat joué en attente');
    answers.push(R('Suite.',{choices:['x'],chronicle:'x'}));click(d.querySelector('[data-choice="0"]'));await waitFor(()=>prompts.length===np4+3,5000,'after narr');
    ok(/PV (\d+)\/(\d+) \(/.test(prompts[np4+2])&&(m=>+m[1]<+m[2])(prompts[np4+2].match(/PV (\d+)\/(\d+) \(/)),'une blessure racontée fait perdre des PV');}
+  // Deux personnages
+  {await waitFor(()=>!d.querySelector('#stopMJ'),5000,'fin MJ');
+   click(d.querySelector('[data-tab="fiche"]'));ok($('secondBtn'),'bouton « Créer un second personnage » dans la fiche');click($('secondBtn'));
+   ok(!$('scr-create').hidden&&d.querySelector('#steps [data-step="0"]').disabled&&d.querySelector('#steps [data-step="6"]').disabled,'assistant ouvert sans époque ni session zéro');
+   click(d.querySelector('[data-path="rebel"]'));click($('stepNext'));$('cName').value='Agent Vey';click($('stepNext'));click($('stepNext'));click($('stepNext'));
+   ok($('stepNext').textContent==='Ajouter le personnage','dernière étape : ajouter le personnage');
+   const np5=prompts.length;answers.push(R('Sur Corellia, une cellule rebelle se cache.',{choices:['Contacter la cellule'],objectif:'Infiltrer le QG impérial',chronicle:'Vey arrive sur Corellia.',secret:{arc:'deux fils'}}));
+   click($('stepNext'));await waitFor(()=>prompts.length===np5+1&&!d.querySelector('#stopMJ'),5000,'second');await sleep(100);
+   ok(prompts[np5].includes('[NOUVEAU PERSONNAGE]')&&prompts[np5].includes('## Autre personnage du joueur\nDarth Test'),'le MJ ouvre le second fil en connaissant le premier');
+   ok(prompts[np5].includes('Nom : Agent Vey')&&prompts[np5].includes('Deux personnages : le joueur mène deux personnages'),'le personnage actif est le second');
+   ok($('feed').textContent.includes('Pendant ce temps — Agent Vey')&&$('pace').textContent.includes('Infiltrer le QG impérial'),'séparateur et objectif propre au second fil');
+   const sw=d.querySelector('[data-tool="switch"]');ok(sw&&sw.textContent.includes('Darth Test'),'bouton « Pendant ce temps » vers le premier personnage');
+   answers.push(R('Darth Test médite.',{choices:['x'],chronicle:'Le Sith attend.'}));click(sw);await waitFor(()=>prompts.length===np5+2&&!d.querySelector('#stopMJ'),5000,'switch');await sleep(100);
+   ok(prompts[np5+1].includes('[PENDANT CE TEMPS] On retrouve Darth Test')&&prompts[np5+1].includes('Nom : Darth Test')&&prompts[np5+1].includes('Agent Vey (Commandant rebelle'),'retour au premier fil, le second en pause');
+   ok(prompts[np5+1].includes('[Agent Vey] Vey arrive sur Corellia.'),'chronique étiquetée par personnage');
+   ok(!$('pace').textContent.includes('Infiltrer le QG impérial'),'chaque fil garde son objectif');
+   click($('menuNew'));ok($('campZone').textContent.includes('Darth Test & Agent Vey'),'la campagne porte les deux noms');}
   ok(!$('sheet').textContent.includes('Contrats'),'pas de contrats tant que l’histoire ne les ouvre pas');
   console.log('prompt bytes',Buffer.byteLength(prompts[4]));fs.writeFileSync('p4.txt',prompts[4]);console.log('E2E OK');process.exit(0);
 })().catch(e=>{console.log('FAIL',e.message);process.exit(1);});

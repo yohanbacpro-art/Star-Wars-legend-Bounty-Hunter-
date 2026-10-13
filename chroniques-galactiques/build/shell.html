@@ -466,7 +466,7 @@ async function rset(k,json){
 }
 async function rdel(k){if(db){try{await db.doc(dkey(k)).delete();}catch(e){}}try{localStorage.removeItem(LSK+k);}catch(e){}}
 const newId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-function idxEntry(s){const era=ERAS.find(e=>e.k===s.era);return{id:s.id,name:s.hero.name,path:PATHS[s.path]?PATHS[s.path].l:'',era:era?era.l:'',ch:s.chapter?s.chapter.n:1,title:(s.chapter&&s.chapter.title)||'',updated:Date.now()};}
+function idxEntry(s){const era=ERAS.find(e=>e.k===s.era);return{id:s.id,name:Array.isArray(s.fils)&&s.fils.length===2?`${s.hero.name} & ${s.fils[1-s.fil].hero.name}`:s.hero.name,path:PATHS[s.path]?PATHS[s.path].l:'',era:era?era.l:'',ch:s.chapter?s.chapter.n:1,title:(s.chapter&&s.chapter.title)||'',updated:Date.now()};}
 async function storeNew(s){s.id=newId();s.bookPart=0;await rset('camp_'+s.id,JSON.stringify(trimState(s)));index.unshift(idxEntry(s));await rset('index',JSON.stringify(index));return s.id;}
 async function loadIndex(){
   const raw=await rget('index');
@@ -567,11 +567,20 @@ function derived(h){
 /* ================= Création ================= */
 const STEPS=['Époque','Voie','Identité','Compétences','Apparence & armes','Ressources','Session zéro'];
 function showScreen(id){for(const s of['scr-title','scr-create','scr-story'])$(s).hidden=s!==id;$('menuNew').hidden=id==='scr-title';window.scrollTo(0,0);}
-function startCreation(){draft=newDraft();step=0;showScreen('scr-create');renderStep();}
-function renderSteps(){$('steps').innerHTML=STEPS.map((s,i)=>`<button type="button" data-step="${i}" class="${i===step?'on':i<step?'done':''}" ${i>step?'disabled':''}>${i+1} · ${s}</button>`).join('');}
+let createMode='campaign';
+const firstStep=()=>createMode==='second'?1:0,lastStep=()=>createMode==='second'?5:STEPS.length-1;
+function startCreation(){createMode='campaign';draft=newDraft();step=0;showScreen('scr-create');renderStep();}
+function startSecond(){if(!S||twoFils())return;createMode='second';draft=newDraft();draft.era=S.era;draft.year=S.year;draft.zero=clone(S.zero);step=1;showScreen('scr-create');renderStep();}
+function addSecond(){
+  const d=draft;migrate(S);S.fils=[pickFil(),{hero:d.hero,res:{...d.res,notes:[]},path:d.path,xp:0,objectif:'',objTurns:0,horloges:[],contrats:[],unlocks:{},fresh:true}];
+  S.fils[1].hero.hp=derived(d.hero).pv;if(S.fils[1].res.fleet.length)S.fils[1].res.fleet.forEach((x,i)=>x.flag=i===0);
+  createMode='campaign';showScreen('scr-story');switchFil();
+}
+function renderSteps(){$('steps').innerHTML=STEPS.map((s,i)=>`<button type="button" data-step="${i}" class="${i===step?'on':i<step?'done':''}" ${i>step||i<firstStep()||i>lastStep()?'disabled':''}>${i+1} · ${s}</button>`).join('');}
 function renderStep(){
   renderSteps();$('stepErr').hidden=true;
-  $('stepPrev').disabled=step===0;$('stepNext').textContent=step===STEPS.length-1?'Lancer la campagne':'Suivant';
+  $('stepPrev').disabled=step===firstStep()&&createMode!=='second';$('stepPrev').textContent=createMode==='second'&&step===firstStep()?'Retour au récit':'Précédent';
+  $('stepNext').textContent=step===lastStep()?(createMode==='second'?'Ajouter le personnage':'Lancer la campagne'):'Suivant';
   const B=$('stepBody'),h=draft.hero;
   if(step===0){
     B.innerHTML=`<h3>Choisis ton époque</h3><p class="intro">Le MJ construira l’histoire dans le contexte de cette période de l’univers Legends.</p>
@@ -711,10 +720,10 @@ $('stepBody').addEventListener('change',e=>{
 });
 $('stepBody').addEventListener('input',e=>{if(step===4)readStep();if(e.target.id==='zDose')$('zDoseL').textContent=doseLabel(+e.target.value);});
 $('steps').addEventListener('click',e=>{const b=e.target.closest('[data-step]');if(!b||b.disabled)return;readStep();step=+b.dataset.step;renderStep();});
-$('stepPrev').addEventListener('click',()=>{readStep();if(step>0){step--;renderStep();}});
+$('stepPrev').addEventListener('click',()=>{readStep();if(createMode==='second'&&step===firstStep()){createMode='campaign';showScreen('scr-story');renderStory();return;}if(step>firstStep()){step--;renderStep();}});
 $('stepNext').addEventListener('click',()=>{
   readStep();const err=validate();if(err){$('stepErr').textContent=err;$('stepErr').hidden=false;return;}
-  if(step<STEPS.length-1){step++;renderStep();}else beginCampaign();
+  if(step<lastStep()){step++;renderStep();}else if(createMode==='second')addSecond();else beginCampaign();
 });
 
 /* ================= Fiches de combat ================= */
@@ -849,6 +858,27 @@ function findComp(n){
   const k=normName(typeof n==='string'?n:n&&n.name);if(!k)return null;const L=S.res.companions,first=x=>x.split(' ')[0];
   return L.find(c=>normName(c.name)===k)||L.find(c=>{const m=normName(c.name);return m.startsWith(k+' ')||k.startsWith(m+' ')||(first(k).length>=4&&first(m)===first(k));})||null;
 }
+/* ================= Deux personnages : un fil par personnage ================= */
+// Le fil actif occupe les champs habituels de S ; l'autre attend dans S.fils[1-S.fil].
+const FIL_KEYS=['hero','res','path','xp','objectif','objTurns','horloges','contrats','unlocks'];
+const twoFils=()=>!!(S&&Array.isArray(S.fils)&&S.fils.length===2);
+const otherFil=()=>S.fils[1-S.fil];
+const filName=i=>i===S.fil?S.hero.name:(S.fils[i]&&S.fils[i].hero.name)||'?';
+function pickFil(){return Object.fromEntries(FIL_KEYS.map(k=>[k,clone(S[k])]));}
+function switchFil(){
+  if(!twoFils()||busyMJ||S.pending)return;
+  undoStack.push({...snapshot(),text:''});if(undoStack.length>10)undoStack.shift();
+  const to=1-S.fil;S.fils[S.fil]=pickFil();Object.assign(S,clone(S.fils[to]));S.fil=to;migrate(S);
+  const fresh=!!S.fils[to].fresh;delete S.fils[to].fresh;
+  addFeed({k:'sys',chapter:true,text:`Pendant ce temps — ${S.hero.name}`});renderStory();
+  askMJ(fresh?`[NOUVEAU PERSONNAGE] Le joueur ouvre le second fil de la campagne avec ${S.hero.name}. Mets à jour le carnet secret ("secret" complet) pour tisser ce fil avec l’arc existant, ajoute au codex ses premiers PNJ, lieux et quêtes, donne son "objectif", puis écris une scène d’ouverture forte qui plonge ce personnage dans l’action.`
+    :`[PENDANT CE TEMPS] On retrouve ${S.hero.name}. Raconte en une ou deux phrases ce qui s’est passé pour ce personnage entre-temps (le temps a passé aussi dans son fil), puis reprends sa scène là où ça devient intéressant.`);
+}
+function otherFilBlock(){
+  const o=otherFil(),h=o.hero,i=1-S.fil;
+  const last=S.chronicle.filter(c=>c.fil===i).slice(-6).map(c=>c.t).join(' ');
+  return[`${h.name} (${PATHS[o.path]?PATHS[o.path].l:'?'}, ${h.species||'?'}) — fil en pause, il ne sait que ce qu’il a vécu.`,`Origine : ${String(h.origin||'—').slice(0,300)}`,`Objectif : ${o.objectif||'—'}`,`Où en est son fil : ${last||'(il n’a pas encore commencé)'}`].join('\n');
+}
 function migrate(s){
   if(!s.codex)s.codex={};for(const k of Object.keys(CODEX))if(!Array.isArray(s.codex[k]))s.codex[k]=[];
   if(!Array.isArray(s.chapters))s.chapters=[];if(s.playerNotes==null)s.playerNotes='';
@@ -856,6 +886,7 @@ function migrate(s){
   if(!Array.isArray(s.hero.forms))s.hero.forms=['none',...(s.hero.form&&s.hero.form!=='none'?[s.hero.form]:[])];
   if(!s.res.faction||!FACTIONS[s.res.faction])s.res.faction=PATH_FACTION[s.path]||'pirate';
   if(!s.fixDuel1){s.fixDuel1=true;const m=derived(s.hero).pv;if(s.hero.hp!=null&&s.hero.hp<m/2)s.hero.hp=Math.ceil(m/2);s.res.companions.forEach(c=>{if(c.hp<.5)c.hp=.5;});}
+  if(!Array.isArray(s.fils))s.fils=[];if(s.fil==null)s.fil=0;
   if(!Array.isArray(s.horloges))s.horloges=[];if(s.objectif==null)s.objectif='';if(s.objTurns==null)s.objTurns=0;
   if(!s.unlocks)s.unlocks={};if(!Array.isArray(s.contrats))s.contrats=[];
   if(s.hero.force&&s.hero.alignement==null)s.hero.alignement=s.path==='sith'?-5:s.path==='jedi'?5:s.hero.side==='sith'?-2:s.hero.side==='jedi'?2:0;
@@ -1079,7 +1110,7 @@ const ROMANCE_RULE={
 };
 const LONG_RULE={courte:'2 à 3 paragraphes courts',normale:'3 à 6 paragraphes courts',longue:'5 à 9 paragraphes, plus amples, en prenant le temps des dialogues et des atmosphères'};
 const STYLE_RULE={direct:'Style direct : phrases nettes, rythme rapide.',equilibre:'',litteraire:'Style littéraire : prose travaillée, images fortes, rythme soigné, sans lourdeur.'};
-function rulesNow(){const z=S.zero;return RULES.replace('__ROMANCE__',ROMANCE_RULE[z.romance||'discrete']);}
+function rulesNow(){const z=S.zero;return RULES.replace('__ROMANCE__',ROMANCE_RULE[z.romance||'discrete'])+(twoFils()?`\n- Deux personnages : le joueur mène deux personnages dans la même histoire, en alternance (« Pendant ce temps… »). Tu joues le personnage actif décrit plus bas ; l’autre fil avance hors champ. Ce qu’un personnage apprend, l’autre l’ignore tant qu’il ne l’a pas appris dans le récit. Tisse des liens entre les deux fils : croisements, conséquences de l’un sur l’autre, ironie dramatique (le joueur sait ce que ses personnages ignorent). Le carnet secret couvre les deux fils.`:'');}
 function formatNow(){const z=S.zero;return FORMAT.replace('__LONGUEUR__',LONG_RULE[z.longueur||'normale']).replace('__STYLE__',STYLE_RULE[z.style||'equilibre']);}
 function buildPrompt(entry,opening){
   const era=ERAS.find(e=>e.k===S.era);
@@ -1087,7 +1118,8 @@ function buildPrompt(entry,opening){
     `## Carnet secret du MJ (ne jamais le révéler)\n${S.secret?JSON.stringify(S.secret):'(à créer)'}`,
     `## Chapitres précédents (résumés)\n${S.chapters.map(c=>`Ch. ${c.n} — ${c.title} : ${c.summary}`).join('\n')||'(aucun)'}`,
     `## Carnet de campagne (ce que le joueur sait)\n${codexBlock()||'(vide)'}`,
-    `## Chronique du chapitre en cours\n${S.chronicle.filter(c=>c.ch===S.chapter.n).slice(-40).map(c=>c.t).join('\n')||'(début du chapitre)'}`,
+    `## Chronique du chapitre en cours\n${S.chronicle.filter(c=>c.ch===S.chapter.n).slice(-40).map(c=>(twoFils()&&c.fil!=null?`[${filName(c.fil)}] `:'')+c.t).join('\n')||'(début du chapitre)'}`,
+    ...(twoFils()?[`## Autre personnage du joueur\n${otherFilBlock()}`]:[]),
     `## Chapitre en cours\n${S.chapter.n} — ${S.chapter.title||'(sans titre)'}`,
     `## Rythme\n${paceBlock()}`,
     `## Dernières scènes\n${recentBlock()||'(aucune)'}`,
@@ -1170,9 +1202,9 @@ function mergeHorloges(list){
 function applyData(d){
   if(d.secret&&typeof d.secret==='object')S.secret=d.secret;
   if(d.codex)mergeCodex(d.codex);
-  if(d.chapter&&d.chapter.title){if(S.chapter.title){closeChapter(d.chapter.resume);S.chapter.n++;S.objTurns=0;healAll();S.destiny=Math.min(5,(S.destiny||0)+1);}S.chapter.title=String(d.chapter.title).slice(0,80);addFeed({k:'sys',chapter:true,text:`Chapitre ${S.chapter.n} — ${S.chapter.title}`},true);
+  if(d.chapter&&d.chapter.title){if(S.chapter.title){closeChapter(d.chapter.resume);S.chapter.n++;S.objTurns=0;if(twoFils()){const o=otherFil();o.hero.hp=derived(o.hero).pv;o.res.companions.forEach(c=>c.hp=1);}healAll();S.destiny=Math.min(5,(S.destiny||0)+1);}S.chapter.title=String(d.chapter.title).slice(0,80);addFeed({k:'sys',chapter:true,text:`Chapitre ${S.chapter.n} — ${S.chapter.title}`},true);
     const last=S.feed.pop(),mj=S.feed.pop();S.feed.push(last,mj);}
-  if(d.chronicle)S.chronicle.push({ch:S.chapter.n,t:String(d.chronicle).slice(0,400)});
+  if(d.chronicle)S.chronicle.push({ch:S.chapter.n,t:String(d.chronicle).slice(0,400),...(twoFils()?{fil:S.fil}:{})});
   const obj=typeof d.objectif==='string'?d.objectif.trim().slice(0,90):'';
   if(obj&&normName(obj)!==normName(S.objectif)){S.objectif=obj;S.objTurns=0;}else S.objTurns=(S.objTurns||0)+1;
   if(Array.isArray(d.horloges))mergeHorloges(d.horloges);
@@ -1237,7 +1269,7 @@ function renderFeed(){$('feed').innerHTML=S.feed.map(feedHTML).join('');scrollFe
 function renderAct(){
   const A=$('actZone');
   if(busyMJ){A.innerHTML=`<div class="typing">Le MJ écrit…</div><div><button type="button" class="small" id="stopMJ">Interrompre</button></div>`;return;}
-  const tools=`<div class="tools"><button type="button" class="small ghost" data-tool="regen" ${lastAsk?'':'disabled'} title="Le MJ réécrit sa dernière réponse">↻ Régénérer</button><button type="button" class="small ghost" data-tool="undo" ${undoStack.length?'':'disabled'} title="Revenir avant ta dernière action">↶ Annuler mon action</button><button type="button" class="small ghost" data-tool="skip" ${busyMJ||S.pending?'disabled':''} title="Ellipse jusqu’à la prochaine scène qui compte">⏭ Passer à la suite</button><button type="button" class="small ghost ${oocMode?'on':''}" data-tool="ooc">? Question hors-jeu</button><span class="destiny" title="Points de Destin : relance un jet raté">Destin ${'●'.repeat(S.destiny||0)}${'○'.repeat(Math.max(0,5-(S.destiny||0)))}</span></div>
+  const tools=`<div class="tools"><button type="button" class="small ghost" data-tool="regen" ${lastAsk?'':'disabled'} title="Le MJ réécrit sa dernière réponse">↻ Régénérer</button><button type="button" class="small ghost" data-tool="undo" ${undoStack.length?'':'disabled'} title="Revenir avant ta dernière action">↶ Annuler mon action</button>${twoFils()?`<button type="button" class="small ghost" data-tool="switch" ${busyMJ||S.pending?'disabled':''} title="Passer à ton autre personnage">⇄ Pendant ce temps : ${esc(otherFil().hero.name)}</button>`:''}<button type="button" class="small ghost" data-tool="skip" ${busyMJ||S.pending?'disabled':''} title="Ellipse jusqu’à la prochaine scène qui compte">⏭ Passer à la suite</button><button type="button" class="small ghost ${oocMode?'on':''}" data-tool="ooc">? Question hors-jeu</button><span class="destiny" title="Points de Destin : relance un jet raté">Destin ${'●'.repeat(S.destiny||0)}${'○'.repeat(Math.max(0,5-(S.destiny||0)))}</span></div>
     ${oocMode?`<div class="say"><textarea id="oocBox" rows="2" maxlength="600" placeholder="Une question au MJ, hors du jeu : qui est ce personnage, que sait mon héros, comment marche une règle…"></textarea><button type="button" id="oocBtn">Demander</button></div>`:''}`;
   let main='';
   if(S.pending&&S.pending.kind==='test'){
@@ -1282,6 +1314,8 @@ function renderSheet(){
     </section>
     ${(r.notes||[]).length?`<section><span class="label">À retenir</span><div class="chron">${r.notes.slice(-8).map(n=>`<div>${esc(n)}</div>`).join('')}</div></section>`:''}
     <section><span class="label">Chronique</span><div class="chron">${S.chronicle.slice(-14).map(c=>`<div><b>Ch. ${c.ch}</b> · ${esc(c.t)}</div>`).join('')||'<div>L’histoire commence.</div>'}</div></section>
+    <section><span class="label">Second personnage</span>${twoFils()?`<p class="sub" style="margin:0">${esc(otherFil().hero.name)} attend son tour (${esc(PATHS[otherFil().path]?PATHS[otherFil().path].l:'')}). Passe de l’un à l’autre avec « Pendant ce temps ».</p>`
+      :`<p class="sub" style="margin:0">Mène une seconde destinée dans la même histoire : un Moff et un agent rebelle, deux rivaux, deux époques d’une même vie… Le MJ tisse les deux fils.</p><div><button type="button" class="small" id="secondBtn" ${busyMJ||S.pending?'disabled':''}>Créer un second personnage</button></div>`}</section>
     <section><span class="label">Exporter</span><div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="small" id="bookBtn">Livre de campagne</button><button type="button" class="small" id="dlBtn">Fichier de sauvegarde</button><button type="button" class="small" id="expBtn">Copier la sauvegarde</button></div><textarea id="saveBox" rows="3" hidden readonly></textarea><p class="sub" style="margin:0">Le livre contient tout le récit, chapitre par chapitre.</p></section>`;
   }else if(sheetTab==='carnet'){
     const c=S.codex,rel=v=>/alli|amic/i.test(v||'')?'good':/hostile|ennemi/i.test(v||'')?'bad':/méfi/i.test(v||'')?'warn':'';
@@ -1378,6 +1412,7 @@ $('actZone').addEventListener('click',e=>{
   else if(b.dataset.tool==='regen')regenerate();
   else if(b.dataset.tool==='undo')undoAction();
   else if(b.dataset.tool==='skip')skipAhead();
+  else if(b.dataset.tool==='switch')switchFil();
   else if(b.dataset.tool==='ooc'){oocMode=!oocMode;renderAct();if(oocMode)$('oocBox').focus();}
   else if(b.id==='oocBtn')askOOC($('oocBox').value);
   else if(b.dataset.ally!=null&&S.pending&&S.pending.combat){const c=S.pending.combat,x=S.res.companions[+b.dataset.ally];if(x){c.allies=c.allies||[];
@@ -1401,6 +1436,7 @@ $('sheet').addEventListener('click',e=>{
   if(b.dataset.leave){const c=findComp(b.dataset.leave);if(c){S.res.companions=S.res.companions.filter(x=>x!==c);S.res.notes.push(`${c.name} a quitté le groupe.`);saveCampaign();}renderSheet();return;}
   if(b.dataset.contrat){const k=S.contrats.find(x=>x.cible===b.dataset.contrat);if(k&&k.etat==='disponible'&&!busyMJ&&!S.pending){const d=[k.prime?k.prime+' crédits':'',k.condition||''].filter(Boolean).join(', ');playerAct(`J’accepte le contrat sur ${k.cible}${d?' ('+d+')':''}.`);}return;}
   if(b.dataset.mg){const m=b.dataset.mg;manage(m,m==='buyship'?$('bShipT').value:m==='buytroop'?$('bTroopT').value:b.dataset.k,m==='buyship'?$('bShipN').value:m==='buytroop'?$('bTroopN').value:'');return;}
+  if(b.id==='secondBtn'){startSecond();return;}
   if(b.id==='expBtn'){const box=$('saveBox');box.hidden=false;box.value=JSON.stringify(trimState(S));box.select();try{navigator.clipboard.writeText(box.value).then(()=>{b.textContent='Copiée';},()=>{});}catch(err){}}
   if(b.id==='dlBtn'){saveCampaign();offerFile(`${fileName(S.hero.name)}-sauvegarde.json`,JSON.stringify(trimState(S)),b);}
   if(b.id==='bookBtn'){b.disabled=true;fullBook().then(all=>{b.disabled=false;offerFile(`${fileName(S.hero.name)}-livre.html`,bookHTML(all),b);});}
@@ -1503,7 +1539,7 @@ function renderCamps(){
   Z.innerHTML=`<span class="label">Tes campagnes</span>${index.map(c=>`<div class="camp"><div><b>${esc(c.name)}</b><span>${esc(c.path)} · ${esc(c.era)}</span><span>Chapitre ${c.ch}${c.title?' — '+esc(c.title):''} · ${fmtDate(c.updated)}</span></div>
     <div class="campb"><button type="button" class="primary small" data-open="${esc(c.id)}">Reprendre</button><button type="button" class="small ghost" data-delc="${esc(c.id)}">${delArmed===c.id?'Confirmer la suppression':'Supprimer'}</button></div></div>`).join('')}`;
 }
-function toTitle(){if(S)saveCampaign();S=null;showScreen('scr-title');renderCamps();}
+function toTitle(){if(S){saveCampaign();const i=index.findIndex(x=>x.id===S.id);if(i>=0)index[i]={...idxEntry(S),updated:Date.now()};}S=null;showScreen('scr-title');renderCamps();}
 $('btnNew').addEventListener('click',startCreation);
 function sfxLabel(){const b=$('sfxBtn');b.textContent=window.SFX.on?'Son : activé':'Son : coupé';b.setAttribute('aria-pressed',String(window.SFX.on));}
 $('sfxBtn').addEventListener('click',()=>{window.SFX.toggle();sfxLabel();});sfxLabel();
