@@ -21,6 +21,8 @@ const TEAMS={
   'jedi seul':()=>[H('jediKnight','Héros')],
   'mandalorien seul':()=>[H('mandoWarrior','Héros')],
   'trio':()=>[H('smuggler','Héros'),H('cloneTrooper','Rex'),H('twilekRogue','Lyss')],
+  'héros débutant (Tir 13)':()=>[H('bountyHunter','Héros',{tir:13,pv:30,tech:[],hero:true})],
+  'héros vétéran (Tir 16)':()=>[H('bountyHunter','Héros',{tir:16,pv:30,tech:['grenades'],hero:true})],
   'tireur blessé (20 %)':()=>[H('bountyHunter','Héros',{tir:15,pv:16,pvMax:32,malus:-2})],
 };
 const FOES={
@@ -33,6 +35,7 @@ const FOES={
 async function fight(team,foes,diff){
   const p=TEAMS[team](),c=JSON.parse(JSON.stringify(FOES[foes]));
   const prep=w.__prep(c,p,diff);
+  if(process.env.DEBUG&&!fight.seen?.[team+foes]){(fight.seen=fight.seen||{})[team+foes]=1;const g=f=>`${f.name} pv${f.pv} tir${f.tir} sab${f.sabre}${f.sbire?' sbire':''}`;console.log('  P:',prep.p.map(g).join(' | '));console.log('  E:',prep.e.map(g).join(' | '),'R:',prep.r.length?g(prep.r[0])+' ×'+prep.r.length:'');}
   const D=w.__duel;
   D.set({p:prep.p.map(f=>({...f,side:'p'})),e:prep.e.map(f=>({...f,side:'e'})),r:prep.r.map(f=>({...f,side:'e'}))},c.arrivee||2,'toits');
   D.startCombat();

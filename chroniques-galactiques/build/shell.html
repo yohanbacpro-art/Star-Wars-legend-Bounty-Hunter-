@@ -175,6 +175,7 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
 .aff{position:relative;height:5px;background:#2a252c;margin:4px 0 2px;max-width:220px}
 .aff::after{content:'';position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--dim)}
 .aff i{position:absolute;top:0;bottom:0}
+.codex .join{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px}.codex .join select{max-width:220px}
 .codex p.voix{font-style:italic;color:#cfc6cf}
 .codex .k{font-weight:600;color:var(--steel);font-size:12px}
 .hist{margin:4px 0 0;padding-left:16px;color:var(--dim);font-size:12px}
@@ -465,9 +466,11 @@ const newId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 function idxEntry(s){const era=ERAS.find(e=>e.k===s.era);return{id:s.id,name:s.hero.name,path:PATHS[s.path]?PATHS[s.path].l:'',era:era?era.l:'',ch:s.chapter?s.chapter.n:1,title:(s.chapter&&s.chapter.title)||'',updated:Date.now()};}
 async function storeNew(s){s.id=newId();s.bookPart=0;await rset('camp_'+s.id,JSON.stringify(trimState(s)));index.unshift(idxEntry(s));await rset('index',JSON.stringify(index));return s.id;}
 async function loadIndex(){
-  try{index=JSON.parse(await rget('index')||'[]');}catch(e){index=[];}
+  const raw=await rget('index');
+  try{index=JSON.parse(raw||'[]');}catch(e){index=[];}
   if(!Array.isArray(index))index=[];
-  if(!index.length){
+  // l'ancienne sauvegarde unique n'est reprise qu'une fois, avant que l'index existe
+  if(raw==null){
     let old=null;
     if(db){try{const s=await db.doc(dkey('campaign')).get();if(s.exists&&s.data()&&s.data().json)old=s.data().json;}catch(e){}}
     if(!old){try{old=localStorage.getItem(LS_OLD);}catch(e){}}
@@ -887,12 +890,20 @@ function balanceFleet(c){
 const P3=[0,0,0,1,4,10,20,35,56,81,108,135,160,181,196,206,212];
 const hitP=s=>{s=Math.round(s);return Math.max(4,s<3?0:s>16?212:P3[s])/216;};
 const isGun=f=>f.weapon==='pistol'||f.weapon==='rifle';
+const dmgHit=f=>isGun(f)?((f.pvMax||f.pv)<20?4.5:5.5)+(f.weapon==='rifle'?1:0)+1:7.5+((f.tech||[]).includes('brute')?2:0);
 function fDps(f,vsSaber,vsBeskar=0){
-  const t=f.tech||[];let d=isGun(f)?((f.pvMax||f.pv)<20?4.5:5.5)+(f.weapon==='rifle'?1:0)+1:7.5+(t.includes('brute')?2:0);
-  let x=hitP((isGun(f)?f.tir:f.sabre)+(f.malus||0)-1)*d;
+  const t=f.tech||[],d=dmgHit(f);let x;
+  if(isGun(f)){
+    // dégâts moyens par échange selon les choix de l'IA : tir, tir visé (+3 : décisif sur 3d6 quand la compétence est basse),
+    // tir rapide, grenade, lance-flammes, assaut aérien, et les échanges passés à couvert ou en esquive
+    const k=f.tir+(f.malus||0)-.6,h=hitP;
+    const A=[[4,h(k)*d],[1.5,h(k+3)*(d+2)],[t.includes('rapid')?2:0,2*h(k-2)*d],[t.includes('grenades')?.7:0,h(k)*13],
+      [t.includes('flamer')?.7:0,h(k+1)*8],[t.includes('jetpack')?1.6:0,h(k+2)*(d+1)],[1.8,0]];
+    x=A.reduce((a,[w,v])=>a+w*v,0)/A.reduce((a,[w])=>a+w,0);
+  }else x=hitP(f.sabre+(f.malus||0)-1)*d;
   // les éclairs rendent un Sith plus redoutable qu'un Jedi de même valeur
   if(f.kind&&f.kind!=='none')x*=1+((f.kind==='sith'?SITH_K:FORCE_K)-1)*(1-.5*vsBeskar);
-  if(['saber','dual','double'].includes(f.weapon))x*=1-.55*vsBeskar;if(t.includes('grenades')||t.includes('flamer'))x*=1.08;if(t.includes('jetpack'))x*=1.06;
+  if(['saber','dual','double'].includes(f.weapon))x*=1-.55*vsBeskar;
   // une lame dévie les tirs et pare les coups
   // flammes, roquettes et assaut aérien ne se dévient pas
   const tools=['flamer','grenades','jetpack'].filter(k=>t.includes(k)).length;
@@ -901,33 +912,47 @@ function fDps(f,vsSaber,vsBeskar=0){
 let FORCE_K=1.4,SITH_K=2.1,GUN_VS_SABER=.65,MELEE_VS_SABER=.35;
 const beskarShare=l=>l.length?l.filter(f=>(f.tech||[]).includes('beskar')).length/l.length:0;
 const saberShare=l=>l.length?l.filter(f=>['saber','dual','double'].includes(f.weapon)).length/l.length:0;
-function duelStrength(p,e,r=[]){
-  const hp=l=>l.reduce((a,f)=>a+f.pv*((f.tech||[]).includes('beskar')?1.4:1),0);
-  const dps=(l,v)=>l.map(f=>fDps(f,saberShare(v),beskarShare(v))).sort((a,b)=>b-a).slice(0,4).reduce((a,b)=>a+b,0);
-  // les sbires visent mal et fuient quand le moral cède : un groupe de sbires pèse moins lourd
-  const sb=[...e,...r].filter(f=>f.sbire).length/Math.max(1,e.length+r.length);
-  return{P:hp(p)*dps(p,e),E:(hp(e)+hp(r))*dps(e,p)*(1-.27*sb)};
+// Rapport de force par une petite simulation des pertes, échange par échange : chaque camp concentre ses coups
+// sur l'adversaire le plus affaibli, quatre ennemis au plus sont au contact et les renforts comblent les vides.
+// Chaque adversaire coûte au moins un coup au but. R > 1 : le joueur l'emporte (R = PV de départ / PV perdus) ;
+// R < 1 : il tombe (R = part des forces ennemies abattues).
+function duelRatio(p,e,r=[]){
+  const avgHit=l=>l.length?l.reduce((a,f)=>a+dmgHit(f),0)/l.length:5,foes=[...e,...r];
+  const sb=foes.filter(f=>f.sbire).length/Math.max(1,foes.length),Dp=avgHit(p),De=avgHit(foes);
+  const besk=f=>(f.tech||[]).includes('beskar')?1.4:1;
+  // les sbires visent mal et fuient quand le moral cède
+  const P=p.map(f=>({hp:Math.max(f.pv,De)*besk(f),dps:fDps(f,saberShare(foes),beskarShare(foes))}));
+  const E=foes.map(f=>({hp:Math.max(f.pv,Dp)*besk(f),dps:fDps(f,saberShare(p),beskarShare(p))*(1-.27*sb)}));
+  const P0=P.reduce((a,x)=>a+x.hp,0),E0=E.reduce((a,x)=>a+x.hp,0);let lostP=0,lostE=0;
+  const hit=(L,dmg,cap)=>{let lost=0;while(dmg>1e-9){const t=L.filter(x=>x.hp>0).slice(0,cap).sort((a,b)=>a.hp-b.hp)[0];if(!t)break;const d=Math.min(dmg,t.hp);t.hp-=d;dmg-=d;lost+=d;}return lost;};
+  for(let t=0;t<60;t+=.25){
+    const pa=P.filter(x=>x.hp>0),field=E.filter(x=>x.hp>0).slice(0,4);if(!pa.length||!field.length)break;
+    const dp=pa.reduce((a,x)=>a+x.dps,0)*.25,de=field.reduce((a,x)=>a+x.dps,0)*.25;
+    lostE+=hit(E,dp,4);lostP+=hit(P,de,9);
+  }
+  return Math.min(20,(lostE/E0)/Math.max(.001,lostP/P0));
 }
-// Rapport de force visé (joueur / ennemis) selon la difficulté, calibré par simulation (t/sim.js).
-const DUEL_TARGET={facile:1.55,normal:1.11,difficile:.88,brutal:.62};
+// Rapport de force visé selon la difficulté, et chances annoncées : calibrés par simulation (t/sim.js).
+const DUEL_TARGET={facile:2.02,normal:1.27,difficile:.9,brutal:.62};
 const DUEL_ODDS=[[.75,'favorable'],[.5,'équilibré'],[.3,'risqué'],[0,'désespéré']];
-const duelWinP=R=>1/(1+Math.exp(-(3.4*Math.log(R)+0.25)));
+const duelWinP=R=>1/(1+Math.exp(-(2.4*Math.log(R)+.05)));
 function balanceDuel(p,e,r=[],diff){
   if(!e.length&&!r.length)return{R:1,win:.5};
   // Un Sith ou un Jedi ennemi garde toute sa puissance face à un camp sans utilisateur de la Force :
   // l'équilibrage ne touche qu'aux adversaires ordinaires, et la carte de combat annonce honnêtement les chances.
   const forceP=p.some(f=>f.kind&&f.kind!=='none'),adj=f=>forceP||!f.kind||f.kind==='none';
-  const scaled=(l,d,h)=>l.map(f=>adj(f)?{...f,tir:f.tir+d,sabre:f.sabre+d,pv:f.pv*h}:f);
-  const base=duelStrength(p,e,r),x=base.P/(DUEL_TARGET[diff]||DUEL_TARGET.normal)/base.E;
+  const pvOf=(f,h)=>f.sbire?Math.max(4,Math.min(12,Math.round(f.pv*h))):Math.max(8,Math.min(70,Math.round(f.pv*h)));
+  const sk=v=>Math.max(5,Math.min(18,v));
+  const scaled=(l,d,h)=>l.map(f=>adj(f)?{...f,tir:sk(f.tir+d),sabre:sk(f.sabre+d),pv:pvOf(f,h)}:f);
+  const Rt=DUEL_TARGET[diff]||DUEL_TARGET.normal;
   // Pour chaque cran de précision (−4 à +3), on cherche les PV qui atteignent la cible ; on garde le meilleur compromis.
   let best=0,bestH=1,bestErr=1e9;
   for(let d=-4;d<=3;d++){
-    let lo=.4,hi=2.2;for(let it=0;it<16;it++){const h=(lo+hi)/2;if(duelStrength(p,scaled(e,d,h),scaled(r,d,h)).E/base.E<x)lo=h;else hi=h;}
-    const h=(lo+hi)/2,err=Math.abs(Math.log(duelStrength(p,scaled(e,d,h),scaled(r,d,h)).E/base.E/x))+Math.abs(d)*.05+Math.abs(Math.log(h))*.02;
+    let lo=.4,hi=2.2;for(let it=0;it<14;it++){const h=(lo+hi)/2;if(duelRatio(p,scaled(e,d,h),scaled(r,d,h))>Rt)lo=h;else hi=h;}
+    const h=(lo+hi)/2,err=Math.abs(Math.log(duelRatio(p,scaled(e,d,h),scaled(r,d,h))/Rt))+Math.abs(d)*.05+Math.abs(Math.log(h))*.02;
     if(err<bestErr){bestErr=err;best=d;bestH=h;}}
-  [...e,...r].filter(adj).forEach(f=>{f.tir=Math.max(5,Math.min(18,f.tir+best));f.sabre=Math.max(5,Math.min(18,f.sabre+best));
-    f.pv=f.sbire?Math.max(4,Math.min(12,Math.round(f.pv*bestH))):Math.max(8,Math.min(70,Math.round(f.pv*bestH)));f.pvMax=f.pv;});
-  const st=duelStrength(p,e,r),R=st.P/st.E;
+  [...e,...r].filter(adj).forEach(f=>{f.tir=sk(f.tir+best);f.sabre=sk(f.sabre+best);f.pv=pvOf(f,bestH);f.pvMax=f.pv;});
+  const R=duelRatio(p,e,r);
   return{R,win:duelWinP(R)};
 }
 const oddsLabel=w=>DUEL_ODDS.find(([t])=>w>=t)[1];
@@ -939,10 +964,18 @@ function foeFiche(x,dflt){
   return f;
 }
 // Prépare un combat rapproché : fiches ennemies, renforts et équilibrage.
+// Le héros de référence : 13 dans sa compétence de combat, 30 PV, sans équipement spécial.
+// Les ennemis sont dosés contre lui : tout ce que le joueur gagne ensuite (XP, équipement) se ressent au combat.
+// Les blessures, elles, sont reportées sur la référence et restent compensées comme avant.
+function refFiche(f){
+  const gun=isGun(f),fr=f.pv/(f.pvMax||f.pv);
+  return{...f,tir:gun?13:Math.min(f.tir,13),sabre:gun?Math.min(f.sabre,13):13,force:f.kind&&f.kind!=='none'?13:f.force,fp:Math.min(f.fp||0,3),tech:[],pvMax:30,pv:Math.round(30*fr)};
+}
 function prepDuel(c,p,diff){
   const e=c.enemies.slice(0,4).map(x=>foeFiche(x,'Adversaire'));
   const r=(c.renforts||[]).map(x=>foeFiche(x,'Renfort'));
-  const b=balanceDuel(p,e,r,diff);
+  balanceDuel(p.map(f=>f.hero?refFiche(f):f),e,r,diff);
+  const R=duelRatio(p,e,r),b={R,win:duelWinP(R)};
   return{p,e,r,win:b.win,R:b.R,np:p.length,sb:[...e,...r].filter(f=>f.sbire).length/Math.max(1,e.length+r.length)};
 }
 
@@ -991,12 +1024,13 @@ Principes :
 - Ne décide jamais à la place du joueur de ses actions ou de ses paroles importantes. Termine chaque réponse sur une situation ouverte.
 - Dialogues vivants et incarnés (le joueur les adore), descriptions sensorielles courtes. Ton et dosage selon la session zéro.
 - Jets : système 3d6 sous la compétence. Modificateurs : facile +2, normal 0, difficile −2, très difficile −4, presque impossible −6. Ne demande un jet que si l’issue est incertaine ET qu’elle compte.
-- Combats : ne déclenche un combat jouable que si l’histoire y mène vraiment et que l’affrontement mérite d’être joué. Choisis le type selon la situation et les ressources : "duel" pour tout combat à échelle humaine (sabres et/ou blasters), "ship" pour un combat du vaisseau personnel du joueur (s’il en a un), "space" seulement si le joueur a une flotte, "ground" seulement s’il a des troupes. Choisis un décor et un objectif cohérents avec le lieu de la scène. Équilibre la difficulté avec la puissance du joueur et ses compagnons.
+- Combats : ne déclenche un combat jouable que si l’histoire y mène vraiment et que l’affrontement mérite d’être joué. Choisis le type selon la situation et les ressources : "duel" pour tout combat à échelle humaine (sabres et/ou blasters), "ship" pour un combat du vaisseau personnel du joueur (s’il en a un), "space" seulement si le joueur a une flotte, "ground" seulement s’il a des troupes. Choisis un décor et un objectif cohérents avec le lieu de la scène. Le jeu dose les adversaires ordinaires pour un héros de valeur moyenne : un héros aguerri les domine, un débutant souffre face à des élites (mercenaires réputés, Mandaloriens). Choisis l'adversité selon l'histoire et l'expérience du héros, et laisse des issues quand le combat serait perdu d'avance.
 - Après un rapport de combat ou un résultat de jet, raconte les conséquences en restant exactement fidèle au résultat.
 - Les blessures et les dégâts durent : un personnage blessé, une flotte abîmée ou des troupes décimées le restent jusqu’à des soins, des réparations ou des renforts. Tiens-en compte dans le récit et dans la difficulté. Le joueur paie lui-même soins, réparations et recrues depuis sa fiche (lignes INTENDANCE) ; accorde "heal" seulement quand le récit apporte vraiment du repos ou des soins.
 - Expérience : 0 pour une scène ordinaire (la plupart), 1 pour un accomplissement notable ou une belle idée du joueur, 2 ou 3 pour une grande victoire ou la fin d’un arc. Les lignes PROGRESSION indiquent ce que le joueur a appris.
 - Le récit est le cœur du jeu : les mécaniques (combats, intendance, progression) servent l’histoire et y reviennent toujours.
 - Chaque PNJ important a sa voix : vocabulaire, tics, accent, ce qu’il veut et ce qu’il cache. Garde-la constante d’une scène à l’autre et note-la dans "codex" ("voix").
+- Compagnons : quand un personnage rejoint durablement le groupe (il voyage et se bat aux côtés du joueur), ajoute-le avec "addCompanions" en choisissant le modèle le plus proche, en plus de sa fiche dans "codex". Quand il part ou meurt, retire-le avec "removeCompanions".
 - Les relations vivent : les compagnons et PNJ ont leurs opinions, leurs désaccords, une loyauté qui se gagne et se perd selon les actes du joueur. Quand un moment change un lien, mets à jour "affinite" (−5 à +5) et décris-le dans "evenement".
 - Romance : __ROMANCE__
 - Systèmes de jeu : rien n’apparaît que l’histoire n’ait amené. Le tableau de contrats ne s’ouvre que si le personnage choisit la chasse aux primes ; la réputation suit ses actes envers chaque faction ; l’alignement dans la Force suit ses choix moraux, sans le juger.
@@ -1196,6 +1230,7 @@ function renderAct(){
 }
 let sheetTab='fiche';
 const meter=(f,label)=>`<span class="meter" title="${esc(label)}"><i style="width:${Math.round(frac(f)*100)}%;background:${f>=.6?'var(--ok)':f>=.3?'var(--amber)':'var(--sith)'}"></i></span>`;
+let joinPick=null;
 function renderSheet(){
   const h=S.hero,D=derived(h),r=S.res,era=ERAS.find(e=>e.k===S.era),hp=heroHP();
   const tabs=[['fiche','Fiche'],['carnet','Carnet'],...(S.unlocks&&S.unlocks.contrats?[['contrats',`Contrats${S.contrats.filter(k=>k.etat==='disponible').length?' · '+S.contrats.filter(k=>k.etat==='disponible').length:''}`]]:[]),['prog',`Progression${S.xp?' · '+S.xp+' XP':''}`],['inten','Intendance']];
@@ -1226,6 +1261,9 @@ function renderSheet(){
       return`<div class="${n.statut&&n.statut!=='vivant'?'done':''}"><b>${esc(n.nom)}</b>${n.role?` <span class="sub">${esc(n.role)}</span>`:''} ${n.relation?`<span class="chip ${rel(n.relation)}">${esc(n.relation)}</span>`:''}${n.romance&&n.romance!=='aucune'?` <span class="chip love">${esc(n.romance)}</span>`:''}${n.statut&&n.statut!=='vivant'?` <span class="chip">${esc(n.statut)}</span>`:''}
       ${a!=null?`<div class="aff" title="Affinité ${a>0?'+':''}${a}"><i style="left:${a<0?50+a*10:50}%;width:${Math.abs(a)*10}%;background:${a>=0?'var(--ok)':'var(--sith)'}"></i></div>`:''}
       ${n.lien?`<p><b class="k">Lien</b> ${esc(n.lien)}</p>`:''}${n.note?`<p>${esc(n.note)}</p>`:''}${n.voix?`<p class="voix">« ${esc(n.voix)} »</p>`:''}
+      ${n.statut&&n.statut!=='vivant'?'':findComp(n.nom)?`<div class="join"><span class="chip good">Dans ton groupe</span><button type="button" class="small ghost" data-leave="${esc(n.nom)}">Quitte le groupe</button></div>`
+        :joinPick===n.nom?`<div class="join"><select id="joinLook" aria-label="Apparence en combat">${lookOptions('smuggler')}</select><button type="button" class="small primary" data-joinok="${esc(n.nom)}">Confirmer</button><button type="button" class="small ghost" data-joinno="1">Annuler</button></div>`
+        :`<div class="join"><button type="button" class="small" data-join="${esc(n.nom)}" ${S.res.companions.length>=8?'disabled':''}>Rejoint ton groupe</button></div>`}
       ${n.hist&&n.hist.length?`<ul class="hist">${n.hist.slice().reverse().map(h=>`<li><b>Ch. ${h.ch}</b> ${esc(h.t)}</li>`).join('')}</ul>`:''}</div>`;}).join('')||'<div class="sub">Personne pour l’instant.</div>'}</div></section>
     ${c.factions.length?`<section><span class="label">Factions</span><div class="codex">${c.factions.map(f=>`<div><b>${esc(f.nom)}</b> ${f.attitude?`<span class="chip ${rel(f.attitude)}">${esc(f.attitude)}</span>`:''}${f.reputation!=null?` <span class="chip ${f.reputation>0?'good':f.reputation<0?'bad':''}">réputation : ${REP_LABEL(f.reputation)}</span><div class="aff"><i style="left:${f.reputation<0?50+f.reputation*10:50}%;width:${Math.abs(f.reputation)*10}%;background:${f.reputation>=0?'var(--ok)':'var(--sith)'}"></i></div>`:''}${f.note?`<p>${esc(f.note)}</p>`:''}</div>`).join('')}</div></section>`:''}
     ${c.lieux.length?`<section><span class="label">Lieux</span><div class="codex">${[...c.lieux].reverse().map(l=>`<div><b>${esc(l.nom)}</b>${l.note?`<p>${esc(l.note)}</p>`:''}</div>`).join('')}</div></section>`:''}
@@ -1307,6 +1345,12 @@ $('sheet').addEventListener('click',e=>{
   if(b.dataset.tab){sheetTab=b.dataset.tab;renderSheet();return;}
   if(b.dataset.zset){const [k,v]=b.dataset.zset.split(':');if(['romance','longueur','style'].includes(k)){S.zero[k]=v;saveCampaign();renderSheet();}return;}
   if(b.dataset.xp){spendXP(b.dataset.xp,b.dataset.k);return;}
+  if(b.dataset.join){joinPick=b.dataset.join;renderSheet();return;}
+  if(b.dataset.joinno){joinPick=null;renderSheet();return;}
+  if(b.dataset.joinok){const n=b.dataset.joinok,pre=$('joinLook').value;joinPick=null;
+    if(!findComp(n)&&S.res.companions.length<8){S.res.companions.push({name:n.slice(0,30),preset:LOOKS[pre]?pre:'smuggler',note:'',hp:1});S.res.notes.push(`${n} a rejoint le groupe de ${S.hero.name}.`);saveCampaign();}
+    renderSheet();return;}
+  if(b.dataset.leave){const c=findComp(b.dataset.leave);if(c){S.res.companions=S.res.companions.filter(x=>x!==c);S.res.notes.push(`${c.name} a quitté le groupe.`);saveCampaign();}renderSheet();return;}
   if(b.dataset.contrat){const k=S.contrats.find(x=>x.cible===b.dataset.contrat);if(k&&k.etat==='disponible'&&!busyMJ&&!S.pending){const d=[k.prime?k.prime+' crédits':'',k.condition||''].filter(Boolean).join(', ');playerAct(`J’accepte le contrat sur ${k.cible}${d?' ('+d+')':''}.`);}return;}
   if(b.dataset.mg){const m=b.dataset.mg;manage(m,m==='buyship'?$('bShipT').value:m==='buytroop'?$('bTroopT').value:b.dataset.k,m==='buyship'?$('bShipN').value:m==='buytroop'?$('bTroopN').value:'');return;}
   if(b.id==='expBtn'){const box=$('saveBox');box.hidden=false;box.value=JSON.stringify(trimState(S));box.select();try{navigator.clipboard.writeText(box.value).then(()=>{b.textContent='Copiée';},()=>{});}catch(err){}}

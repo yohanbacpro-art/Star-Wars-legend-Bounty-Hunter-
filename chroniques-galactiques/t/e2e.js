@@ -123,6 +123,10 @@ async function finishEngine(name,flee){
   ok(!prompts[4].includes('Ouverture sur la station.'),'chronique limitée au chapitre en cours');
   click(d.querySelector('[data-tab="carnet"]'));
   ok($('sheet').textContent.includes('Station Kessaria'),'onglet Carnet affiche les lieux');
+  {const jb=d.querySelector('#sheet [data-join="Lyss"]');ok(!!jb,'bouton « Rejoint ton groupe » sur un PNJ');click(jb);
+   $('joinLook').value='twilekRogue';click(d.querySelector('#sheet [data-joinok="Lyss"]'));
+   ok($('sheet').textContent.includes('Dans ton groupe')&&!!d.querySelector('#sheet [data-leave="Lyss"]'),'le PNJ rejoint le groupe de combat');
+   click(d.querySelector('#sheet [data-leave="Lyss"]'));ok(!!d.querySelector('#sheet [data-join="Lyss"]'),'… et peut le quitter');}
   // Couche récit
   ok(/- Varek \(gouverneur\) \[hostile, affinité -1, méfiance polie\][^\n]*Voix : Parle bas[^\n]*Récemment : Il a menti sur les cargos/.test(prompts[4]),'relation, voix et historique transmis au MJ');
   ok(prompts[4].includes('romance : attirance')&&prompts[4].includes('Romance : une romance peut naître'),'romance suivie et règle de romance');
