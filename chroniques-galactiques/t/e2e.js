@@ -63,7 +63,7 @@ async function finishEngine(name,flee){
   $('cName').value='Moff Tarkis';click($('stepNext'));
   click(d.querySelector('[data-sk="tir"][data-d="1"]'));click($('stepNext'));
   await sleep(100);click($('stepNext'));
-  click(d.querySelector('[data-addres="companions"]'));{const co=[...d.querySelectorAll('#stepBody [data-co][data-f="name"]')].pop();co.value='Krrasantan Le Noir ';}click($('stepNext'));
+  click(d.querySelector('[data-addres="companions"]'));{const co=[...d.querySelectorAll('#stepBody [data-co][data-f="name"]')].pop();co.value='Krrasantan Le Noir ';const pr=[...d.querySelectorAll('#stepBody [data-co][data-f="preset"]')].pop();pr.value='mandoWarrior';}click($('stepNext'));
   click(d.querySelector('[data-theme="Guerre et rébellion"]'));
   click($('stepNext'));
   await waitFor(()=>$('rollBtn'),5000,'roll button');
@@ -241,7 +241,7 @@ async function finishEngine(name,flee){
    // Fusillade : un héros sans la Force contre des soldats
    const fz=n=>R('Des stormtroopers bloquent le hangar.',{choices:[],combat:{type:'duel',title:'Hangar 7',briefing:'Une patrouille.',lieu:'hangar',enemies:[{name:'Lieutenant',preset:'officer',chef:true},{name:'Stormtrooper',preset:'trooper'},{name:'Stormtrooper',preset:'trooper'}]},chronicle:n});
    answers.push(fz('Darth Test tombe sur une patrouille.'));click(d.querySelector('[data-choice="0"]'));await waitFor(()=>$('fightBtn'),5000,'sith card');
-   ok(d.querySelector('#actZone .combatcard .kind').textContent==='Duel','un héros Sith affronte les soldats en duel');
+   ok(d.querySelector('#actZone .combatcard .kind').textContent==='Fusillade','un héros Sith face à des soldats : fusillade, avec ses pouvoirs');
    answers.push(R('Pendant ce temps.',{choices:['Avancer'],chronicle:'x'}));click($('narrBtn'));await waitFor(()=>!d.querySelector('#stopMJ')&&d.querySelector('[data-tool="switch"]')&&!d.querySelector('[data-tool="switch"]').disabled,5000,'narr2');
    {const n0=prompts.length;answers.push(R('Vey reprend.',{choices:['Avancer'],chronicle:'x'}));click(d.querySelector('[data-tool="switch"]'));await waitFor(()=>prompts.length===n0+1&&!d.querySelector('#stopMJ')&&d.querySelector('[data-choice="0"]'),5000,'to vey');}
    answers.push(fz('Vey tombe sur une patrouille.'));const np6=prompts.length;click(d.querySelector('[data-choice="0"]'));await waitFor(()=>$('fightBtn'),5000,'fus card');

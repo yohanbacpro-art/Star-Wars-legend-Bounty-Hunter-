@@ -993,7 +993,7 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
 <div class="wrap">
   <header>
     <div><div class="eyebrow" id="fu-eyebrow">Fusillade tactique · prototype</div><h1 id="fu-title">Rixe au <span>Ver Fumant</span></h1></div>
-    <div class="turn">Tour<b id="fu-roundNo">01</b><span id="fu-phaseTag">À toi</span></div>
+    <div class="turn">Tour<b id="fu-roundNo">01</b><span id="fu-phaseTag">À toi</span><span id="fu-waveInfo" hidden></span></div>
   </header>
   <div class="stage">
     <div class="map">
@@ -4100,10 +4100,15 @@ const LOOK={
   officer:{cloth:'#4a4f45',cloth2:'#2a2d27',skin:'#e0bfa4',hair:'#4a3626',head:'cap'},
   mando:{cloth:'#5d7a8c',cloth2:'#2b2f33',skin:'#5d7a8c',hair:'#222',head:'mando',stripe:'#c9a227'},
   b1:{cloth:'#c9b48a',cloth2:'#8a7a5c',skin:'#c9b48a',hair:'#111',head:'droid'},
+  jedi:{cloth:'#a88c63',cloth2:'#4a3a2a',skin:'#d4ab8e',hair:'#4a2f1f',head:'hairlong'},
+  inquis:{cloth:'#2a2d33',cloth2:'#15161a',skin:'#8a8fa8',hair:'#1a1a1f',head:'helm'},
   pirate:{cloth:'#5a3a3a',cloth2:'#2a2020',skin:'#a87c5c',hair:'#1a1410',head:'hair'}
 };
 const P=(name,look,weapon,tir,sabre,pv,tech=[],o={})=>({name,look:{...LOOK[look]},weapon,tir,sabre,pv,tech,...o});
-const TEAM=()=>[P('Kael Varro','smuggler','pistol',15,9,28,['rapid'],{hero:true}),P('Ryn','hunter','rifle',14,10,30,['grenades']),P('Krrasantan','wookiee','rifle',13,14,38,['brute'])];
+const TEAM_JEDI=()=>[P('Ilsa Moro','jedi','saber',9,14,32,[],{hero:true,kind:'jedi',force:13,fp:3,blade1:'#46ff70'}),P('Ryn','hunter','rifle',14,10,30,['grenades']),P('Vex Kaar','mando','pistol',15,12,30,['beskar','jetpack','flamer'])];
+const SITH=()=>P('Inquisitrice','inquis','saber',10,14,34,[],{kind:'sith',force:13,fp:3,blade1:'#ff3030'});
+let OPT={jedi:false,sith:false};
+const TEAM=()=>OPT.jedi?TEAM_JEDI():[P('Kael Varro','smuggler','pistol',15,9,28,['rapid'],{hero:true}),P('Ryn','hunter','rifle',14,10,30,['grenades']),P('Krrasantan','wookiee','rifle',13,14,38,['brute'])];
 const FOES={
   cantina:()=>[P('Gorrk','gamorrean','vibro',10,13,26,['brute'],{chef:true}),P('Homme de main','thug','pistol',10,9,9,[],{sbire:true}),P('Homme de main','thug','pistol',10,9,9,[],{sbire:true}),P('Gamorréen','gamorrean','vibro',8,11,10,['brute'],{sbire:true}),P('Tireur','pirate','rifle',12,9,16),P('Homme de main','thug','pistol',10,9,9,[],{sbire:true})],
   hangar:()=>[P('Lieutenant Kress','officer','pistol',12,8,18,[],{chef:true}),...Array.from({length:5},()=>P('Stormtrooper','trooper','rifle',10,7,9,[],{sbire:true})),P('Éclaireur','trooper','rifle',12,8,16,['grenades'])],
@@ -4115,11 +4120,14 @@ function mkUnit(f,side){
   const t=f.tech||[];
   return{...f,id:uid++,side,hp:f.pv,pvMax:Math.max(f.pv,f.pvMax||0),x:0,y:0,px:0,py:0,ap:0,alive:true,fled:false,ow:false,hunker:false,
     malus:f.malus||0,tech:t,grenades:t.includes('grenades')?2:0,ranged:f.weapon==='pistol'||f.weapon==='rifle',saberW:['saber','dual','double'].includes(f.weapon),
-    beskar:t.includes('beskar'),brute:t.includes('brute'),face:side==='p'?0:Math.PI,look:f.look||LOOK.thug,path:null};
+    beskar:t.includes('beskar'),brute:t.includes('brute'),face:side==='p'?0:Math.PI,look:f.look||LOOK.thug,path:null,
+    kind:f.kind||'none',force:f.force||8,fp:f.fp||0,fpMax:f.fp||0,jet:t.includes('jetpack')?2:0,fuel:t.includes('flamer')?2:0,prone:false};
 }
 function numberDupes(list){const n={},i={};list.forEach(u=>{n[u.name]=(n[u.name]||0)+1;});list.forEach(u=>{if(n[u.name]>1){i[u.name]=(i[u.name]||0)+1;u.name=u.name+' '+i[u.name];}});}
 const unitAt=(x,y)=>units.find(u=>u.alive&&u.x===x&&u.y===y);
 const team=s=>units.filter(u=>u.side===s&&u.alive);
+const isMelee=u=>!u.ranged;
+const engaged=u=>units.some(o=>o.alive&&o.side!==u.side&&isMelee(o)&&adj(o,u));
 function placeSide(list,side){
   const cols=side==='p'?[1,0,2]:[COLS-2,COLS-1,COLS-3];const ys=[5,4,6,3,7,2,8,1,9];
   const taken=new Set(units.filter(u=>u.alive).map(u=>u.y*COLS+u.x));
@@ -4154,11 +4162,12 @@ const P3=[0,0,0,1,4,10,20,35,56,81,108,135,160,181,196,206,212];
 const chance=s=>Math.round(Math.max(4,s<3?0:s>16?212:P3[Math.round(s)])/216*100);
 function shotMods(a,t,o={}){
   let s=a.tir+(a.malus||0);const m=[];
-  if(!t.isBarrel){const c=coverOf(t,a);
+  if(!t.isBarrel){const c=t.prone?0:coverOf(t,a);if(t.prone)m.push('à terre : sans couvert');
     if(c===1){s-=3;m.push('couvert partiel −3');}else if(c===2){s-=6;m.push('couvert complet −6');}else m.push('à découvert');
     if(c>0&&t.hunker){s-=3;m.push('planqué −3');}}
   else{s+=2;m.push('cible fixe +2');}
   const rp=rangePen(a,dist(a,t));if(rp){s-=rp;m.push(`distance −${rp}`);}
+  if(engaged(a)){s-=2;m.push('engagé au contact −2');}
   if(o.aim){s+=3;m.push('visée +3');}if(o.ow){s-=2;m.push('réaction −2');}if(o.rapid){s-=2;m.push('tir rapide −2');}
   if(a.malus)m.push(`blessure ${a.malus}`);
   return{s:Math.round(s),m};
@@ -4200,17 +4209,81 @@ function damage(t,n,src){
 }
 
 /* ---------- Actions ---------- */
+async function reactions(u){
+  for(const o of units.filter(o=>o.alive&&o.ow&&o.side!==u.side)){
+    if(!u.alive)break;if(dist(o,u)>12||!los(o,u))continue;
+    o.ow=false;log(`${o.name} tire en réaction sur ${u.name} !`,o.side);await shoot(o,u,{ow:true});
+  }
+}
 async function moveAlong(u,path){
+  // rompre le contact avec un combattant de mêlée lui offre un coup au passage
+  const guards=units.filter(o=>o.alive&&o.side!==u.side&&isMelee(o)&&adj(o,u));
   for(const [x,y] of path){
     u.face=Math.atan2(y-u.y,x-u.x);u.x=x;u.y=y;
     await tween(u,x*TS+TS/2,y*TS+TS/2,110);
-    // tirs de réaction
-    for(const o of units.filter(o=>o.alive&&o.ow&&o.side!==u.side)){
-      if(!u.alive)break;if(dist(o,u)>12||!los(o,u))continue;
-      o.ow=false;log(`${o.name} tire en réaction sur ${u.name} !`,o.side);await shoot(o,u,{ow:true});
-    }
+    for(let i=guards.length-1;i>=0;i--){const o=guards[i];if(!o.alive||adj(o,u))continue;guards.splice(i,1);
+      log(`${o.name} frappe ${u.name} qui rompt le contact !`,o.side);await melee(o,u,{free:true});if(!u.alive)return;}
+    await reactions(u);
     if(!u.alive)return;
   }
+}
+// Bond de Force ou jetpack : par-dessus les obstacles
+async function leapTo(u,x,y,what){
+  u.face=Math.atan2(y-u.y,x-u.x);const x0=u.px,y0=u.py,x1=x*TS+TS/2,y1=y*TS+TS/2,t0=performance.now(),ms=420;
+  sfx(what==='jet'?'flame':'force');u.x=x;u.y=y;
+  await new Promise(res=>{u.tw=now=>{const k=Math.min(1,(now-t0)/ms);u.px=x0+(x1-x0)*k;u.py=y0+(y1-y0)*k-Math.sin(k*Math.PI)*36;if(k>=1){u.tw=null;res();}};});
+  log(`${u.name} ${what==='jet'?'s’envole au jetpack':'bondit dans la Force'}.`,u.side);await reactions(u);
+}
+// Charge : une case libre au contact de la cible, à portée d'une action de déplacement
+function chargeSpot(u,t,max=MOV){
+  const Rr=reach(u,max);let best=null,bc=1e9;
+  for(const [a,b] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]){const x=t.x+a,y=t.y+b;if(!Rr.ok(x,y))continue;const c=Rr.cost(x,y);if(c<bc){bc=c;best=[x,y];}}
+  return best?{spot:best,path:Rr.path(best[0],best[1])}:null;
+}
+async function charge(u,t){
+  if(adj(u,t)){await melee(u,t);return;}
+  const c=chargeSpot(u,t);if(!c)return;
+  log(`${u.name} charge ${t.name} !`,u.side);await moveAlong(u,c.path);
+  if(u.alive&&t.alive&&adj(u,t))await melee(u,t,{charge:true});
+}
+/* ---------- Pouvoirs de la Force et outils mandaloriens ---------- */
+async function push(a,t){
+  a.fp--;a.face=Math.atan2(t.y-a.y,t.x-a.x);sfx('force');
+  const r=test(a,'Poussée de Force',a.force+(a.malus||0)-(t.kind!=='none'?3:0)-(dist(a,t)>3?1:0));
+  if(!r.ok){floatT(t.px,t.py-30,'Résiste','#c9b4ff',15);log(`${t.name} résiste à la poussée de ${a.name}.`,t.side);await wait(300);return;}
+  const sx=Math.sign(t.x-a.x),sy=Math.sign(t.y-a.y);let hit=false;
+  for(let i=0;i<2;i++){const nx=t.x+sx,ny=t.y+sy;if(blocks(nx,ny)||unitAt(nx,ny)){hit=true;break;}t.x=nx;t.y=ny;await tween(t,nx*TS+TS/2,ny*TS+TS/2,140);}
+  t.prone=true;t.hunker=false;t.ow=false;floatT(t.px,t.py-36,'Renversé !','#c9b4ff',16);log(`${a.name} projette ${t.name} au sol.`,a.side);
+  damage(t,hit?rint(3,6):rint(1,2),a);await wait(300);
+}
+async function lightning(a,t){
+  a.fp--;a.face=Math.atan2(t.y-a.y,t.x-a.x);sfx('zap');
+  const r=test(a,'Éclairs de Force',a.force+(a.malus||0)-(dist(a,t)>3?1:0));
+  fx.push({k:'zap',x0:a.px,y0:a.py,x1:t.px,y1:t.py,t0:performance.now(),dur:500});await wait(450);
+  if(!r.ok){log(`Les éclairs de ${a.name} manquent ${t.name}.`,a.side);return;}
+  let n=rint(6,9)+Math.min(3,Math.floor(Math.max(0,r.margin)/2));
+  if(t.saberW&&t.hunker){n/=2;log(`${t.name} absorbe les éclairs sur sa lame.`,t.side);}else if(t.beskar){n/=2;log(`Le beskar de ${t.name} disperse les éclairs.`,t.side);}
+  log(`Des éclairs frappent ${t.name}.`,a.side);damage(t,n,a);
+  const o=units.find(o=>o.alive&&o!==t&&o.side===t.side&&adj(o,t));
+  if(o){fx.push({k:'zap',x0:t.px,y0:t.py,x1:o.px,y1:o.py,t0:performance.now(),dur:400});log(`Les éclairs sautent sur ${o.name}.`,a.side);damage(o,(o.beskar?.5:1)*rint(3,5),a);}
+  await wait(300);
+}
+async function throwSaber(a,t){
+  a.fp--;a.face=Math.atan2(t.y-a.y,t.x-a.x);sfx('saber');
+  const c=t.prone?0:coverOf(t,a),r=test(a,'Lancer du sabre',a.sabre+(a.malus||0)-1-(c===2?3:0));
+  fx.push({k:'throw',x0:a.px,y0:a.py,x1:t.px,y1:t.py,c:a.blade1||'#ff3b3b',t0:performance.now(),dur:600});await wait(600);
+  if(!r.ok){log(`Le sabre de ${a.name} manque ${t.name} et revient en main.`,a.side);return;}
+  let n=rint(6,9)+Math.min(3,Math.floor(Math.max(0,r.margin)/2));if(r.crit)n*=1.5;if(t.beskar)n*=.45;
+  log(`Le sabre de ${a.name} fauche ${t.name}.`,a.side);damage(t,n,a);await wait(200);
+}
+async function flame(a,t){
+  a.fuel--;a.face=Math.atan2(t.y-a.y,t.x-a.x);sfx('flame');
+  const r=test(a,'Lance-flammes',a.tir+1+(a.malus||0));
+  fx.push({k:'flame',x0:a.px,y0:a.py,x1:t.px,y1:t.py,t0:performance.now(),dur:600});await wait(500);
+  if(!r.ok){log(`Les flammes de ${a.name} manquent ${t.name}.`,a.side);return;}
+  log(`${a.name} arrose ${t.name} de flammes.`,a.side);damage(t,rint(6,9)-(t.beskar?2:0),a);
+  const o=units.find(o=>o.alive&&o!==t&&adj(o,t)&&o!==a);if(o&&Math.random()<.5){log(`${o.name} est léché par les flammes.`,a.side);damage(o,rint(3,5),a);}
+  await wait(250);
 }
 function tween(u,x,y,ms){return new Promise(res=>{const x0=u.px,y0=u.py,t0=performance.now();u.tw=now=>{const k=Math.min(1,(now-t0)/ms);u.px=x0+(x-x0)*k;u.py=y0+(y-y0)*k;if(k>=1){u.tw=null;res();}};});}
 async function shoot(a,t,o={}){
@@ -4223,7 +4296,7 @@ async function shoot(a,t,o={}){
   // une lame peut dévier le tir
   if(t.saberW){const dr=test(t,'Renvoi',t.sabre+(t.hunker?0:-4)+(t.malus||0));
     if(dr.ok){bolt(a,t.px,t.py);await wait(200);sfx('saber');
-      if(dr.margin>=4){fx.push({k:'bolt',x0:t.px,y0:t.py,x1:a.px,y1:a.py,c:'#a8d8ff',t0:performance.now(),dur:200});await wait(200);floatT(t.px,t.py-40,'Renvoyé !','#a8d8ff',16);damage(a,rint(4,7)-(a.beskar?2:0),t);}
+      if(dr.margin>=(t.hunker?3:4)){fx.push({k:'bolt',x0:t.px,y0:t.py,x1:a.px,y1:a.py,c:'#a8d8ff',t0:performance.now(),dur:200});await wait(200);floatT(t.px,t.py-40,'Renvoyé !','#a8d8ff',16);damage(a,rint(4,7)-(a.beskar?2:0),t);}
       else floatT(t.px,t.py-40,'Dévié','#a8d8ff',16);
       log(`${t.name} dévie le tir de ${a.name}.`,t.side);await wait(200);return;}}
   bolt(a,t.px,t.py);await wait(220);
@@ -4231,9 +4304,10 @@ async function shoot(a,t,o={}){
   if(r.crit)n*=1.5;if(t.beskar)n-=2;
   log(`${a.name} touche ${t.name}.`,a.side);damage(t,n,a);await wait(160);
 }
-async function melee(a,t){
+async function melee(a,t,o={}){
+  if(!a.alive||!t.alive)return;
   a.face=Math.atan2(t.y-a.y,t.x-a.x);
-  const r=test(a,'Corps à corps',a.sabre+(a.malus||0)-(!t.ranged?2:0));
+  const r=test(a,o.free?'Coup au passage':o.charge?'Charge':'Corps à corps',a.sabre+(a.malus||0)-(!t.ranged?2:0)+(o.charge?1:0)+(t.prone?2:0));
   sfx(a.saberW?'saber':'hit');
   if(!r.ok){floatT(t.px,t.py-30,'Esquive','#c9bcc6',15);log(`${t.name} esquive le coup de ${a.name}.`,t.side);await wait(300);return;}
   let n=a.saberW?rint(6,9):a.weapon==='vibro'||a.weapon==='staff'?rint(5,8):rint(2,4);
@@ -4267,7 +4341,14 @@ const ACTS={
   aim:{l:'Tir visé',d:'+3 au tir. Demande tes deux actions.',need:2},
   rapid:{l:'Tir rapide',d:'Deux tirs à −2 sur la même cible. Demande tes deux actions.'},
   ow:{l:'Guet',d:'Tire en réaction sur le premier ennemi qui bouge en vue (−2). Termine le tour.'},
-  hunker:{l:'Se planquer',d:'−3 de plus à qui te tire dessus, si tu es à couvert. Une lame pare mieux. Termine le tour.'},
+  hunker:{l:'Se planquer',d:'−3 de plus à qui te tire dessus, si tu es à couvert. Termine le tour.'},
+  charge:{l:'Charge',d:'Fonce sur un ennemi à 5 cases au plus et frappe dans la foulée (+1). Demande tes deux actions.'},
+  leap:{l:'Bond de Force',d:'Saute jusqu’à 6 cases, par-dessus les obstacles. 1 action, 1 point de Force.'},
+  push:{l:'Poussée de Force',d:'Projette un ennemi à 5 cases au plus : il recule, se retrouve à terre sans couvert, et se blesse contre un obstacle. 1 action, 1 point de Force.'},
+  lightning:{l:'Éclairs de Force',d:'Ignorent le couvert et sautent sur un voisin de la cible. 5 cases au plus, 1 point de Force. Termine le tour.'},
+  throwS:{l:'Lancer du sabre',d:'Frappe à 4 cases au plus, puis la lame revient en main. 1 point de Force. Termine le tour.'},
+  jet:{l:'Jetpack',d:'S’envole jusqu’à 6 cases, par-dessus les obstacles. 1 action.'},
+  flame:{l:'Lance-flammes',d:'Gerbe de feu à 3 cases au plus : ignore le couvert, peut toucher un voisin. Termine le tour.'},
   grenade:{l:'Grenade',d:'Clique une case à 7 cases au plus : gros dégâts au centre, éclats autour. Détruit tables et caisses.'},
   flip:{l:'Renverser une table',d:'Une table voisine devient un couvert complet. 1 action.'},
   melee:{l:'Corps à corps',d:'Frappe un ennemi au contact (un Wookiee cogne fort). Termine le tour.'}
@@ -4279,6 +4360,12 @@ function actAvail(u,k){
   if(k==='grenade')return u.grenades>0;
   if(k==='flip')return[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]].some(([a,b])=>{const t=tile(u.x+a,u.y+b);return t&&t.t==='table';});
   if(k==='melee')return team('e').some(e=>adj(u,e));
+  if(k==='charge')return u.ap>=2&&(isMelee(u)||u.brute);
+  if(k==='leap'||k==='push')return u.kind!=='none'&&u.fp>0;
+  if(k==='lightning')return u.kind==='sith'&&u.fp>0;
+  if(k==='throwS')return u.saberW&&u.kind!=='none'&&u.fp>0;
+  if(k==='jet')return u.jet>0;
+  if(k==='flame')return u.fuel>0;
   return true;
 }
 function select(u){sel=u;mode='move';R=u&&u.alive&&u.ap>0?reach(u,u.ap>=2?MOV*2:MOV):null;renderSide();}
@@ -4296,7 +4383,15 @@ function onTile(x,y){
   const s=sel,t=tile(x,y);
   if(mode==='grenade'){if(Math.hypot(x-s.x,y-s.y)>7.5)return;act(async()=>{await grenade(s,x,y);s.ap=0;await spend(s,0);});return;}
   if(mode==='flip'){if(t&&t.t==='table'&&adj(s,{x,y})){act(async()=>{grid[y][x]={t:'flipped',k:'flipped',v:t.v,dir:Math.atan2(y-s.y,x-s.x)};sfx('hit');log(`${s.name} renverse une table.`,'p');mode='move';await spend(s,1);});}return;}
+  if((mode==='leap'||mode==='jet')&&!u){if(Math.hypot(x-s.x,y-s.y)>6.5||!free(x,y))return;
+    act(async()=>{if(mode==='leap')s.fp--;else s.jet--;const m=mode;mode='move';s.hunker=false;await leapTo(s,x,y,m);await spend(s,1);});return;}
   if(u&&u.side==='e'){
+    const near=(r)=>Math.hypot(u.x-s.x,u.y-s.y)<=r+.5&&los(s,u);
+    if(mode==='push'){if(near(5))act(async()=>{mode='move';await push(s,u);await spend(s,1);});else setHint('Cible trop loin ou hors de vue (5 cases).');return;}
+    if(mode==='lightning'){if(near(5))act(async()=>{mode='move';await lightning(s,u);s.ap=0;await spend(s,0);});else setHint('Cible trop loin ou hors de vue (5 cases).');return;}
+    if(mode==='throwS'){if(near(4))act(async()=>{mode='move';await throwSaber(s,u);s.ap=0;await spend(s,0);});else setHint('Cible trop loin ou hors de vue (4 cases).');return;}
+    if(mode==='flame'){if(near(3))act(async()=>{mode='move';await flame(s,u);s.ap=0;await spend(s,0);});else setHint('Cible trop loin ou hors de vue (3 cases).');return;}
+    if(mode==='charge'||(isMelee(s)&&!adj(s,u))){if(s.ap>=2&&(adj(s,u)||chargeSpot(s,u)))act(async()=>{mode='move';await charge(s,u);s.ap=0;await spend(s,0);});else setHint('Hors de portée de charge (5 cases, deux actions).');return;}
     if(mode==='melee'||!s.ranged){if(adj(s,u))act(async()=>{await melee(s,u);s.ap=0;await spend(s,0);});return;}
     if(!s.ranged)return;
     if(!los(s,u)){setHint('Pas de ligne de vue sur cette cible.');return;}
@@ -4309,7 +4404,7 @@ function onTile(x,y){
 async function special(k){
   const s=sel;if(!actAvail(s,k)||busy)return;
   if(k==='ow'){act(async()=>{s.ow=true;s.ap=0;log(`${s.name} se met en guet.`,'p');await spend(s,0);});return;}
-  if(k==='hunker'){act(async()=>{s.hunker=true;s.ap=0;log(`${s.name} se planque.`,'p');await spend(s,0);});return;}
+  if(k==='hunker'){act(async()=>{s.hunker=true;s.ap=0;log(s.saberW?`${s.name} se met en garde, lame levée.`:`${s.name} se planque.`,'p');await spend(s,0);});return;}
   mode=mode===k?'move':k;renderSide();
 }
 
@@ -4320,14 +4415,14 @@ async function endPlayerPhase(){
   // renforts
   if(round>=waveFrom&&reserve.length){let n=0;for(const y of [5,4,6,3,7,2,8]){if(!reserve.length||n>=2)break;if(free(COLS-1,y)&&!unitAt(COLS-1,y)){const u=reserve.shift();u.x=COLS-1;u.y=y;u.px=COLS*TS+20;u.py=y*TS+TS/2;units.push(u);tween(u,u.x*TS+TS/2,u.py,500);n++;}}
     if(n){log(`Renforts : ${n} adversaire${n>1?'s':''} entre${n>1?'nt':''} dans la mêlée${reserve.length?` (${reserve.length} encore en approche)`:''}.`,'kill');await wait(500);}}
-  for(const e of team('e')){e.ap=2;e.ow=false;e.hunker=false;}
+  for(const e of team('e')){e.ap=2;e.ow=false;e.hunker=false;e.prone=false;}
   for(const e of team('e')){if(over)return;if(!e.alive)continue;await aiTurn(e);if(checkEnd())return;}
   await checkMorale();if(checkEnd())return;
   startPlayerPhase();
 }
 function startPlayerPhase(){
   round++;phase='p';
-  for(const p of team('p')){p.ap=2;p.ow=false;p.hunker=false;}
+  for(const p of team('p')){p.ap=2;p.ow=false;p.hunker=false;p.prone=false;}
   $('roundNo').textContent=String(round).padStart(2,'0');
   select(team('p')[0]||null);renderSide();
 }
@@ -4349,6 +4444,20 @@ async function aiTurn(e){
   if(e.fled)return;
   if(moraleBroken&&e.sbire&&Math.random()<.45){await flee(e);return;}
   const foes=team('p');if(!foes.length)return;
+  const inReach=r=>foes.filter(p=>Math.hypot(p.x-e.x,p.y-e.y)<=r+.5&&los(e,p)).sort((a,b)=>a.hp-b.hp);
+  if(e.kind==='sith'&&e.fp>0&&Math.random()<.5){const t=inReach(5)[0];if(t){await lightning(e,t);e.ap=0;return;}}
+  if(e.kind!=='none'&&e.fp>0&&Math.random()<.25){const t=inReach(5).find(p=>!p.prone&&coverOf(p,e)>0);if(t){await push(e,t);e.ap--;if(!e.alive||!t.alive)return;}}
+  if(e.fuel>0&&Math.random()<.6){const t=inReach(3)[0];if(t){await flame(e,t);e.ap=0;return;}}
+  if(!e.ranged&&e.ap>0){ // mêlée : bond de Force si la cible est loin, sinon charge
+    const tgt=foes.slice().sort((a,b)=>dist(e,a)-dist(e,b))[0];
+    if(!adj(e,tgt)&&e.kind!=='none'&&e.fp>0&&!chargeSpot(e,tgt)){
+      const spots=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]].map(([a,b])=>[tgt.x+a,tgt.y+b]).filter(([x,y])=>free(x,y)&&!unitAt(x,y)&&Math.hypot(x-e.x,y-e.y)<=6.5);
+      if(spots.length){e.fp--;await leapTo(e,spots[0][0],spots[0][1],'leap');e.ap--;if(e.alive&&e.ap>0&&adj(e,tgt)){await melee(e,tgt);e.ap=0;}return;}}
+    if(!adj(e,tgt)&&e.ap>=2&&chargeSpot(e,tgt)){await charge(e,tgt);e.ap=0;return;}
+  }
+  if(e.jet>0&&e.ranged&&Math.random()<.35){let jb=null,js=evalTile(e,e.x,e.y)+.6;
+    for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){if(Math.hypot(x-e.x,y-e.y)>6.5||!free(x,y)||unitAt(x,y))continue;const v=evalTile(e,x,y);if(v>js){js=v;jb=[x,y];}}
+    if(jb){e.jet--;await leapTo(e,jb[0],jb[1],'jet');e.ap--;if(!e.alive)return;const t=team('p').filter(p=>los(e,p)).sort((a,b)=>chance(shotMods(e,b,{}).s)-chance(shotMods(e,a,{}).s))[0];if(t&&e.ap>0){await shoot(e,t,{});}e.ap=0;return;}}
   if(!e.ranged){ // corps à corps : fondre sur la cible la plus proche
     const tgt=foes.slice().sort((a,b)=>dist(e,a)-dist(e,b))[0];
     if(!adj(e,tgt)){const Rr=reach(e,MOV*2);let best=null,bd=99;
@@ -4463,7 +4572,7 @@ function drawUnit(u,now){
   ctx.scale(1.15,1.15);
   ctx.rotate(u.face);
   // arme
-  if(u.saberW){ctx.strokeStyle='#ff3b3b';ctx.lineWidth=3;ctx.shadowColor='#ff3b3b';ctx.shadowBlur=8;ctx.beginPath();ctx.moveTo(6,6);ctx.lineTo(24,10);ctx.stroke();ctx.shadowBlur=0;}
+  if(u.saberW){const bc=u.blade1||'#ff3b3b';ctx.strokeStyle=bc;ctx.lineWidth=3;ctx.shadowColor=bc;ctx.shadowBlur=8;ctx.beginPath();ctx.moveTo(6,6);ctx.lineTo(24,10);ctx.stroke();ctx.shadowBlur=0;}
   else if(u.ranged){ctx.fillStyle='#1c1c20';ctx.fillRect(4,3,u.weapon==='rifle'?19:12,4);ctx.fillStyle='#55555c';ctx.fillRect(4,3,u.weapon==='rifle'?19:12,1.5);}
   else{ctx.strokeStyle='#9aa0a8';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(4,6);ctx.lineTo(20,8);ctx.stroke();}
   // épaules et tête
@@ -4483,7 +4592,7 @@ function drawUnit(u,now){
   // barre de vie et marqueurs
   const w=32,h=4,f=u.hp/u.pvMax;ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(x-w/2,y-31,w,h);ctx.fillStyle=f>.6?'#8dffad':f>.3?'#e8ab52':'#ff4a4a';ctx.fillRect(x-w/2,y-31,w*f,h);
   ctx.font='600 10px "IBM Plex Mono"';ctx.textAlign='center';ctx.textBaseline='bottom';
-  const tags=[u.chef?'★':'',u.ow?'◉':'',u.hunker?'▼':''].filter(Boolean).join(' ');
+  const tags=[u.chef?'★':'',u.ow?'◉':'',u.hunker?'▼':'',u.prone?'↓':''].filter(Boolean).join(' ');
   if(tags){ctx.fillStyle='#ffd27a';ctx.fillText(tags,x,y-32);}
 
   if(u.side==='p'&&phase==='p'&&u.ap>0&&u!==sel&&!(hover&&hover.x===u.x&&hover.y===u.y)){for(let i=0;i<u.ap;i++){ctx.fillStyle='#5fb4ff';ctx.fillRect(x-7+i*9,y+23,6,3);}}
@@ -4498,7 +4607,7 @@ function drawTargetInfo(){
   const u=unitAt(hover.x,hover.y),t=tile(hover.x,hover.y);
   let tgt=null;if(u&&u.side==='e')tgt=u;else if(t&&t.t==='barrel')tgt={x:hover.x,y:hover.y,isBarrel:true};
   if(!tgt)return;
-  if(!sel.ranged||(mode==='melee')){if(u&&adj(sel,u)){bubble(u.x*TS+TS/2,u.y*TS-4,`${chance(sel.sabre+(sel.malus||0)-(!u.ranged?2:0))} %`,'#ffd27a');}return;}
+  if(!sel.ranged||mode==='melee'||mode==='charge'){if(u&&(adj(sel,u)||(sel.ap>=2&&chargeSpot(sel,u)))){bubble(u.x*TS+TS/2,u.y*TS-4,`${adj(sel,u)?'':'Charge '}${chance(sel.sabre+(sel.malus||0)-(!u.ranged?2:0)+(adj(sel,u)?0:1)+(u.prone?2:0))} %`,'#ffd27a');}return;}
   const ok=los(sel,tgt),tx=tgt.x*TS+TS/2,ty=tgt.y*TS+TS/2;
   ctx.strokeStyle=ok?'rgba(255,90,90,.75)':'rgba(140,140,140,.5)';ctx.lineWidth=1.5;ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(sel.px,sel.py);ctx.lineTo(tx,ty);ctx.stroke();ctx.setLineDash([]);
   if(!ok){bubble(tx,ty-26,'Pas de vue','#aaa');return;}
@@ -4511,6 +4620,9 @@ function drawFx(now){
   for(const f of fx){const k=(now-f.t0)/f.dur;
     if(f.k==='bolt'){const a=Math.min(1,k*1.6),b=Math.max(0,k*1.6-.45);ctx.strokeStyle=f.c;ctx.lineWidth=3;ctx.shadowColor=f.c;ctx.shadowBlur=10;ctx.beginPath();ctx.moveTo(f.x0+(f.x1-f.x0)*b,f.y0+(f.y1-f.y0)*b);ctx.lineTo(f.x0+(f.x1-f.x0)*a,f.y0+(f.y1-f.y0)*a);ctx.stroke();ctx.shadowBlur=0;}
     else if(f.k==='boom'){const r=f.r*(.3+k*.9);const g=ctx.createRadialGradient(f.x,f.y,0,f.x,f.y,r);g.addColorStop(0,`rgba(255,240,200,${1-k})`);g.addColorStop(.4,`rgba(255,140,40,${.9*(1-k)})`);g.addColorStop(1,'rgba(80,20,10,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(f.x,f.y,r,0,7);ctx.fill();}
+    else if(f.k==='zap'){ctx.strokeStyle=`rgba(200,170,255,${1-k*.6})`;ctx.lineWidth=2.5;ctx.shadowColor='#b48cff';ctx.shadowBlur=12;ctx.beginPath();ctx.moveTo(f.x0,f.y0);for(let i=1;i<=8;i++){const q=i/8;ctx.lineTo(f.x0+(f.x1-f.x0)*q+(i<8?rnd(-9,9):0),f.y0+(f.y1-f.y0)*q+(i<8?rnd(-9,9):0));}ctx.stroke();ctx.shadowBlur=0;}
+    else if(f.k==='throw'){const q=k<.5?k*2:2-k*2,x=f.x0+(f.x1-f.x0)*q,y=f.y0+(f.y1-f.y0)*q;ctx.save();ctx.translate(x,y);ctx.rotate(now/40);ctx.strokeStyle=f.c;ctx.lineWidth=3;ctx.shadowColor=f.c;ctx.shadowBlur=10;ctx.beginPath();ctx.moveTo(-12,0);ctx.lineTo(12,0);ctx.stroke();ctx.restore();ctx.shadowBlur=0;}
+    else if(f.k==='flame'){for(let i=0;i<10;i++){const q=Math.min(1,k*1.6)*(i/10),x=f.x0+(f.x1-f.x0)*q+rnd(-6,6),y=f.y0+(f.y1-f.y0)*q+rnd(-6,6);ctx.fillStyle=`rgba(255,${120+rint(0,90)},40,${.8*(1-k)})`;ctx.beginPath();ctx.arc(x,y,5+q*8,0,7);ctx.fill();}}
     else if(f.k==='lob'){const x=f.x0+(f.x1-f.x0)*k,y=f.y0+(f.y1-f.y0)*k-Math.sin(k*Math.PI)*40;ctx.fillStyle='#c9c4b0';ctx.beginPath();ctx.arc(x,y,4,0,7);ctx.fill();}}
   floats=floats.filter(f=>now-f.t0<1100);
   for(const f of floats){const k=(now-f.t0)/1100;ctx.globalAlpha=1-k;ctx.font=`700 ${f.s}px "Chakra Petch"`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='rgba(0,0,0,.7)';ctx.fillText(f.t,f.x+1,f.y-k*26+1);ctx.fillStyle=f.c;ctx.fillText(f.t,f.x,f.y-k*26);ctx.globalAlpha=1;}
@@ -4531,9 +4643,10 @@ function renderLog(){$('log').innerHTML=logs.map(l=>`<li class="${l.c}">${esc(l.
 const WNAME={pistol:'Pistolet',rifle:'Fusil',vibro:'Vibrolame',staff:'Bâton',saber:'Sabre'};
 function renderSide(){
   $('phaseTag').textContent=over?'Terminé':phase==='p'?'À toi':'Tour adverse';$('phaseTag').className=phase==='e'?'e':'';
+  {const w=$('waveInfo');w.hidden=!reserve.length;w.textContent=reserve.length?`Renforts ${reserve.length}${round<waveFrom?' · tour '+waveFrom:''}`:'';}
   $('selName').textContent=sel?sel.name:'—';
-  $('selCard').innerHTML=sel?`<div class="fc active"><div class="fm">${WNAME[sel.weapon]||sel.weapon} · Tir ${sel.tir} · Mêlée ${sel.sabre} · ${sel.hp}/${sel.pvMax} PV · ${sel.ap} action${sel.ap>1?'s':''}${sel.grenades?` · ${sel.grenades} grenade${sel.grenades>1?'s':''}`:''}</div></div>`:'';
-  $('acts').innerHTML=sel&&sel.alive&&phase==='p'?Object.entries(ACTS).filter(([k])=>k==='move'||actAvail(sel,k)||k==='aim'&&sel.ranged).map(([k,a])=>`<button type="button" class="act ${mode===k?'sel':''}" data-act="${k}" ${busy||(k!=='move'&&!actAvail(sel,k))?'disabled':''}><span class="t">${a.l}</span><span class="d">${a.d}</span></button>`).join(''):'';
+  $('selCard').innerHTML=sel?`<div class="fc active"><div class="fm">${WNAME[sel.weapon]||sel.weapon} · Tir ${sel.tir} · Mêlée ${sel.sabre} · ${sel.hp}/${sel.pvMax} PV · ${sel.ap} action${sel.ap>1?'s':''}${sel.grenades?` · ${sel.grenades} grenade${sel.grenades>1?'s':''}`:''}${sel.fpMax?` · Force ${sel.fp}/${sel.fpMax}`:''}${sel.jet?` · jetpack ${sel.jet}`:''}${sel.fuel?` · lance-flammes ${sel.fuel}`:''}</div></div>`:'';
+  $('acts').innerHTML=sel&&sel.alive&&phase==='p'?Object.entries(ACTS).filter(([k])=>k==='move'||actAvail(sel,k)||k==='aim'&&sel.ranged||k==='charge'&&(isMelee(sel)||sel.brute)).map(([k,a0])=>{const a=k==='hunker'&&sel.saberW?{l:'Garde au sabre',d:'Tu dévies tous les tirs du tour à pleine compétence et en renvoies davantage. Termine le tour.'}:a0;return`<button type="button" class="act ${mode===k?'sel':''}" data-act="${k}" ${busy||(k!=='move'&&!actAvail(sel,k))?'disabled':''}><span class="t">${a.l}</span><span class="d">${a.d}</span></button>`;}).join(''):'';
   $('endBtn').disabled=busy||over||phase!=='p';$('nextBtn').disabled=busy||over||phase!=='p';
   if(!sel&&phase==='p'&&!over)setHint('Choisis un personnage, ou termine le tour.');
   else if(sel&&phase==='p'&&!busy)setHint(mode==='move'?'Clique une case pour te déplacer, un ennemi pour tirer.':ACTS[mode].d);
@@ -4569,9 +4682,9 @@ function start(cfg){
   log(`${p.map(u=>u.name).join(', ')} face à ${e.length+r.length} adversaires.`,'kill');renderDice();
   startPlayerPhase();
 }
-function newGame(lieu){start({lieu,p:TEAM(),e:FOES[lieu]()});renderLieux();}
-function renderLieux(){$('lieux').innerHTML=Object.entries(LIEUX).map(([k,l])=>`<button type="button" data-lieu="${k}" class="${k===LIEU?'on':''}">${l.l}</button>`).join('');}
-$('lieux').addEventListener('click',ev=>{const b=ev.target.closest('[data-lieu]');if(b&&!busy)newGame(b.dataset.lieu);});
+function newGame(lieu){const e=FOES[lieu]();if(OPT.sith)e.splice(1,1,SITH());start({lieu,p:TEAM(),e});renderLieux();}
+function renderLieux(){$('lieux').innerHTML=Object.entries(LIEUX).map(([k,l])=>`<button type="button" data-lieu="${k}" class="${k===LIEU?'on':''}">${l.l}</button>`).join('')+`<button type="button" data-opt="jedi" class="${OPT.jedi?'on':''}">Avec un Jedi</button><button type="button" data-opt="sith" class="${OPT.sith?'on':''}">Avec un Sith</button>`;}
+$('lieux').addEventListener('click',ev=>{const o=ev.target.closest('[data-opt]');if(o&&!busy){OPT[o.dataset.opt]=!OPT[o.dataset.opt];newGame(LIEU);return;}const b=ev.target.closest('[data-lieu]');if(b&&!busy)newGame(b.dataset.lieu);});
 window.FUSILLADE={start,LIEUX,debug:{units:()=>units,tile,los,coverOf,shotMods,chance,onTile,special,endPlayerPhase,state:()=>({phase,over,busy,round,mode,sel:sel&&sel.id})}};
 requestAnimationFrame(frame);
 window.ENGINES=window.ENGINES||{};
@@ -5333,7 +5446,7 @@ Principes :
 - Ne décide jamais à la place du joueur de ses actions ou de ses paroles importantes. Termine chaque réponse sur une situation ouverte.
 - Dialogues vivants et incarnés (le joueur les adore), descriptions sensorielles courtes. Ton et dosage selon la session zéro.
 - Jets : système 3d6 sous la compétence. Modificateurs : facile +2, normal 0, difficile −2, très difficile −4, presque impossible −6. Ne demande un jet que si l’issue est incertaine ET qu’elle compte.
-- Combats : ne déclenche un combat jouable que si l’histoire y mène vraiment et que l’affrontement mérite d’être joué. Choisis le type selon la situation et les ressources : "duel" quand la Force ou un Mandalorien entre en jeu (un duel au sabre, un Jedi ou un Sith face à des tireurs, un chasseur mandalorien) ; "fusillade" pour les autres échanges de tirs et rixes à échelle humaine (pègre, soldats, pirates, droïdes), un combat tactique au tour par tour où l’on se met à couvert ; ou la narration, avec des tests, pour une escarmouche brève ou quand l’astuce compte plus que les tirs (le jeu bascule lui-même entre duel et fusillade selon les combattants) ; "ship" pour un combat du vaisseau personnel du joueur (s’il en a un), "space" seulement si le joueur a une flotte, "ground" seulement s’il a des troupes. Choisis un décor et un objectif cohérents avec le lieu de la scène. Le jeu dose les adversaires ordinaires pour un héros de valeur moyenne : un héros aguerri les domine, un débutant souffre face à des élites (mercenaires réputés, Mandaloriens). Choisis l'adversité selon l'histoire et l'expérience du héros, et laisse des issues quand le combat serait perdu d'avance.
+- Combats : ne déclenche un combat jouable que si l’histoire y mène vraiment et que l’affrontement mérite d’être joué. Choisis le type selon la situation et les ressources : "duel" quand un utilisateur de la Force ou un Mandalorien se trouve dans chaque camp (Jedi contre Sith, Mandalorien contre Jedi, chasseurs mandaloriens rivaux) ; "fusillade" pour tous les autres affrontements à échelle humaine (pègre, soldats, pirates, droïdes, et aussi un Jedi face à une escouade ou un Sith à la tête de ses soldats), un combat tactique au tour par tour où l’on se met à couvert, où l’on charge au corps à corps et où la Force s’exprime (bond, poussée, éclairs, lancer du sabre) ; ou la narration, avec des tests, pour une escarmouche brève ou quand l’astuce compte plus que les tirs (le jeu bascule lui-même entre duel et fusillade selon les combattants) ; "ship" pour un combat du vaisseau personnel du joueur (s’il en a un), "space" seulement si le joueur a une flotte, "ground" seulement s’il a des troupes. Choisis un décor et un objectif cohérents avec le lieu de la scène. Le jeu dose les adversaires ordinaires pour un héros de valeur moyenne : un héros aguerri les domine, un débutant souffre face à des élites (mercenaires réputés, Mandaloriens). Choisis l'adversité selon l'histoire et l'expérience du héros, et laisse des issues quand le combat serait perdu d'avance.
 - Combat raconté : quand un affrontement se joue en narration (par ton choix ou parce que le joueur a choisi « Raconter plutôt »), découpe-le en moments décisifs. À chaque moment, laisse le joueur décider (choices) et demande un jet ("test") quand l’issue est risquée. Le nombre, le terrain et les compétences comptent ; la difficulté choisie en session zéro aussi. Traduis les coups reçus avec "blessure" et "compagnonsBlesses".
 - Après un rapport de combat ou un résultat de jet, raconte les conséquences en restant exactement fidèle au résultat.
 - Les blessures et les dégâts durent : un personnage blessé, une flotte abîmée ou des troupes décimées le restent jusqu’à des soins, des réparations ou des renforts. Tiens-en compte dans le récit et dans la difficulté. Le joueur paie lui-même soins, réparations et recrues depuis sa fiche (lignes INTENDANCE) ; accorde "heal" seulement quand le récit apporte vraiment du repos ou des soins.
@@ -5501,7 +5614,7 @@ function applyData(d){
     S.pending={kind:'test',skill:d.test.skill,mod:Math.max(-6,Math.min(4,Math.round(+d.test.mod||0))),why:String(d.test.why||'').slice(0,160)};
   }else if(d.combat&&['duel','fusillade','ship','space','ground'].includes(d.combat.type)){
     const c=d.combat;
-    if(c.type==='duel'||c.type==='fusillade'){const all=[...(Array.isArray(c.enemies)?c.enemies:[]),...(Array.isArray(c.renforts)?c.renforts:[])].filter(x=>x&&typeof x==='object');c.type=duelWanted(all)?'duel':'fusillade';if(c.type==='fusillade'&&!LIEUX_F[c.lieu])c.lieu=c.decor==='vaisseau'?'coursive':'rue';}
+    if(c.type==='duel'||c.type==='fusillade'){const all=[...(Array.isArray(c.enemies)?c.enemies:[]),...(Array.isArray(c.renforts)?c.renforts:[])].filter(x=>x&&typeof x==='object');c.type=duelWanted(all,c.allies)?'duel':'fusillade';if(c.type==='fusillade'&&!LIEUX_F[c.lieu])c.lieu=c.decor==='vaisseau'?'coursive':'rue';}
     if(c.type==='space'&&!S.res.fleet.length)c.type=S.res.ship?'ship':'duel';
     if(c.type==='ship'&&!S.res.ship)c.type=S.res.fleet.length?'space':'duel';
     if(c.type==='ground'&&!S.res.troops.length)c.type='duel';
@@ -5743,8 +5856,13 @@ const LIEUX_F={cantina:'Cantina',hangar:'Hangar',rue:'Ruelle',coursive:'Coursive
 const MANDO_P=new Set(['mandoWarrior','mandoCommando','mandoChief','deathWatch']);
 const isForceFoe=x=>!!x&&(x.kind==='sith'||x.kind==='jedi'||(x.kind!=='none'&&LOOKS[x.preset]&&LOOKS[x.preset].kind!=='none'));
 const isMandoFoe=x=>!!x&&(MANDO_P.has(x.preset)||(x.look&&x.look.head==='mando')||(Array.isArray(x.tech)&&x.tech.includes('beskar')&&x.tech.includes('jetpack')));
-// Le duel accueille les combats où la Force ou un Mandalorien entre en jeu ; les autres échanges de tirs se jouent en fusillade.
-const duelWanted=foes=>heroFiche().kind!=='none'||foes.some(x=>isForceFoe(x)||isMandoFoe(x));
+// Le duel accueille les affrontements où la Force ou un Mandalorien se trouve dans chaque camp (Jedi contre Sith, Mandalorien contre Jedi…) ;
+// tout le reste se joue en fusillade, Jedi contre escouade compris, avec les pouvoirs de la Force.
+function sideHasElite(allies){
+  const h=heroFiche();if(h.kind!=='none'||isMandoFoe(h))return true;
+  return (allies||[]).some(a=>{const c=findComp(a);const L=c&&LOOKS[c.preset];return!!L&&(L.kind!=='none'||MANDO_P.has(c.preset));});
+}
+const duelWanted=(foes,allies)=>sideHasElite(allies)&&foes.some(x=>isForceFoe(x)||isMandoFoe(x));
 const cap4=c=>c.type==='fusillade'?8:4;
 function duelParty(c){
   const p=[heroFiche()];

@@ -1067,7 +1067,7 @@ Principes :
 - Ne décide jamais à la place du joueur de ses actions ou de ses paroles importantes. Termine chaque réponse sur une situation ouverte.
 - Dialogues vivants et incarnés (le joueur les adore), descriptions sensorielles courtes. Ton et dosage selon la session zéro.
 - Jets : système 3d6 sous la compétence. Modificateurs : facile +2, normal 0, difficile −2, très difficile −4, presque impossible −6. Ne demande un jet que si l’issue est incertaine ET qu’elle compte.
-- Combats : ne déclenche un combat jouable que si l’histoire y mène vraiment et que l’affrontement mérite d’être joué. Choisis le type selon la situation et les ressources : "duel" quand la Force ou un Mandalorien entre en jeu (un duel au sabre, un Jedi ou un Sith face à des tireurs, un chasseur mandalorien) ; "fusillade" pour les autres échanges de tirs et rixes à échelle humaine (pègre, soldats, pirates, droïdes), un combat tactique au tour par tour où l’on se met à couvert ; ou la narration, avec des tests, pour une escarmouche brève ou quand l’astuce compte plus que les tirs (le jeu bascule lui-même entre duel et fusillade selon les combattants) ; "ship" pour un combat du vaisseau personnel du joueur (s’il en a un), "space" seulement si le joueur a une flotte, "ground" seulement s’il a des troupes. Choisis un décor et un objectif cohérents avec le lieu de la scène. Le jeu dose les adversaires ordinaires pour un héros de valeur moyenne : un héros aguerri les domine, un débutant souffre face à des élites (mercenaires réputés, Mandaloriens). Choisis l'adversité selon l'histoire et l'expérience du héros, et laisse des issues quand le combat serait perdu d'avance.
+- Combats : ne déclenche un combat jouable que si l’histoire y mène vraiment et que l’affrontement mérite d’être joué. Choisis le type selon la situation et les ressources : "duel" quand un utilisateur de la Force ou un Mandalorien se trouve dans chaque camp (Jedi contre Sith, Mandalorien contre Jedi, chasseurs mandaloriens rivaux) ; "fusillade" pour tous les autres affrontements à échelle humaine (pègre, soldats, pirates, droïdes, et aussi un Jedi face à une escouade ou un Sith à la tête de ses soldats), un combat tactique au tour par tour où l’on se met à couvert, où l’on charge au corps à corps et où la Force s’exprime (bond, poussée, éclairs, lancer du sabre) ; ou la narration, avec des tests, pour une escarmouche brève ou quand l’astuce compte plus que les tirs (le jeu bascule lui-même entre duel et fusillade selon les combattants) ; "ship" pour un combat du vaisseau personnel du joueur (s’il en a un), "space" seulement si le joueur a une flotte, "ground" seulement s’il a des troupes. Choisis un décor et un objectif cohérents avec le lieu de la scène. Le jeu dose les adversaires ordinaires pour un héros de valeur moyenne : un héros aguerri les domine, un débutant souffre face à des élites (mercenaires réputés, Mandaloriens). Choisis l'adversité selon l'histoire et l'expérience du héros, et laisse des issues quand le combat serait perdu d'avance.
 - Combat raconté : quand un affrontement se joue en narration (par ton choix ou parce que le joueur a choisi « Raconter plutôt »), découpe-le en moments décisifs. À chaque moment, laisse le joueur décider (choices) et demande un jet ("test") quand l’issue est risquée. Le nombre, le terrain et les compétences comptent ; la difficulté choisie en session zéro aussi. Traduis les coups reçus avec "blessure" et "compagnonsBlesses".
 - Après un rapport de combat ou un résultat de jet, raconte les conséquences en restant exactement fidèle au résultat.
 - Les blessures et les dégâts durent : un personnage blessé, une flotte abîmée ou des troupes décimées le restent jusqu’à des soins, des réparations ou des renforts. Tiens-en compte dans le récit et dans la difficulté. Le joueur paie lui-même soins, réparations et recrues depuis sa fiche (lignes INTENDANCE) ; accorde "heal" seulement quand le récit apporte vraiment du repos ou des soins.
@@ -1235,7 +1235,7 @@ function applyData(d){
     S.pending={kind:'test',skill:d.test.skill,mod:Math.max(-6,Math.min(4,Math.round(+d.test.mod||0))),why:String(d.test.why||'').slice(0,160)};
   }else if(d.combat&&['duel','fusillade','ship','space','ground'].includes(d.combat.type)){
     const c=d.combat;
-    if(c.type==='duel'||c.type==='fusillade'){const all=[...(Array.isArray(c.enemies)?c.enemies:[]),...(Array.isArray(c.renforts)?c.renforts:[])].filter(x=>x&&typeof x==='object');c.type=duelWanted(all)?'duel':'fusillade';if(c.type==='fusillade'&&!LIEUX_F[c.lieu])c.lieu=c.decor==='vaisseau'?'coursive':'rue';}
+    if(c.type==='duel'||c.type==='fusillade'){const all=[...(Array.isArray(c.enemies)?c.enemies:[]),...(Array.isArray(c.renforts)?c.renforts:[])].filter(x=>x&&typeof x==='object');c.type=duelWanted(all,c.allies)?'duel':'fusillade';if(c.type==='fusillade'&&!LIEUX_F[c.lieu])c.lieu=c.decor==='vaisseau'?'coursive':'rue';}
     if(c.type==='space'&&!S.res.fleet.length)c.type=S.res.ship?'ship':'duel';
     if(c.type==='ship'&&!S.res.ship)c.type=S.res.fleet.length?'space':'duel';
     if(c.type==='ground'&&!S.res.troops.length)c.type='duel';
@@ -1477,8 +1477,13 @@ const LIEUX_F={cantina:'Cantina',hangar:'Hangar',rue:'Ruelle',coursive:'Coursive
 const MANDO_P=new Set(['mandoWarrior','mandoCommando','mandoChief','deathWatch']);
 const isForceFoe=x=>!!x&&(x.kind==='sith'||x.kind==='jedi'||(x.kind!=='none'&&LOOKS[x.preset]&&LOOKS[x.preset].kind!=='none'));
 const isMandoFoe=x=>!!x&&(MANDO_P.has(x.preset)||(x.look&&x.look.head==='mando')||(Array.isArray(x.tech)&&x.tech.includes('beskar')&&x.tech.includes('jetpack')));
-// Le duel accueille les combats où la Force ou un Mandalorien entre en jeu ; les autres échanges de tirs se jouent en fusillade.
-const duelWanted=foes=>heroFiche().kind!=='none'||foes.some(x=>isForceFoe(x)||isMandoFoe(x));
+// Le duel accueille les affrontements où la Force ou un Mandalorien se trouve dans chaque camp (Jedi contre Sith, Mandalorien contre Jedi…) ;
+// tout le reste se joue en fusillade, Jedi contre escouade compris, avec les pouvoirs de la Force.
+function sideHasElite(allies){
+  const h=heroFiche();if(h.kind!=='none'||isMandoFoe(h))return true;
+  return (allies||[]).some(a=>{const c=findComp(a);const L=c&&LOOKS[c.preset];return!!L&&(L.kind!=='none'||MANDO_P.has(c.preset));});
+}
+const duelWanted=(foes,allies)=>sideHasElite(allies)&&foes.some(x=>isForceFoe(x)||isMandoFoe(x));
 const cap4=c=>c.type==='fusillade'?8:4;
 function duelParty(c){
   const p=[heroFiche()];
