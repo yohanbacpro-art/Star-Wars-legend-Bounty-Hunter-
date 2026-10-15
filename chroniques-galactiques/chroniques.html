@@ -4718,6 +4718,13 @@ const ERAS=[
 const SKILLS=[['sabre','Sabre / mêlée'],['tir','Tir'],['pilotage','Pilotage'],['commandement','Commandement'],['discretion','Discrétion'],['persuasion','Persuasion'],['intimidation','Intimidation'],['technique','Technique'],['perception','Perception'],['athletisme','Athlétisme'],['force','Force']];
 const SKL=Object.fromEntries(SKILLS);
 const POOL=26,BASE=8,MAXSK=16;
+// Niveau de départ : la stature du personnage quand l'histoire commence.
+const LEVELS={
+  debutant:{l:'Débutant',d:'Tout reste à prouver.',pool:26,max:16,pv:0,fp:0,xp:0,destiny:3},
+  aguerri:{l:'Aguerri',d:'Quelques années de métier, un nom qui circule.',pool:34,max:17,pv:1,fp:1,xp:2,destiny:3},
+  veteran:{l:'Vétéran',d:'Une réputation solide, des ennemis qui le craignent.',pool:42,max:18,pv:2,fp:1,xp:4,destiny:4},
+  legende:{l:'Légende',d:'Un nom qu’on murmure dans toute la galaxie.',pool:50,max:18,pv:3,fp:2,xp:6,destiny:5}};
+const lvlOf=h=>LEVELS[h.niveau]||LEVELS.debutant;
 const SHIP_T={cruiser:'Croiseur',frigate:'Frégate',corvette:'Corvette',fighters:'Escadron de chasseurs',interceptor:'Escadron d’intercepteurs',bomber:'Escadron de bombardiers'};
 const FACTIONS={imp:'Empire galactique',reb:'Rébellion / Nouvelle République',rep:'République (clones, Ancienne République)',sep:'Séparatistes',mando:'Mandaloriens',pirate:'Pègre / pirates',vong:'Yuuzhan Vong',chiss:'Chiss',sith:'Empire Sith'};
 const OPP={imp:'reb',reb:'imp',rep:'sep',sep:'rep',mando:'pirate',pirate:'imp',vong:'reb',chiss:'pirate',sith:'rep'};
@@ -4944,7 +4951,7 @@ function applyLook(key){const L=LOOKS[key];draft.hero.lookKey=key;draft.hero.loo
 const spent=h=>SKILLS.reduce((a,[k])=>a+((k==='force'&&!h.force)?0:Math.max(0,h.skills[k]-BASE)),0);
 function derived(h){
   const ath=h.skills.athletisme,per=h.skills.perception;
-  return{pv:22+(ath-BASE)*2+(h.pvBonus||0)*4,fp:h.force?2+Math.max(0,Math.floor((h.skills.force-BASE)/2)):0,ref:Math.round((ath+per)/2)};
+  return{pv:22+(ath-BASE)*2+(h.pvBonus||0)*4,fp:h.force?2+Math.max(0,Math.floor((h.skills.force-BASE)/2))+(h.fpBonus||0):0,ref:Math.round((ath+per)/2)};
 }
 
 /* ================= Création ================= */
@@ -4955,7 +4962,7 @@ const firstStep=()=>createMode==='second'?1:0,lastStep=()=>createMode==='second'
 function startCreation(){createMode='campaign';draft=newDraft();step=0;showScreen('scr-create');renderStep();}
 function startSecond(){if(!S||twoFils())return;createMode='second';draft=newDraft();draft.era=S.era;draft.year=S.year;draft.zero=clone(S.zero);step=1;showScreen('scr-create');renderStep();}
 function addSecond(){
-  const d=draft;migrate(S);S.fils=[pickFil(),{hero:d.hero,res:{...d.res,notes:[]},path:d.path,xp:0,objectif:'',objTurns:0,horloges:[],contrats:[],unlocks:{},fresh:true}];
+  const d=draft;migrate(S);S.fils=[pickFil(),{hero:d.hero,res:{...d.res,notes:[]},path:d.path,xp:lvlOf(d.hero).xp,objectif:'',objTurns:0,horloges:[],contrats:[],unlocks:{},fresh:true}];
   S.fils[1].hero.hp=derived(d.hero).pv;if(S.fils[1].res.fleet.length)S.fils[1].res.fleet.forEach((x,i)=>x.flag=i===0);
   createMode='campaign';showScreen('scr-story');switchFil();
 }
@@ -4988,8 +4995,9 @@ function renderStep(){
         <label class="fld"><span>Secret</span><textarea id="cSecret" rows="2" maxlength="400">${esc(h.secret)}</textarea></label>
       </div>`;
   }else if(step===3){
-    const left=POOL-spent(h),D=derived(h);
-    B.innerHTML=`<h3>Compétences</h3><p class="intro">Chaque compétence part de ${BASE}. Pendant le jeu, tu lances 3d6 et tu dois faire inférieur ou égal à ton score (avec les modificateurs). 3 ou 4 : réussite critique. 17 ou 18 : échec critique.</p>
+    const L=lvlOf(h),left=L.pool-spent(h),D=derived(h);
+    B.innerHTML=`<h3>Compétences</h3><div class="fld"><span>Niveau de départ</span><div class="chipset">${Object.entries(LEVELS).map(([k,v])=>`<button type="button" data-niveau="${k}" class="${(h.niveau||'debutant')===k?'on':''}" title="${v.d}">${v.l}</button>`).join('')}</div><span class="muted">${L.d} ${L.pool} points, ${L.max} au plus par compétence${L.pv?`, +${L.pv*4} PV`:''}${L.fp&&h.force?`, +${L.fp} point${L.fp>1?'s':''} de Force`:''}${L.xp?`, ${L.xp} XP à dépenser en jeu (techniques, formes)`:''}, ${L.destiny} points de Destin.</span></div>
+      <p class="intro">Chaque compétence part de ${BASE}. Pendant le jeu, tu lances 3d6 et tu dois faire inférieur ou égal à ton score (avec les modificateurs). 3 ou 4 : réussite critique. 17 ou 18 : échec critique.</p>
       <div class="pool"><span class="label">Points restants</span><b>${h.rolled?'—':left}</b><button type="button" id="cAdvice">Répartition conseillée</button><button type="button" id="cRoll">Tirer aux dés (3d6)</button>${h.rolled?'<span class="muted">Scores tirés aux dés : la réserve de points ne s’applique plus.</span>':''}</div>
       <div class="skills">${SKILLS.filter(([k])=>k!=='force'||h.force).map(([k,l])=>`<div class="sk"><span>${l}</span><button type="button" data-sk="${k}" data-d="-1" aria-label="Baisser ${l}">−</button><div style="display:grid;gap:4px"><span class="v">${h.skills[k]}</span><span class="bar"><i style="width:${(h.skills[k]-6)/(18-6)*100}%"></i></span></div><button type="button" data-sk="${k}" data-d="1" aria-label="Monter ${l}">+</button></div>`).join('')}</div>
       <div class="derived"><span>PV <b>${D.pv}</b></span><span>Réflexes <b>${D.ref}</b></span>${h.force?`<span>Réserve de Force <b>${D.fp}</b></span>`:''}<span class="muted">PV et réflexes viennent de l’Athlétisme et de la Perception.</span></div>`;
@@ -5074,7 +5082,7 @@ function validate(){
   const h=draft.hero;
   if(step===1&&!draft.path)return'Choisis une voie.';
   if(step===2&&!h.name)return'Donne un nom à ton personnage.';
-  if(step===3&&!h.rolled&&spent(h)>POOL)return'Tu as dépensé plus de points que disponible.';
+  if(step===3&&!h.rolled&&spent(h)>lvlOf(h).pool)return'Tu as dépensé plus de points que disponible.';
   if(step===6&&!draft.zero.themes.length)return'Choisis au moins un thème.';
   return null;
 }
@@ -5082,7 +5090,8 @@ $('stepBody').addEventListener('click',e=>{
   const t=e.target.closest('button');if(!t)return;const h=draft.hero;
   if(t.dataset.era){readStep();draft.era=t.dataset.era;renderStep();}
   else if(t.dataset.path){readStep();applyPath(t.dataset.path);renderStep();}
-  else if(t.dataset.sk){const k=t.dataset.sk,d=+t.dataset.d;const nv=h.skills[k]+d;if(nv<6||nv>MAXSK+(h.rolled?2:0))return;if(!h.rolled&&d>0&&spent(h)>=POOL)return;if(!h.rolled&&nv<BASE)return;h.skills[k]=nv;renderStep();}
+  else if(t.dataset.niveau&&LEVELS[t.dataset.niveau]){const L=LEVELS[t.dataset.niveau];h.niveau=t.dataset.niveau;h.pvBonus=L.pv;h.fpBonus=L.fp;if(!h.rolled)SKILLS.forEach(([k])=>{h.skills[k]=Math.min(h.skills[k],L.max);});renderStep();}
+  else if(t.dataset.sk){const k=t.dataset.sk,d=+t.dataset.d;const nv=h.skills[k]+d;if(nv<6||nv>lvlOf(h).max+(h.rolled?2:0))return;if(!h.rolled&&d>0&&spent(h)>=lvlOf(h).pool)return;if(!h.rolled&&nv<BASE)return;h.skills[k]=nv;renderStep();}
   else if(t.id==='cAdvice'){const P=PATHS[draft.path||'free'];SKILLS.forEach(([k])=>h.skills[k]=BASE);Object.assign(h.skills,P.sk);if(!h.force)h.skills.force=BASE;else if(h.skills.force<12)h.skills.force=12;h.rolled=false;renderStep();}
   else if(t.id==='cRoll'){SKILLS.forEach(([k])=>{const r=rint(1,6)+rint(1,6)+rint(1,6);h.skills[k]=Math.max(6,Math.min(18,r));});if(!h.force)h.skills.force=BASE;h.rolled=true;renderStep();}
   else if(t.dataset.addres){readStep();const r=draft.res,k=t.dataset.addres;
@@ -5407,7 +5416,7 @@ async function getSample(){
 }
 function heroBlock(){
   const h=S.hero,D=derived(h),era=ERAS.find(e=>e.k===S.era);
-  return[`Nom : ${h.name} · Espèce : ${h.species||'?'} · Âge : ${h.age||'?'}`,
+  return[`Nom : ${h.name} · Espèce : ${h.species||'?'} · Âge : ${h.age||'?'} · Niveau : ${lvlOf(h).l} (${lvlOf(h).d})`,
     `Voie : ${PATHS[S.path].l}${h.force?` · Sensible à la Force (${(PATHS[S.path].kind!=='none'?PATHS[S.path].kind:h.side)==='sith'?'côté obscur':'côté lumineux'})`:' · Non sensible à la Force'}`,
     `Origine : ${h.origin||'—'}`,`Atout : ${h.trait||'—'}`,`Faiblesse : ${h.flaw||'—'}`,`Secret : ${h.secret||'—'}`,
     `Compétences (3d6 sous le score) : ${SKILLS.filter(([k])=>k!=='force'||h.force).map(([k,l])=>`${k}=${h.skills[k]}`).join(', ')}`,
@@ -5455,6 +5464,7 @@ Principes :
 - Après un rapport de combat ou un résultat de jet, raconte les conséquences en restant exactement fidèle au résultat.
 - Les blessures et les dégâts durent : un personnage blessé, une flotte abîmée ou des troupes décimées le restent jusqu’à des soins, des réparations ou des renforts. Tiens-en compte dans le récit et dans la difficulté. Le joueur paie lui-même soins, réparations et recrues depuis sa fiche (lignes INTENDANCE) ; accorde "heal" seulement quand le récit apporte vraiment du repos ou des soins.
 - Expérience : 0 pour une scène ordinaire (la plupart), 1 pour un accomplissement notable ou une belle idée du joueur, 2 ou 3 pour une grande victoire ou la fin d’un arc. Les lignes PROGRESSION indiquent ce que le joueur a appris.
+- Stature : le niveau du personnage (débutant, aguerri, vétéran, légende) dit qui il est au début de l’histoire. Accorde-lui la réputation, les contacts, les ennemis et les enjeux qui vont avec : un débutant commence en bas de l’échelle, une légende est connue, crainte et traquée par des adversaires à sa mesure.
 - Le récit est le cœur du jeu : les mécaniques (combats, intendance, progression) servent l’histoire et y reviennent toujours.
 - Chaque PNJ important a sa voix : vocabulaire, tics, accent, ce qu’il veut et ce qu’il cache. Garde-la constante d’une scène à l’autre et note-la dans "codex" ("voix").
 - Compagnons : quand un personnage rejoint durablement le groupe (il voyage et se bat aux côtés du joueur), ajoute-le avec "addCompanions" en choisissant le modèle le plus proche, en plus de sa fiche dans "codex". Quand il part ou meurt, retire-le avec "removeCompanions".
@@ -5935,6 +5945,7 @@ async function beginCampaign(){
   const d=draft;
   S={v:2,codex:null,chapters:[],playerNotes:'',era:d.era,year:d.year,path:d.path,hero:d.hero,res:{...d.res,notes:[]},zero:d.zero,secret:null,chronicle:[],chapter:{n:1,title:''},feed:[],pending:null,choices:[],xp:0,created:Date.now()};
   if(S.res.fleet.length)S.res.fleet.forEach((s,i)=>s.flag=i===0);
+  S.xp=lvlOf(S.hero).xp;S.destiny=lvlOf(S.hero).destiny;
   migrate(S);S.hero.hp=derived(S.hero).pv;book=[];undoStack=[];lastAsk=null;
   await storeNew(S);
   showScreen('scr-story');renderStory();

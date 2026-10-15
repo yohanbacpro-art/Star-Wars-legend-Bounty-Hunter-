@@ -202,10 +202,15 @@ async function finishEngine(name,flee,retry){
   // Jauge de la Force : un Seigneur Sith
   answers.push(R('Tu brises le prisonnier sans un mot.',{choices:['Partir'],updates:{cote:-3,cote_raison:'A torturé un prisonnier'},chronicle:'Cruauté.',chapter:{title:'Ombres'},secret:{arc:'x'}}));
   click($('menuNew'));click($('btnNew'));click($('stepNext'));click(d.querySelector('[data-path="sith"]'));click($('stepNext'));click($('stepNext'));
-  $('cName').value='Darth Test';click($('stepNext'));click($('stepNext'));click($('stepNext'));click($('stepNext'));
+  $('cName').value='Darth Test';click($('stepNext'));
+  click(d.querySelector('[data-niveau="legende"]'));ok($('stepBody').textContent.includes('50 points, 18 au plus par compétence, +12 PV'),'niveau Légende : 50 points, 18 au plus, +12 PV');
+  for(let i=0;i<12;i++)click(d.querySelector('[data-sk="sabre"][data-d="1"]'));ok(+d.querySelector('[data-sk="sabre"][data-d="1"]').parentElement.querySelector('.v').textContent===18,'une Légende monte une compétence jusqu’à 18');
+  click($('stepNext'));click($('stepNext'));click($('stepNext'));
   click(d.querySelector('[data-theme="Vengeance"]'));click($('stepNext'));
   await waitFor(()=>$('sheet').textContent.includes('plongé dans le côté obscur'),5000,'force');
   ok(d.querySelector('.abar'),'jauge de la Force affichée pour un personnage sensible à la Force');
+  ok(prompts.some(q=>q.includes('Nom : Darth Test')&&q.includes('Niveau : Légende')),'le MJ connaît la stature du personnage');
+  ok(d.querySelector('.destiny').textContent.includes('●●●●●'),'une Légende commence avec 5 points de Destin');
   // Rythme : thème principal, objectif, horloges, ellipse
   ok(prompts[0].includes('Thème principal (il porte l’intrigue) : Guerre et rébellion'),'thème principal transmis au MJ');
   ok(prompts[1].includes('## Rythme\nObjectif actuel : Démasquer le saboteur')&&prompts[1].includes('- Le saboteur frappe : 1/4'),'objectif et horloges transmis au MJ');
