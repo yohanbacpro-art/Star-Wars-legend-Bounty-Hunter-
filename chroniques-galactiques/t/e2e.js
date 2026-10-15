@@ -34,7 +34,7 @@ const $=id=>d.getElementById(id);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const click=el=>{if(!el)throw new Error('missing element');el.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));};
 async function waitFor(fn,ms=60000,label=''){const t=Date.now();while(Date.now()-t<ms){try{if(fn())return;}catch(e){}await sleep(50);}throw new Error('timeout '+label);}
-async function finishEngine(name,flee){
+async function finishEngine(name,flee,retry){
   const pre={space:'sp',ground:'gr',duel:'ar',skirmish:'fu'}[name];
   await waitFor(()=>!$('eng-'+name).hidden,5000,'engine shown '+name);
   let n=0;
@@ -49,6 +49,9 @@ async function finishEngine(name,flee){
   }
   await waitFor(()=>!$(pre+'-over').hidden,90000,'engine over '+name);
   console.log(name,'report:',$(pre+'-rBox').value.split('\n')[0]);
+  if(retry){click(d.querySelector('#eng-'+name+' [data-retry-combat]'));
+    await waitFor(()=>!$('eng-'+name).hidden&&$(pre+'-over').hidden,5000,'retry');
+    console.log('ok - recommencer relance le même combat');return finishEngine(name,flee,false);}
   click(d.querySelector('#eng-'+name+' [data-return]'));
   await waitFor(()=>!$('shell').hidden,3000,'back to shell');
 }
@@ -89,12 +92,15 @@ async function finishEngine(name,flee){
   click($('fightBtn'));
   await waitFor(()=>!$('eng-duel').hidden,5000,'duel shown');
   ok($('ar-fighters').textContent.includes('Krrasantan Le Noir'),'le compagnon combat aux côtés du héros');
+  const promptsBefore=prompts.length;
   {const card=n=>[...$('ar-fighters').querySelectorAll('.fc')].find(x=>x.textContent.includes(n)).textContent;
    ok(card('Stormtrooper').includes('Sbire')&&!card('Vessk').includes('Sbire'),'les soldats de base sont des sbires, pas l’assassin nommé');}
   ok(!$('ar-waveInfo').hidden&&$('ar-waveInfo').textContent==='Renforts 3 · échange 2','compteur de renforts affiché');
-  await finishEngine('duel');
+  await finishEngine('duel',false,true);
+  ok(prompts.length===promptsBefore+1,'recommencer n’envoie rien au MJ : un seul rapport, celui du combat rejoué');
   ok(/Stormtrooper 5/.test(prompts[2]),'les renforts figurent dans le rapport de combat');
   await waitFor(()=>$('fightBtn'),8000,'fight space');
+  ok(d.querySelector('.destiny').textContent.includes('●○○○○'),'recommencer a coûté un point de Destin');
   ok($('actZone').textContent.includes('Empire galactique contre Séparatistes'),'camps de la bataille spatiale');
   ok($('actZone').textContent.includes('Escorte de convoi · Tempête ionique'),'mission et météo spatiales sur la carte de combat');
   click($('fightBtn'));await finishEngine('space');

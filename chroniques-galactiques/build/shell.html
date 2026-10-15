@@ -214,6 +214,7 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
 /* Moteurs : plein écran pendant les combats */
 .engine{min-height:100vh}
 .engine [data-return]{margin-top:2px}
+.engine [data-retry-combat]{margin-top:2px}
 #sp-againBtn,#sp-newBtn,#gr-againBtn,#gr-newBtn,#ar-againBtn,#ar-backBtn,#ar-backBtn2{display:none!important}
 .engbar{max-width:1480px;margin:0 auto;padding:10px 16px 0;display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
 .engbar span{font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
@@ -1522,6 +1523,12 @@ function launchCombat(){
   window.ENGINES[eng].start();
 }
 window.__engineEnd=(engine,res)=>{if(combatCtx)combatCtx.result={engine,...res};};
+// Recommencer un combat : rien n'a encore été appliqué à la partie ; il en coûte un point de Destin.
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-retry-combat]');if(!b||!combatCtx||!combatCtx.result||!S)return;
+  if((S.destiny||0)<1){b.textContent='Plus de point de Destin';b.disabled=true;return;}
+  S.destiny--;combatCtx.result=null;saveCampaign();hideEngines();launchCombat();
+});
 document.addEventListener('click',e=>{
   if(!e.target.closest('[data-return]'))return;
   if(!combatCtx||!combatCtx.result)return;

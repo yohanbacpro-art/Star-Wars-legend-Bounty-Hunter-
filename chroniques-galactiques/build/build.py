@@ -55,7 +55,7 @@ def prefix_dom(dom, p):
     dom = re.sub(r'\bfor="([^"]+)"', lambda m: f'for="{p}-{m.group(1)}"', dom)
     dom = re.sub(r'aria-labelledby="([^"]+)"', lambda m: f'aria-labelledby="{p}-{m.group(1)}"', dom)
     dom = dom.replace(f'<textarea id="{p}-rBox" readonly></textarea>',
-                      f'<textarea id="{p}-rBox" readonly></textarea>\n          <button type="button" class="primary" data-return>Retour au récit</button>')
+                      f'<textarea id="{p}-rBox" readonly></textarea>\n          <button type="button" class="primary" data-return>Retour au récit</button>\n          <button type="button" data-retry-combat>Recommencer le combat · 1 point de Destin</button>')
     assert 'data-return' in dom, p
     return dom
 
@@ -192,6 +192,8 @@ css, dom, js = parts(os.path.join(SRC, 'fusillade.html'))
 css = css.replace('canvas#cv', 'canvas#fu-cv')
 fu_css = scope_css(css, '#eng-skirmish')
 fu_dom = prefix_dom(dom, 'fu')
+fu_dom = must(fu_dom, '<button type="button" id="fu-copyBtn">Copier le rapport</button>', '<button type="button" data-retry-combat>Recommencer · 1 point de Destin</button><button type="button" id="fu-copyBtn">Copier le rapport</button>')
+fu_dom = must(fu_dom, '<div class="btns"><button type="button" data-retry-combat>', '<div class="btns" style="grid-template-columns:1fr 1fr 1fr"><button type="button" data-retry-combat>')
 js = must(js, "const $=id=>document.getElementById(id);", "const $=id=>document.getElementById('fu-'+id);")
 js = must(js, 'function frame(now){', GATE % 'skirmish')
 js = must(js, "window.__fusEnd&&window.__fusEnd(", "window.__engineEnd&&window.__engineEnd('skirmish',")

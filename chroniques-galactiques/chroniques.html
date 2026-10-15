@@ -214,6 +214,7 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
 /* Moteurs : plein écran pendant les combats */
 .engine{min-height:100vh}
 .engine [data-return]{margin-top:2px}
+.engine [data-retry-combat]{margin-top:2px}
 #sp-againBtn,#sp-newBtn,#gr-againBtn,#gr-newBtn,#ar-againBtn,#ar-backBtn,#ar-backBtn2{display:none!important}
 .engbar{max-width:1480px;margin:0 auto;padding:10px 16px 0;display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
 .engbar span{font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
@@ -714,6 +715,7 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
           <label class="label" for="sp-rBox">Rapport à recopier dans le JDR</label>
           <textarea id="sp-rBox" readonly></textarea>
           <button type="button" class="primary" data-return>Retour au récit</button>
+          <button type="button" data-retry-combat>Recommencer le combat · 1 point de Destin</button>
           <div class="btns">
             <button id="sp-copyBtn" type="button">Copier le rapport</button>
             <button id="sp-againBtn" class="primary" type="button">Nouvelle bataille</button>
@@ -784,6 +786,7 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
           <label class="label" for="gr-rBox">Rapport à recopier dans le JDR</label>
           <textarea id="gr-rBox" readonly></textarea>
           <button type="button" class="primary" data-return>Retour au récit</button>
+          <button type="button" data-retry-combat>Recommencer le combat · 1 point de Destin</button>
           <div class="btns">
             <button id="gr-copyBtn" type="button">Copier le rapport</button>
             <button id="gr-againBtn" class="primary" type="button">Nouvelle bataille</button>
@@ -858,6 +861,7 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
           <label class="label" for="ar-rBox">Rapport à recopier dans le JDR</label>
           <textarea id="ar-rBox" readonly></textarea>
           <button type="button" class="primary" data-return>Retour au récit</button>
+          <button type="button" data-retry-combat>Recommencer le combat · 1 point de Destin</button>
           <div class="btns">
             <button id="ar-copyBtn" type="button">Copier le rapport</button>
             <button id="ar-againBtn" class="primary" type="button">Rejouer</button>
@@ -1000,7 +1004,7 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);background
       <canvas id="fu-cv" aria-label="Carte tactique"></canvas>
       <div class="over" id="fu-over" hidden>
         <div class="report"><h2 id="fu-rTitle"></h2><p id="fu-rText"></p><textarea id="fu-rBox" readonly aria-label="Rapport de combat"></textarea>
-          <div class="btns"><button type="button" id="fu-copyBtn">Copier le rapport</button><button type="button" class="primary" id="fu-againBtn" data-return>Rejouer</button></div></div>
+          <div class="btns" style="grid-template-columns:1fr 1fr 1fr"><button type="button" data-retry-combat>Recommencer · 1 point de Destin</button><button type="button" id="fu-copyBtn">Copier le rapport</button><button type="button" class="primary" id="fu-againBtn" data-return>Rejouer</button></div></div>
       </div>
     </div>
     <aside class="console">
@@ -5901,6 +5905,12 @@ function launchCombat(){
   window.ENGINES[eng].start();
 }
 window.__engineEnd=(engine,res)=>{if(combatCtx)combatCtx.result={engine,...res};};
+// Recommencer un combat : rien n'a encore été appliqué à la partie ; il en coûte un point de Destin.
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-retry-combat]');if(!b||!combatCtx||!combatCtx.result||!S)return;
+  if((S.destiny||0)<1){b.textContent='Plus de point de Destin';b.disabled=true;return;}
+  S.destiny--;combatCtx.result=null;saveCampaign();hideEngines();launchCombat();
+});
 document.addEventListener('click',e=>{
   if(!e.target.closest('[data-return]'))return;
   if(!combatCtx||!combatCtx.result)return;
