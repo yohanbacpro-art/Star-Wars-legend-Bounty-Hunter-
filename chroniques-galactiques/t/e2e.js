@@ -268,5 +268,24 @@ async function finishEngine(name,flee,retry){
    await waitFor(()=>!d.querySelector('#stopMJ'),5000,'fin MJ');
    click($('menuNew'));ok(/Agent Vey & Darth Test|Darth Test & Agent Vey/.test($('campZone').textContent),'la campagne porte les deux noms');}
   ok(!$('sheet').textContent.includes('Contrats'),'pas de contrats tant que l’histoire ne les ouvre pas');
+  // Deux personnages dès la création, alternance automatique, « Précédemment… »
+  {click($('btnNew'));click(d.querySelector('[data-duo="1"]'));ok($('stepBody').textContent.includes('Tu crées les deux personnages'),'choix « Deux personnages » à la création');
+   click($('stepNext'));ok($('stepBody').textContent.includes('Personnage 1 sur 2'),'repère « Personnage 1 sur 2 »');
+   click(d.querySelector('[data-path="smuggler"]'));click($('stepNext'));$('cName').value='Kael Duo';click($('stepNext'));click($('stepNext'));click($('stepNext'));
+   ok($('stepNext').textContent==='Créer le second personnage','après les ressources : créer le second personnage');click($('stepNext'));
+   ok($('stepBody').textContent.includes('Personnage 2 sur 2 · le premier : Kael Duo')&&$('stepPrev').disabled,'on enchaîne sur le second personnage');
+   click(d.querySelector('[data-path="moff"]'));click($('stepNext'));$('cName').value='Moff Vire';click($('stepNext'));click($('stepNext'));click($('stepNext'));click($('stepNext'));
+   click(d.querySelector('[data-theme="Intrigues politiques"]'));
+   const n0=prompts.length;answers.push(R('Kael atterrit.',{choices:['Avancer'],chronicle:'a',secret:{arc:'duo'},chapter:{title:'Deux fils'}}));click($('stepNext'));
+   await waitFor(()=>prompts.length===n0+1&&!d.querySelector('#stopMJ'),5000,'duo open');await sleep(100);
+   ok(prompts[n0].includes('Le joueur a créé deux personnages')&&prompts[n0].includes('Nom : Kael Duo')&&prompts[n0].includes('## Autre personnage du joueur\nMoff Vire'),'le MJ ouvre la campagne avec les deux personnages');
+   answers.push(R('La porte s’ouvre sur le vide.',{choices:['x'],bascule:true,chronicle:'b'}));answers.push(R('Le Moff observe.',{choices:['x'],chronicle:'c'}));
+   click(d.querySelector('[data-choice="0"]'));await waitFor(()=>prompts.length===n0+3&&!d.querySelector('#stopMJ'),8000,'auto switch');await sleep(100);
+   ok(prompts[n0+2].includes('[NOUVEAU PERSONNAGE]')&&prompts[n0+2].includes('Nom : Moff Vire')&&$('feed').textContent.includes('Pendant ce temps — Moff Vire'),'le MJ coupe la scène et le jeu passe seul à l’autre personnage');
+   click($('menuNew'));const real=w.Date.now;w.Date.now=()=>real()+3*3600e3;
+   answers.push(R('Kael et le Moff tournent autour du même secret.',{}));const n1=prompts.length;
+   [...d.querySelectorAll('[data-open]')].find(b=>b.closest('.camp').textContent.includes('Kael Duo')).click();
+   await waitFor(()=>prompts.length===n1+1&&!d.querySelector('#stopMJ'),5000,'recap');await sleep(100);w.Date.now=real;
+   ok(prompts[n1].includes('« Précédemment… »')&&$('feed').textContent.includes('Précédemment…')&&$('feed').textContent.includes('tournent autour du même secret'),'« Précédemment… » à la reprise après une pause');}
   console.log('prompt bytes',Buffer.byteLength(prompts[4]));fs.writeFileSync('p4.txt',prompts[4]);console.log('E2E OK');process.exit(0);
 })().catch(e=>{console.log('FAIL',e.message);process.exit(1);});
