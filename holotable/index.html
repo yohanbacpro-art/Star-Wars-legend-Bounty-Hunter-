@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Holotable Galactique</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Chakra+Petch:wght@500;600;700&family=Share+Tech+Mono&display=swap">
+<style>
+/* Mise en page : une table holographique de salle de guerre. Le plateau
+   hexagonal occupe tout l'écran, la console de commandement est accolée à
+   droite (sous le plateau sur téléphone). Thème sombre unique, choisi :
+   c'est un hologramme projeté dans le noir. */
+:root{
+  color-scheme: dark;
+  --void:#060a11;
+  --hull:#0c1320;
+  --hull-2:#121d2e;
+  --hull-3:#192840;
+  --seam:#24364f;
+  --text:#d8e5f2;
+  --muted:#8197b0;
+  --holo:#7fd9ff;
+  --holo-soft:rgba(127,217,255,.16);
+  --side-a:#4aa8ff;
+  --side-b:#ff5d4f;
+  --side-n:#e9c46a;
+  --gold:#ffcf5a;
+  --good:#5bd69a;
+  --bad:#ff6b5e;
+  --f-display:"Chakra Petch","Rajdhani","Segoe UI",system-ui,sans-serif;
+  --f-body:"Barlow","Segoe UI",system-ui,-apple-system,sans-serif;
+  --f-data:"Share Tech Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  --gutter-l:max(16px, env(safe-area-inset-left, 0px));
+  --gutter-r:max(16px, env(safe-area-inset-right, 0px));
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--void);color:var(--text);font:15px/1.45 var(--f-body);-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--holo);outline-offset:2px}
+h1,h2,h3{font-family:var(--f-display);font-weight:600;letter-spacing:.02em;text-wrap:balance;margin:0}
+.eyebrow{font:600 .72rem/1 var(--f-display);letter-spacing:.18em;text-transform:uppercase;color:var(--holo)}
+.mono{font-family:var(--f-data);font-variant-numeric:tabular-nums}
+
+/* ---------- Boutons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.45em;min-height:36px;padding:.4em .9em;border:1px solid var(--seam);background:var(--hull-2);border-radius:6px;font:600 .86rem/1.1 var(--f-display);letter-spacing:.05em;text-transform:uppercase;transition:background .15s,border-color .15s,transform .1s}
+.btn:hover{background:var(--hull-3);border-color:var(--holo)}
+.btn:active{transform:translateY(1px)}
+.btn[disabled]{opacity:.4;pointer-events:none}
+.btn.primary{background:var(--holo);color:var(--void);border-color:var(--holo)}
+.btn.primary:hover{background:#a9e7ff}
+.btn.danger:hover{border-color:var(--bad);color:var(--bad)}
+.btn.ghost{background:transparent}
+.btn.sm{min-height:30px;padding:.3em .65em;font-size:.76rem}
+.btn.icon{width:36px;padding:0}
+.seg{display:inline-flex;border:1px solid var(--seam);border-radius:6px;overflow:hidden}
+.seg button{border:0;background:transparent;padding:.45em .8em;font:600 .78rem/1 var(--f-display);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--holo-soft);color:var(--holo)}
+.field{display:grid;gap:4px}
+.field label{font:600 .7rem/1 var(--f-display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.field input,.field select,.field textarea{background:var(--void);border:1px solid var(--seam);border-radius:6px;padding:.45em .6em;min-height:36px;width:100%}
+.field textarea{font-family:var(--f-data);font-size:.78rem;min-height:140px;resize:vertical}
+
+/* ---------- Écran d'accueil */
+#menu{min-height:100%;position:relative;padding-block:28px 48px;padding-left:var(--gutter-l);padding-right:var(--gutter-r);
+  background:linear-gradient(180deg,rgba(6,10,17,.35),var(--void) 420px),url("assets/carte-espace.jpg") center top/cover no-repeat,var(--void)}
+.menu-inner{max-width:1180px;margin:0 auto;display:grid;gap:36px}
+.masthead{display:grid;gap:10px;padding-top:24px}
+.masthead h1{font-size:clamp(2.6rem,7vw,5.2rem);font-weight:700;line-height:.92;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--holo);text-shadow:0 0 24px rgba(127,217,255,.45)}
+.masthead h1 span{display:block;font-size:.34em;letter-spacing:.42em;color:var(--text);text-shadow:none;margin-top:.5em}
+.masthead p{max-width:62ch;color:var(--muted);font-size:1.05rem;margin:0}
+.menu-actions{display:flex;flex-wrap:wrap;gap:10px}
+.menu-section{display:grid;gap:14px}
+.menu-section > header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px;border-bottom:1px solid var(--seam);padding-bottom:8px}
+.menu-section h2{font-size:1.35rem}
+.menu-section header p{margin:0;color:var(--muted);font-size:.92rem}
+.scen-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.scen{display:grid;grid-template-rows:auto auto 1fr auto;gap:10px;padding:14px;background:rgba(12,19,32,.88);border:1px solid var(--seam);border-radius:10px;min-width:0}
+.scen .strip{display:flex;align-items:center;justify-content:space-between;gap:6px;height:64px;padding:6px 10px;border-radius:6px;
+  background:repeating-linear-gradient(90deg,transparent 0 27px,rgba(127,217,255,.06) 27px 28px),var(--void)}
+.scen .strip .grp{display:flex;align-items:center;gap:2px;min-width:0}
+.scen .strip img{height:46px;width:auto;object-fit:contain}
+.scen .strip .vs{font:700 .7rem/1 var(--f-display);letter-spacing:.2em;color:var(--muted)}
+.scen h3{font-size:1.08rem}
+.scen p{margin:0;color:var(--muted);font-size:.9rem}
+.scen .meta{font:.74rem/1.2 var(--f-data);color:var(--holo);letter-spacing:.04em}
+.scen .row{display:flex;flex-wrap:wrap;gap:8px}
+.two-col{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:14px}
+.panel-card{padding:16px;background:rgba(12,19,32,.88);border:1px solid var(--seam);border-radius:10px;display:grid;gap:14px;align-content:start;min-width:0}
+.panel-card p{margin:0;color:var(--muted)}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+
+/* ---------- Écran de bataille */
+#battle{height:100%;display:grid;grid-template-rows:auto 1fr;padding-block:10px;padding-left:var(--gutter-l);padding-right:var(--gutter-r);gap:10px}
+.cmdbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;min-width:0}
+.cmdbar .title{display:grid;gap:2px;min-width:0;margin-right:auto}
+.cmdbar .title b{font:600 1.02rem/1.1 var(--f-display);letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.turnchip{display:inline-flex;align-items:center;gap:8px;padding:.35em .7em;border:1px solid var(--seam);border-radius:999px;background:var(--hull);font:.8rem/1 var(--f-data)}
+.turnchip i{width:10px;height:10px;border-radius:50%;background:var(--c,var(--holo));box-shadow:0 0 10px var(--c,var(--holo))}
+.battle-body{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:10px;min-height:0}
+.board-wrap{position:relative;min-height:0;min-width:0;display:grid;grid-template-rows:1fr auto;border:1px solid var(--seam);border-radius:10px;background:var(--void);overflow:hidden}
+.board-scroll{overflow:auto;min-height:0;display:flex;overscroll-behavior:contain;container-type:size}
+/* Le plateau tient dans le cadre, en largeur comme en hauteur ; --ar est son rapport largeur/hauteur. */
+#board{display:block;flex:none;margin:auto;width:calc(100% * var(--zoom,1));max-width:none;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+@supports (width:1cqh){#board{width:calc(min(100cqw, 100cqh * var(--ar,2)) * var(--zoom,1))}}
+.hexinfo{display:flex;flex-wrap:wrap;gap:4px 14px;padding:6px 12px;border-top:1px solid var(--seam);font:.78rem/1.3 var(--f-data);color:var(--muted);min-height:30px;background:var(--hull)}
+.hexinfo b{color:var(--text);font-weight:400}
+.banner{position:absolute;left:50%;top:18%;transform:translate(-50%,0);padding:.5em 1.4em;background:rgba(6,10,17,.82);border:1px solid var(--c,var(--holo));border-radius:6px;
+  font:700 clamp(.8rem,3.4vw,1.15rem)/1.2 var(--f-display);letter-spacing:.14em;text-transform:uppercase;color:var(--c,var(--holo));pointer-events:none;white-space:nowrap;
+  animation:banner 1.6s ease forwards}
+@keyframes banner{0%{opacity:0;transform:translate(-50%,-8px)}15%,70%{opacity:1;transform:translate(-50%,0)}100%{opacity:0}}
+
+.console{min-height:0;overflow:auto;display:grid;align-content:start;gap:10px;padding-right:2px}
+.box{background:var(--hull);border:1px solid var(--seam);border-radius:10px;padding:12px;display:grid;gap:10px;min-width:0}
+.box > h3{font-size:.74rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.sides{display:grid;gap:6px}
+.sideline{display:grid;grid-template-columns:12px 1fr auto;align-items:center;gap:8px;font-size:.9rem}
+.sideline i{width:10px;height:10px;border-radius:2px;background:var(--c)}
+.sideline .mono{color:var(--muted);font-size:.78rem}
+.sideline.active b{color:var(--c)}
+
+.ucard{display:grid;grid-template-columns:64px 1fr;gap:12px;align-items:center}
+.ucard .thumb{width:64px;height:64px;border-radius:8px;background:radial-gradient(circle at 50% 60%,var(--hull-3),var(--void));border:1px solid var(--seam);display:grid;place-items:center;overflow:hidden}
+.ucard .thumb img{max-width:56px;max-height:56px;object-fit:contain}
+.ucard .thumb .tok{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font:700 1rem/1 var(--f-display);background:var(--c);color:var(--void)}
+.ucard h2{font-size:1.1rem;line-height:1.15}
+.ucard .sub{font-size:.82rem;color:var(--muted)}
+.hpbar{height:8px;border-radius:4px;background:var(--void);overflow:hidden;border:1px solid var(--seam)}
+.hpbar > i{display:block;height:100%;background:var(--good);transition:width .3s}
+.hpline{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;font:.8rem/1 var(--f-data)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.stats div{background:var(--void);border:1px solid var(--seam);border-radius:6px;padding:6px 4px;text-align:center}
+.stats b{display:block;font:1.15rem/1 var(--f-data)}
+.stats span{font:600 .62rem/1 var(--f-display);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{font:600 .68rem/1 var(--f-display);letter-spacing:.08em;text-transform:uppercase;padding:.35em .55em;border-radius:4px;border:1px solid var(--seam);color:var(--muted);cursor:help}
+.ability{border:1px dashed var(--seam);border-radius:6px;padding:8px 10px;font-size:.86rem;display:grid;gap:2px}
+.ability b{font-family:var(--f-display);font-weight:600;color:var(--gold)}
+.desc{margin:0;color:var(--muted);font-size:.86rem}
+.status{font:.8rem/1.3 var(--f-data);color:var(--holo)}
+.actions{display:flex;flex-wrap:wrap;gap:6px}
+.odds{display:grid;gap:6px;padding:10px;border-radius:8px;border:1px solid var(--side-b);background:rgba(255,93,79,.07)}
+.odds .big{font:600 1rem/1.25 var(--f-display)}
+.odds ul{margin:0;padding-left:1.1em;color:var(--muted);font-size:.84rem}
+.hint{margin:0;color:var(--muted);font-size:.88rem}
+
+.log{display:grid;gap:6px;max-height:340px;overflow:auto;font-size:.84rem}
+.log .e{display:grid;grid-template-columns:8px 1fr;gap:8px;align-items:start}
+.log .e > i{width:8px;height:8px;border-radius:50%;margin-top:6px;background:var(--c,var(--muted))}
+.log .e.turn{color:var(--holo);font:600 .74rem/1.4 var(--f-display);letter-spacing:.12em;text-transform:uppercase;border-top:1px solid var(--seam);padding-top:6px}
+.dice{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;align-items:center}
+.dice .lbl{font:.68rem/1 var(--f-data);color:var(--muted);margin-right:2px}
+.die{width:20px;height:20px;border-radius:4px;display:grid;place-items:center;font:.76rem/1 var(--f-data);border:1px solid var(--seam);color:var(--muted)}
+.die.hit{background:var(--c,var(--holo));border-color:var(--c,var(--holo));color:var(--void)}
+.die.crit{background:var(--gold);border-color:var(--gold);color:var(--void)}
+.die.save{background:var(--holo-soft);border-color:var(--holo);color:var(--holo)}
+.die.big{width:30px;height:30px;font-size:1rem}
+
+.palette{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px}
+.palette button{display:grid;justify-items:center;gap:4px;padding:6px 4px;border:1px solid var(--seam);border-radius:8px;background:var(--void);font-size:.74rem;line-height:1.15;text-align:center}
+.palette button img{height:40px;width:auto;max-width:80px;object-fit:contain}
+.palette button .tok{width:36px;height:36px;border-radius:50%;background:var(--side-n);color:var(--void);display:grid;place-items:center;font:700 .8rem/1 var(--f-display)}
+.palette button[aria-pressed="true"]{border-color:var(--holo);background:var(--holo-soft)}
+.palette button small{color:var(--muted);font-family:var(--f-data)}
+.terrains{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px}
+.terrains button{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--seam);border-radius:8px;background:var(--void);font-size:.82rem;text-align:left}
+.terrains button i{width:18px;height:18px;border-radius:3px;flex:none;background:var(--c)}
+.terrains button[aria-pressed="true"]{border-color:var(--holo);background:var(--holo-soft)}
+.edit-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.edit-grid .field input{text-align:center;font-family:var(--f-data)}
+.hpedit{display:grid;grid-template-columns:auto 1fr auto;gap:6px;align-items:center}
+.diceout{display:grid;gap:6px;justify-items:start}
+.diceout .tot{font:600 1.5rem/1 var(--f-data);color:var(--holo)}
+
+/* ---------- Plateau SVG */
+#board .ov-move{fill:rgba(127,217,255,.17);stroke:rgba(127,217,255,.55);stroke-width:1}
+#board .ov-target{fill:rgba(255,93,79,.12);stroke:var(--side-b);stroke-width:2;stroke-dasharray:5 3}
+#board .ov-pending{fill:rgba(255,93,79,.28);stroke:var(--gold);stroke-width:3}
+#board .ov-sel{fill:none;stroke:#fff;stroke-width:2.5}
+#board .ov-hover{fill:rgba(255,255,255,.07);stroke:rgba(255,255,255,.6);stroke-width:1.5}
+#board .ov-spawn{fill:rgba(255,207,90,.14);stroke:var(--gold);stroke-width:1.5;stroke-dasharray:4 3}
+#board .unit .ring{stroke-width:2.5}
+#board .unit.s0 .ring{stroke:var(--side-a);fill:rgba(74,168,255,.16)}
+#board .unit.s1 .ring{stroke:var(--side-b);fill:rgba(255,93,79,.16)}
+#board .unit.s2 .ring{stroke:var(--side-n);fill:rgba(233,196,106,.16)}
+#board .unit.spent .ring{stroke-dasharray:4 4;opacity:.6}
+#board .unit.spent .spr{filter:saturate(.35) brightness(.72)}
+#board .unit.sel .ring{stroke:#fff;filter:drop-shadow(0 0 6px var(--holo))}
+#board .unit .spr image{filter:drop-shadow(0 3px 3px rgba(0,0,0,.6))}
+#board .hpb{fill:rgba(6,10,17,.85);stroke:rgba(255,255,255,.25);stroke-width:.6}
+#board .hpf{fill:var(--good)}
+#board .hpf.mid{fill:var(--gold)}
+#board .hpf.low{fill:var(--bad)}
+#board .hpt{font:8px var(--f-data);fill:#fff;text-anchor:middle;dominant-baseline:central;paint-order:stroke;stroke:rgba(0,0,0,.8);stroke-width:2px}
+#board .tokt{font:700 13px var(--f-display);fill:#06101c;text-anchor:middle;dominant-baseline:central}
+#board .pop{font:700 15px var(--f-display);text-anchor:middle;paint-order:stroke;stroke:rgba(0,0,0,.85);stroke-width:3px}
+#board .grid polygon{fill:none;stroke:rgba(127,217,255,.2);stroke-width:.8}
+
+/* ---------- Fenêtres */
+.modal{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:rgba(3,6,10,.72);padding:max(16px,env(safe-area-inset-top,0px)) var(--gutter-r) max(16px,env(safe-area-inset-bottom,0px)) var(--gutter-l)}
+.modal-card{width:min(760px,100%);max-height:100%;overflow:auto;background:var(--hull);border:1px solid var(--seam);border-radius:12px;padding:20px;display:grid;gap:14px}
+.modal-card header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.modal-card h2{font-size:1.35rem}
+.rules{display:grid;gap:14px;font-size:.94rem}
+.rules h3{font-size:1rem;color:var(--holo)}
+.rules p,.rules ul{margin:0}
+.rules ul{padding-left:1.2em}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--seam);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.84rem}
+th,td{padding:6px 8px;border-bottom:1px solid var(--seam);text-align:left;white-space:nowrap}
+th{font:600 .68rem/1 var(--f-display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+td.n{font-family:var(--f-data);text-align:right}
+.victory{text-align:center;justify-items:center}
+.victory h2{font-size:2rem;color:var(--c,var(--holo));text-transform:uppercase;letter-spacing:.1em}
+
+@media (max-width: 900px){
+  #battle{height:auto;min-height:100%}
+  .battle-body{grid-template-columns:minmax(0,1fr)}
+  .board-scroll{max-height:70vh;container-type:normal}
+  #board{width:calc(100% * var(--zoom,1))}
+  .console{overflow:visible}
+}
+@media (prefers-reduced-motion: reduce){
+  *{transition:none!important;animation:none!important}
+}
+</style>
+</head>
+<body>
+
+<section id="menu" aria-label="Accueil">
+  <div class="menu-inner">
+    <div class="masthead">
+      <div class="eyebrow">Table tactique · plateau hexagonal</div>
+      <h1>Holotable<span>Batailles de la galaxie</span></h1>
+      <p>Des escarmouches spatiales et terrestres en tour par tour, contre l'IA ou à deux. Ou une table libre pour mettre en scène les combats de votre partie de jeu de rôle.</p>
+      <div class="menu-actions">
+        <button class="btn primary" id="btn-resume" hidden>Reprendre la partie</button>
+        <button class="btn" id="btn-rules">Règles du jeu</button>
+      </div>
+    </div>
+
+    <section class="menu-section" aria-labelledby="h-scen">
+      <header><h2 id="h-scen">Escarmouches</h2><p>Des scénarios prêts à jouer, armées équilibrées.</p></header>
+      <div class="scen-grid" id="scen-grid"></div>
+    </section>
+
+    <div class="two-col">
+      <section class="panel-card" aria-labelledby="h-custom">
+        <div class="eyebrow">Stratégie</div>
+        <h2 id="h-custom">Bataille sur mesure</h2>
+        <p>Choisissez le théâtre, les deux factions et un budget en points : les armées sont tirées au hasard dans les effectifs de chaque camp.</p>
+        <div class="form-grid">
+          <div class="field"><label for="cu-biome">Théâtre</label><select id="cu-biome"></select></div>
+          <div class="field"><label for="cu-a">Camp bleu</label><select id="cu-a"></select></div>
+          <div class="field"><label for="cu-b">Camp rouge</label><select id="cu-b"></select></div>
+          <div class="field"><label for="cu-budget">Budget</label>
+            <select id="cu-budget"><option value="120">120 pts · rapide</option><option value="200" selected>200 pts · standard</option><option value="300">300 pts · grande bataille</option></select></div>
+          <div class="field"><label for="cu-ctrl">Adversaire</label>
+            <select id="cu-ctrl"><option value="ai">IA</option><option value="human">Deuxième joueur</option></select></div>
+        </div>
+        <div class="row"><button class="btn primary" id="btn-custom">Générer la bataille</button></div>
+        <p class="hint" id="cu-warn" hidden></p>
+      </section>
+
+      <section class="panel-card" aria-labelledby="h-gm">
+        <div class="eyebrow">Jeu de rôle</div>
+        <h2 id="h-gm">Table du MJ</h2>
+        <p>Une table libre pour accompagner vos séances : placez n'importe quel pion, y compris vos personnages, peignez le terrain, déplacez tout à la main, suivez les points de vie et lancez les dés. Les règles s'activent d'un clic si le combat doit se résoudre en jeu.</p>
+        <div class="form-grid">
+          <div class="field"><label for="gm-biome">Carte</label><select id="gm-biome"></select></div>
+        </div>
+        <div class="row"><button class="btn primary" id="btn-gm">Ouvrir une table vide</button></div>
+      </section>
+    </div>
+  </div>
+</section>
+
+<section id="battle" aria-label="Bataille" hidden>
+  <header class="cmdbar">
+    <button class="btn sm ghost" id="b-menu" title="Retour à l'accueil">◂ Accueil</button>
+    <div class="title"><span class="eyebrow" id="b-mode-label">Escarmouche</span><b id="b-name">Bataille</b></div>
+    <span class="turnchip" id="b-turn"><i></i><span></span></span>
+    <div class="seg" role="group" aria-label="Mode">
+      <button id="m-rules" aria-pressed="true" title="Tour par tour, déplacements et tirs limités">Règles</button>
+      <button id="m-free" aria-pressed="false" title="Table libre du MJ : tout se déplace à la main">Libre</button>
+    </div>
+    <button class="btn sm" id="b-sides" title="Noms, factions et contrôle des camps">Camps</button>
+    <button class="btn sm" id="b-help" title="Règles du jeu">Règles</button>
+    <div class="seg" role="group" aria-label="Zoom">
+      <button id="z-out" title="Dézoomer">−</button><button id="z-in" title="Zoomer">+</button>
+    </div>
+    <button class="btn sm primary" id="b-end">Fin du tour</button>
+  </header>
+  <div class="battle-body">
+    <div class="board-wrap">
+      <div class="board-scroll" id="board-scroll"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Plateau de bataille"></svg></div>
+      <div class="hexinfo" id="hexinfo">Survolez une case pour voir le terrain.</div>
+    </div>
+    <aside class="console" id="console" aria-label="Console de commandement"></aside>
+  </div>
+</section>
+
+<div class="modal" id="modal" hidden><div class="modal-card" id="modal-card" role="dialog" aria-modal="true"></div></div>
+
+<script src="engine.js"></script>
+<script id="ui">
+(function(){
+"use strict";
+const E = Engine, T = E.TYPES;
+const R = 30, SQ3 = Math.sqrt(3), HW = R * SQ3;
+const SAVE_KEY = "holotable.v1";
+const SIDE_COLORS = ["#4aa8ff", "#ff5d4f", "#e9c46a"];
+const SIDE_LABEL = ["Camp bleu", "Camp rouge", "Neutre"];
+const REDUCED = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const LOOK = {
+  desert: { plaine:"#c7a46b", foret:"#9a9550", roche:"#8a6646", ruines:"#a48c6c", eau:"#3f8797", tree:"#6f6d34", treeHi:"#b0ad5c", rock:"#6e4d33", rockHi:"#b48a60", wall:"#5e4a35", base:"#b9955c", pines:false },
+  foret:  { plaine:"#5c7c44", foret:"#2f4c27", roche:"#666a5f", ruines:"#6f6851", eau:"#2f6482", tree:"#20391c", treeHi:"#55833c", rock:"#565b53", rockHi:"#949a8d", wall:"#3f3a2c", base:"#4b6a38", pines:false },
+  neige:  { plaine:"#dbe5ee", foret:"#a9bcc8", roche:"#8794a0", ruines:"#b4bcc4", eau:"#86b6d4", tree:"#34524f", treeHi:"#6d918c", rock:"#6f7c88", rockHi:"#d2dde7", wall:"#5d6973", base:"#cfdbe5", pines:true },
+};
+
+// ---------------------------------------------------------------- État d'interface
+let G = null;
+const ui = { sel:null, reach:null, targets:[], pending:null, special:false, spawnPreview:false,
+  tool:"select", place:"storm", placeSide:0, paint:"foret", tab:"select", targeting:false,
+  hover:null, zoom:1, busy:false, aiToken:0, aiRunning:false, overShown:false, drag:null, lastDice:null };
+const unitEls = new Map();
+const SPR = {};
+
+const $ = (s, el) => (el || document).querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const wait = (ms) => new Promise(r => setTimeout(r, REDUCED ? Math.min(ms, 60) : ms));
+const sprUrl = (n) => "assets/sprites/" + n + ".webp";
+const svgEl = (tag, attrs) => { const el = document.createElementNS("http://www.w3.org/2000/svg", tag); for (const k in attrs) el.setAttribute(k, attrs[k]); return el; };
+const initials = (name) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+const factionName = (f) => E.FACTIONS[f] ? E.FACTIONS[f].name : f;
+
+function store(fn){ try { return fn(); } catch (e) { return null; } }
+
+// Préchargement des sprites : dimensions réelles, et repli sur un jeton si une
+// planche n'a pas encore été découpée.
+function preload(){
+  const names = new Set();
+  for (const id in T) T[id].sprites.forEach(n => names.add(n));
+  names.forEach(n => {
+    SPR[n] = { w:1, h:1, ok:false, pending:true };
+    const img = new Image();
+    img.onload = () => { SPR[n] = { w:img.naturalWidth, h:img.naturalHeight, ok:true }; scheduleUnits(); };
+    img.onerror = () => { SPR[n] = { w:1, h:1, ok:false }; scheduleUnits(); };
+    img.src = sprUrl(n);
+  });
+}
+let unitsQueued = false;
+function scheduleUnits(){ if (unitsQueued) return; unitsQueued = true; requestAnimationFrame(() => { unitsQueued = false; if (G && !$("#battle").hidden) { unitEls.forEach(el => el.remove()); unitEls.clear(); syncUnits(); } renderMenuThumbs(); }); }
+function spriteOk(n){ return n && SPR[n] && SPR[n].ok; }
+
+// ---------------------------------------------------------------- Accueil
+function renderMenu(){
+  const grid = $("#scen-grid");
+  grid.innerHTML = E.SCENARIOS.map(sc => {
+    const pts = sc.sides.map(s => s.units.reduce((a, t) => a + T[t].cost, 0));
+    const strip = (s) => { const seen = []; s.units.forEach(t => { if (seen.indexOf(t) < 0) seen.push(t); }); return seen.slice(0, 3).map(t => '<img data-spr="' + T[t].sprites[0] + '" alt="' + esc(T[t].name) + '">').join(""); };
+    return '<article class="scen">' +
+      '<div class="strip"><div class="grp">' + strip(sc.sides[0]) + '</div><span class="vs">VS</span><div class="grp">' + strip(sc.sides[1]) + '</div></div>' +
+      '<h3>' + esc(sc.name) + '</h3><p>' + esc(sc.blurb) + '</p>' +
+      '<div class="meta">' + esc(E.BIOMES[sc.biome].name) + ' · ' + sc.turnLimit + ' tours · ' + pts[0] + ' contre ' + pts[1] + ' pts<br>' +
+        esc(E.FACTIONS[sc.sides[0].faction].short) + ' contre ' + esc(E.FACTIONS[sc.sides[1].faction].short) + '</div>' +
+      '<div class="row"><button class="btn sm primary" data-scen="' + sc.id + '" data-ctrl="ai">Contre l\'IA</button><button class="btn sm" data-scen="' + sc.id + '" data-ctrl="human">À deux</button></div>' +
+      '</article>';
+  }).join("");
+  renderMenuThumbs();
+  const biomeOpts = Object.keys(E.BIOMES).map(b => '<option value="' + b + '">' + esc(E.BIOMES[b].name) + '</option>').join("");
+  $("#cu-biome").innerHTML = biomeOpts;
+  $("#gm-biome").innerHTML = biomeOpts;
+  $("#gm-biome").value = "foret";
+  fillFactionSelects();
+  $("#btn-resume").hidden = !store(() => localStorage.getItem(SAVE_KEY));
+}
+function renderMenuThumbs(){
+  document.querySelectorAll("#scen-grid img[data-spr]").forEach(img => {
+    const n = img.dataset.spr;
+    if (spriteOk(n)) img.src = sprUrl(n);
+    else if (SPR[n] && !SPR[n].pending) img.remove();
+  });
+}
+function fillFactionSelects(){
+  const theater = E.BIOMES[$("#cu-biome").value].theater;
+  const opts = ["rebels", "empire", "republic", "separatists"].filter(f => E.rosters(f, theater).length)
+    .map(f => '<option value="' + f + '">' + esc(E.FACTIONS[f].name) + '</option>').join("");
+  const a = $("#cu-a").value, b = $("#cu-b").value;
+  $("#cu-a").innerHTML = opts; $("#cu-b").innerHTML = opts;
+  const avail = Array.from($("#cu-a").options).map(o => o.value);
+  $("#cu-a").value = avail.indexOf(a) >= 0 ? a : avail[0];
+  $("#cu-b").value = avail.indexOf(b) >= 0 ? b : (avail[1] || avail[0]);
+}
+
+function startCustom(){
+  const biome = $("#cu-biome").value, theater = E.BIOMES[biome].theater, budget = +$("#cu-budget").value;
+  const fa = $("#cu-a").value, fb = $("#cu-b").value, seed = Math.floor(Math.random() * 1e9);
+  const ua = E.randomArmy(fa, theater, budget, seed), ub = E.randomArmy(fb, theater, budget, seed + 1);
+  const warn = $("#cu-warn");
+  if (!ua.length || !ub.length) { warn.hidden = false; warn.textContent = "Une des factions n'a pas d'unités pour ce théâtre. Changez de faction ou de théâtre."; return; }
+  warn.hidden = true;
+  launch(E.createGame({ name: E.FACTIONS[fa].short + " contre " + E.FACTIONS[fb].short, biome, turnLimit: 12, seed,
+    sides: [{ faction: fa, units: ua, control: "human" }, { faction: fb, units: ub, control: $("#cu-ctrl").value }] }));
+}
+
+function startGM(){
+  const biome = $("#gm-biome").value;
+  const s = E.blankState({ name: "Table du MJ", biome, mode: "libre",
+    sides: [{ faction: "rebels", control: "human" }, { faction: "empire", control: "human" }] });
+  s.sides[0].name = "Camp bleu"; s.sides[1].name = "Camp rouge";
+  E.log(s, { k: "info", text: "Table ouverte. Choisissez un pion dans l'onglet Unités, puis cliquez sur la carte pour le poser." });
+  ui.tab = "units";
+  ui.place = E.BIOMES[biome].theater === "space" ? "xwing" : "rebel";
+  launch(s);
+}
+
+// ---------------------------------------------------------------- Lancement
+function launch(state){
+  G = state;
+  ui.sel = null; ui.pending = null; ui.overShown = !!G.over; ui.targeting = false; ui.aiToken++;
+  ui.aiRunning = false; ui.busy = false;
+  if (G.mode === "libre" && ui.tab === "select" && !G.units.length) ui.tab = "units";
+  $("#menu").hidden = true; $("#battle").hidden = false;
+  ui.zoom = window.innerWidth < 700 ? 2.1 : 1;
+  applyZoom();
+  buildBoard();
+  commit();
+  if (G.mode === "regles") banner();
+}
+
+function toMenu(){
+  ui.aiToken++;
+  save();
+  $("#battle").hidden = true; $("#menu").hidden = false;
+  $("#btn-resume").hidden = !store(() => localStorage.getItem(SAVE_KEY));
+  window.scrollTo(0, 0);
+}
+
+function save(){ if (G) store(() => localStorage.setItem(SAVE_KEY, JSON.stringify(G))); }
+
+// Après chaque changement : sauvegarde, sélection recalculée, rendu, IA.
+function commit(triggerAI){
+  save();
+  refreshSelection();
+  render();
+  if (G.over && !ui.overShown) { ui.overShown = true; setTimeout(showVictory, REDUCED ? 0 : 700); }
+  if (triggerAI !== false) maybeRunAI();
+}
+
+function refreshSelection(){
+  const u = ui.sel != null ? E.byUid(G, ui.sel) : null;
+  if (!u) { ui.sel = null; ui.reach = null; ui.targets = []; ui.pending = null; ui.special = false; return; }
+  const own = isMyTurnUnit(u);
+  ui.reach = G.mode === "regles" && own && !u.moved ? E.reachable(G, u) : null;
+  if (G.mode === "regles") ui.targets = own && !u.acted ? E.targets(G, u, { special: ui.special }) : [];
+  else ui.targets = ui.targeting ? G.units.filter(t => t !== u && t.side !== u.side) : [];
+  if (ui.pending != null && !ui.targets.some(t => t.uid === ui.pending)) ui.pending = null;
+  if (ui.special && !(T[u.type].ability && (u.uses[T[u.type].ability.id] || 0) > 0)) ui.special = false;
+}
+
+function isHumanTurn(){ return G.mode === "regles" && !G.over && G.sides[G.active].control === "human"; }
+function isMyTurnUnit(u){ return isHumanTurn() && u.side === G.active; }
+
+// ---------------------------------------------------------------- Plateau
+function boardSize(){ return { w: HW * (G.map.cols + 0.5), h: R * (1.5 * G.map.rows + 0.5) }; }
+function hexPoints(cx, cy, s){
+  const p = [];
+  for (let i = 0; i < 6; i++) { const a = Math.PI / 180 * (60 * i - 30); p.push((cx + s * Math.cos(a)).toFixed(1) + "," + (cy + s * Math.sin(a)).toFixed(1)); }
+  return p.join(" ");
+}
+function blob(cx, cy, rad, rnd, n){
+  const p = [];
+  n = n || 7;
+  for (let i = 0; i < n; i++) { const a = Math.PI * 2 * i / n + rnd() * 0.4; const rr = rad * (0.65 + rnd() * 0.45); p.push((cx + Math.cos(a) * rr).toFixed(1) + "," + (cy + Math.sin(a) * rr).toFixed(1)); }
+  return p.join(" ");
+}
+function terrainColor(id){
+  const L = LOOK[G.map.biome];
+  if (L) return L[id] || L.plaine;
+  return { vide:"#0b1220", asteroides:"#6b6f7a", nebuleuse:"#7b4fa8" }[id] || "#222";
+}
+function terrainLabel(id){
+  const B = E.BIOMES[G.map.biome];
+  return (B.labels && B.labels[id]) || E.TERRAIN[id].name;
+}
+function terrainRules(id, short){
+  const t = E.TERRAIN[id], out = [];
+  if (t.cover) out.push("couvert");
+  if (t.blocksLOS) out.push("bloque la vue");
+  if (t.impassable) out.push("infranchissable");
+  else if (t.water) out.push("répulseurs seulement");
+  else if (t.cost > 1) out.push("coût " + t.cost);
+  if (t.vehCost) out.push("véhicules : coût " + t.vehCost);
+  if (t.noCapital) out.push(short ? "interdit aux capitaux" : "interdit aux vaisseaux capitaux");
+  return out.join(" · ") || "aucun effet";
+}
+
+function buildBoard(){
+  const svg = $("#board"), { w, h } = boardSize();
+  svg.setAttribute("viewBox", "0 0 " + w.toFixed(0) + " " + h.toFixed(0));
+  svg.style.setProperty("--ar", (w / h).toFixed(4));
+  svg.innerHTML =
+    '<defs>' +
+      '<filter id="grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" seed="4"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="table" tableValues="0 0.22"/></feComponentTransfer></filter>' +
+      '<filter id="mottle" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="3" seed="9"/><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.4 1.05"/></filter>' +
+      '<radialGradient id="neb"><stop offset="0" stop-color="#a86bff" stop-opacity=".55"/><stop offset=".55" stop-color="#5b3fd0" stop-opacity=".28"/><stop offset="1" stop-color="#2a1a70" stop-opacity="0"/></radialGradient>' +
+      '<radialGradient id="vign" cx="50%" cy="50%" r="75%"><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".55"/></radialGradient>' +
+      '<radialGradient id="boom"><stop offset="0" stop-color="#fff6c2"/><stop offset=".35" stop-color="#ffb347"/><stop offset=".7" stop-color="#ff5a1f" stop-opacity=".7"/><stop offset="1" stop-color="#ff3d00" stop-opacity="0"/></radialGradient>' +
+    '</defs>' +
+    '<g id="L-bg"></g><g id="L-ter"></g><g id="L-grid" class="grid"></g><g id="L-ov"></g><g id="L-units"></g><g id="L-fx"></g>';
+  unitEls.clear();
+  drawBackground();
+  drawTerrain();
+  const grid = [];
+  for (let r = 0; r < G.map.rows; r++) for (let c = 0; c < G.map.cols; c++) { const p = E.center(c, r, R); grid.push('<polygon points="' + hexPoints(p.x, p.y, R) + '"/>'); }
+  $("#L-grid").innerHTML = grid.join("");
+}
+
+function drawBackground(){
+  const { w, h } = boardSize(), bg = $("#L-bg");
+  if (G.map.theater === "space") {
+    bg.innerHTML = '<rect width="' + w + '" height="' + h + '" fill="#05080f"/>' +
+      '<image href="assets/carte-espace.jpg" x="0" y="0" width="' + w + '" height="' + h + '" preserveAspectRatio="xMidYMid slice"/>' +
+      '<rect width="' + w + '" height="' + h + '" fill="url(#vign)"/>';
+  } else {
+    const L = LOOK[G.map.biome];
+    bg.innerHTML = '<rect width="' + w + '" height="' + h + '" fill="' + L.base + '"/>';
+  }
+}
+
+function drawTerrain(){
+  const out = [], over = [], m = G.map, { w, h } = boardSize(), L = LOOK[m.biome];
+  for (let r = 0; r < m.rows; r++) for (let c = 0; c < m.cols; c++) {
+    const id = E.terrainId(m, c, r), p = E.center(c, r, R);
+    const rnd = E.hash((c * 73856093) ^ (r * 19349663) ^ m.seed);
+    if (m.theater === "space") {
+      if (id === "nebuleuse") over.push('<circle cx="' + p.x + '" cy="' + p.y + '" r="' + (R * 1.45) + '" fill="url(#neb)"/>');
+      if (id === "asteroides") {
+        out.push('<polygon points="' + hexPoints(p.x, p.y, R) + '" fill="rgba(150,140,125,.12)"/>');
+        const n = 3 + Math.floor(rnd() * 3);
+        for (let i = 0; i < n; i++) {
+          const x = p.x + (rnd() - .5) * R * 1.2, y = p.y + (rnd() - .5) * R * 1.1, rad = R * (0.12 + rnd() * 0.2);
+          out.push('<polygon points="' + blob(x, y, rad, rnd, 7) + '" fill="#4a4c53" stroke="#9a9ca6" stroke-width=".8"/>');
+          out.push('<polygon points="' + blob(x - rad * .2, y - rad * .25, rad * .45, rnd, 6) + '" fill="#62656e"/>');
+        }
+      }
+      continue;
+    }
+    // Sol : teinte du terrain légèrement variée case par case.
+    const jitter = (rnd() - 0.5) * 0.12;
+    out.push('<polygon points="' + hexPoints(p.x, p.y, R + 0.6) + '" fill="' + terrainColor(id) + '" style="filter:brightness(' + (1 + jitter).toFixed(3) + ')"/>');
+    if (id === "foret") {
+      const n = 4 + Math.floor(rnd() * 3);
+      for (let i = 0; i < n; i++) {
+        const x = p.x + (rnd() - .5) * R * 1.15, y = p.y + (rnd() - .5) * R * 1.05, rad = R * (0.2 + rnd() * 0.12);
+        if (L.pines) {
+          over.push('<polygon points="' + x.toFixed(1) + ',' + (y - rad * 1.3).toFixed(1) + ' ' + (x - rad * .85).toFixed(1) + ',' + (y + rad * .7).toFixed(1) + ' ' + (x + rad * .85).toFixed(1) + ',' + (y + rad * .7).toFixed(1) + '" fill="' + L.tree + '"/>');
+          over.push('<polygon points="' + x.toFixed(1) + ',' + (y - rad * 1.3).toFixed(1) + ' ' + (x - rad * .35).toFixed(1) + ',' + (y - rad * .3).toFixed(1) + ' ' + (x + rad * .25).toFixed(1) + ',' + (y - rad * .4).toFixed(1) + '" fill="#f2f7fb" opacity=".8"/>');
+        } else {
+          over.push('<circle cx="' + x.toFixed(1) + '" cy="' + (y + 2).toFixed(1) + '" r="' + rad.toFixed(1) + '" fill="rgba(0,0,0,.25)"/>');
+          over.push('<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + rad.toFixed(1) + '" fill="' + L.tree + '"/>');
+          over.push('<circle cx="' + (x - rad * .25).toFixed(1) + '" cy="' + (y - rad * .3).toFixed(1) + '" r="' + (rad * .5).toFixed(1) + '" fill="' + L.treeHi + '" opacity=".7"/>');
+        }
+      }
+    } else if (id === "roche") {
+      const n = 2 + Math.floor(rnd() * 2);
+      for (let i = 0; i < n; i++) {
+        const x = p.x + (rnd() - .5) * R * .8, y = p.y + (rnd() - .5) * R * .7, rad = R * (0.32 + rnd() * 0.18);
+        out.push('<polygon points="' + blob(x, y + 2, rad, rnd, 6) + '" fill="rgba(0,0,0,.3)"/>');
+        out.push('<polygon points="' + blob(x, y, rad, rnd, 6) + '" fill="' + L.rock + '" stroke="' + L.rockHi + '" stroke-width="1"/>');
+        out.push('<polygon points="' + blob(x - rad * .2, y - rad * .2, rad * .45, rnd, 5) + '" fill="' + L.rockHi + '" opacity=".45"/>');
+      }
+    } else if (id === "ruines") {
+      for (let i = 0; i < 3; i++) {
+        const x = p.x + (rnd() - .5) * R * .9, y = p.y + (rnd() - .5) * R * .8, len = R * (0.35 + rnd() * 0.4), horiz = rnd() > .5;
+        out.push('<rect x="' + (x - (horiz ? len / 2 : 2.5)).toFixed(1) + '" y="' + (y - (horiz ? 2.5 : len / 2)).toFixed(1) + '" width="' + (horiz ? len : 5).toFixed(1) + '" height="' + (horiz ? 5 : len).toFixed(1) + '" fill="' + L.wall + '" stroke="rgba(255,255,255,.18)" stroke-width=".6"/>');
+      }
+      for (let i = 0; i < 5; i++) out.push('<circle cx="' + (p.x + (rnd() - .5) * R * 1.2).toFixed(1) + '" cy="' + (p.y + (rnd() - .5) * R).toFixed(1) + '" r="' + (1 + rnd() * 1.6).toFixed(1) + '" fill="' + L.wall + '"/>');
+    } else if (id === "eau") {
+      for (let i = 0; i < 2; i++) {
+        const y = p.y - 6 + i * 11 + (rnd() - .5) * 3, x = p.x - R * .5;
+        out.push('<path d="M' + x.toFixed(1) + ' ' + y.toFixed(1) + ' q7 -4 14 0 t14 0" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="1.3" stroke-linecap="round"/>');
+      }
+    }
+  }
+  let extra = "";
+  if (m.theater !== "space") {
+    extra = '<rect width="' + w + '" height="' + h + '" fill="#000" filter="url(#mottle)" opacity=".25"/>' +
+            '<rect width="' + w + '" height="' + h + '" filter="url(#grain)"/>';
+  }
+  $("#L-ter").innerHTML = out.join("") + extra + over.join("");
+}
+
+// ---------------------------------------------------------------- Unités
+function unitBox(u){
+  const Ty = T[u.type], s = Ty.size * HW * 0.92;
+  const sp = SPR[u.sprite];
+  if (!spriteOk(u.sprite)) return { w: s, h: s, token: true };
+  const k = s / Math.max(sp.w, sp.h);
+  return { w: sp.w * k, h: sp.h * k, token: false };
+}
+function spriteBase(u){
+  const Ty = T[u.type];
+  return (Ty.spriteBase && Ty.spriteBase[u.sprite] != null) ? Ty.spriteBase[u.sprite] : (Ty.base || 0);
+}
+function createUnitEl(u){
+  const g = svgEl("g", { class: "unit" });
+  g.appendChild(svgEl("circle", { class: "ring", r: (R * 0.8).toFixed(1) }));
+  const spr = svgEl("g", { class: "spr" });
+  const box = unitBox(u);
+  if (box.token) {
+    const big = T[u.type].size > 1.3;
+    const rad = big ? R * 1.05 : R * 0.6;
+    spr.appendChild(svgEl("circle", { r: rad.toFixed(1), fill: SIDE_COLORS[u.side], stroke: "#fff", "stroke-width": 1.5, opacity: .95 }));
+    const t = svgEl("text", { class: "tokt" });
+    t.textContent = initials(u.name);
+    if (big) t.setAttribute("style", "font-size:20px");
+    spr.appendChild(t);
+  } else {
+    spr.appendChild(svgEl("image", { href: sprUrl(u.sprite), x: (-box.w / 2).toFixed(1), y: (-box.h / 2).toFixed(1), width: box.w.toFixed(1), height: box.h.toFixed(1) }));
+  }
+  g.appendChild(spr);
+  const bw = R * 1.3, by = R * 0.66;
+  g.appendChild(svgEl("rect", { class: "hpb", x: -bw / 2, y: by, width: bw, height: 7, rx: 2 }));
+  g.appendChild(svgEl("rect", { class: "hpf", x: -bw / 2 + 1, y: by + 1, width: bw - 2, height: 5, rx: 1.5 }));
+  g.appendChild(svgEl("text", { class: "hpt", x: 0, y: by + 3.6 }));
+  g._box = box;
+  return g;
+}
+function updateUnitEl(g, u){
+  const p = E.center(u.c, u.r, R);
+  if (!g._anim) g.setAttribute("transform", "translate(" + p.x.toFixed(1) + "," + p.y.toFixed(1) + ")");
+  g.setAttribute("class", "unit s" + u.side + (u.acted && u.side === G.active && G.mode === "regles" ? " spent" : "") + (ui.sel === u.uid ? " sel" : ""));
+  setFacing(g, u, u.facing);
+  const max = E.maxHp(u), frac = Math.max(0, Math.min(1, u.hp / max)), bw = R * 1.3 - 2;
+  const f = g.querySelector(".hpf");
+  f.setAttribute("width", (bw * frac).toFixed(1));
+  f.setAttribute("class", "hpf" + (frac <= .34 ? " low" : frac <= .67 ? " mid" : ""));
+  g.querySelector(".hpt").textContent = max >= 8 ? u.hp + "/" + max : "";
+  const tok = g.querySelector(".tokt");
+  if (tok) tok.textContent = initials(u.name);
+}
+function setFacing(g, u, facing){
+  const spr = g.querySelector(".spr");
+  if (T[u.type].rotate && !g._box.token) spr.setAttribute("transform", "rotate(" + (facing - spriteBase(u)) + ")");
+  else spr.removeAttribute("transform");
+}
+function syncUnits(){
+  const layer = $("#L-units"); if (!layer) return;
+  const alive = new Set();
+  const sorted = G.units.slice().sort((a, b) => T[b.type].size - T[a.type].size || a.r - b.r);
+  for (const u of sorted) {
+    alive.add(u.uid);
+    let g = unitEls.get(u.uid);
+    if (!g) { g = createUnitEl(u); unitEls.set(u.uid, g); }
+    updateUnitEl(g, u);
+    layer.appendChild(g);
+  }
+  for (const [id, g] of unitEls) if (!alive.has(id) && !g._dying) { g.remove(); unitEls.delete(id); }
+}
+
+// ---------------------------------------------------------------- Surcouche
+function renderOverlay(){
+  const out = [];
+  const poly = (c, r, cls, s) => { const p = E.center(c, r, R); out.push('<polygon class="' + cls + '" points="' + hexPoints(p.x, p.y, s || R - 1.5) + '"/>'); };
+  const u = ui.sel != null ? E.byUid(G, ui.sel) : null;
+  if (ui.reach) for (const v of ui.reach.dest.values()) if (!(v.c === u.c && v.r === u.r)) poly(v.c, v.r, "ov-move");
+  for (const t of ui.targets) poly(t.c, t.r, t.uid === ui.pending ? "ov-pending" : "ov-target", R - 3);
+  if (u && ui.spawnPreview) for (const h of E.neighbors(G.map, u.c, u.r)) if (E.canStand(G, T[u.type].ability.spawn, h.c, h.r)) poly(h.c, h.r, "ov-spawn");
+  if (u) poly(u.c, u.r, "ov-sel", R - 1);
+  if (ui.hover && E.inBounds(G.map, ui.hover.c, ui.hover.r)) poly(ui.hover.c, ui.hover.r, "ov-hover", R - 1);
+  $("#L-ov").innerHTML = out.join("");
+}
+
+// ---------------------------------------------------------------- Rendu général
+function render(){
+  if (!G) return;
+  syncUnits();
+  renderOverlay();
+  renderBar();
+  renderConsole();
+}
+
+function renderBar(){
+  const libre = G.mode === "libre";
+  $("#b-name").textContent = G.name;
+  $("#b-mode-label").textContent = libre ? "Table libre" : (G.scenario ? "Escarmouche" : "Bataille");
+  $("#m-rules").setAttribute("aria-pressed", String(!libre));
+  $("#m-free").setAttribute("aria-pressed", String(libre));
+  const chip = $("#b-turn"), side = G.sides[G.active];
+  if (libre) {
+    chip.style.setProperty("--c", "var(--holo)");
+    chip.querySelector("span").textContent = "Manche " + G.turn;
+  } else {
+    chip.style.setProperty("--c", SIDE_COLORS[G.active]);
+    const ctl = side.control === "ai" ? " · IA" : "";
+    chip.querySelector("span").textContent = (G.over ? "Bataille terminée" : "Tour " + G.turn + (G.turnLimit ? "/" + G.turnLimit : "") + " · " + side.name + ctl);
+  }
+  const end = $("#b-end");
+  end.textContent = libre ? "Manche suivante" : "Fin du tour";
+  end.disabled = !libre && (!isHumanTurn() || ui.busy);
+}
+
+function sideSummary(){
+  return '<div class="sides">' + [0, 1].map(i => {
+    const n = E.alive(G, i), pts = G.score[i];
+    return '<div class="sideline' + (G.mode === "regles" && G.active === i ? " active" : "") + '" style="--c:' + SIDE_COLORS[i] + '"><i></i><b>' + esc(G.sides[i].name) + '</b>' +
+      '<span class="mono">' + n + ' unité' + (n > 1 ? "s" : "") + (G.mode === "regles" ? ' · ' + pts + ' pts' : '') + '</span></div>';
+  }).join("") + '</div>';
+}
+
+function thumbHtml(u){
+  if (spriteOk(u.sprite)) return '<div class="thumb"><img src="' + sprUrl(u.sprite) + '" alt=""></div>';
+  return '<div class="thumb"><span class="tok" style="--c:' + SIDE_COLORS[u.side] + '">' + esc(initials(u.name)) + '</span></div>';
+}
+
+function unitCard(u){
+  const Ty = T[u.type], max = E.maxHp(u), frac = Math.max(0, u.hp / max);
+  const color = frac <= .34 ? "var(--bad)" : frac <= .67 ? "var(--gold)" : "var(--good)";
+  const variant = Ty.variants && Ty.sprites.indexOf(u.sprite) >= 0 ? Ty.variants[Ty.sprites.indexOf(u.sprite)] + " · " : "";
+  let html = '<div class="ucard">' + thumbHtml(u) + '<div><h2>' + esc(u.name) + '</h2><div class="sub">' + esc(variant + Ty.name) + ' · <span style="color:' + SIDE_COLORS[u.side] + '">' + esc(u.side < 2 ? G.sides[u.side].name : "Neutre") + '</span></div></div></div>';
+  html += '<div class="hpline"><div class="hpbar"><i style="width:' + (frac * 100).toFixed(0) + '%;background:' + color + '"></i></div><span>' + u.hp + ' / ' + max + ' PV</span></div>';
+  html += '<div class="stats">' + [["mv", "Mouv."], ["rng", "Portée"], ["att", "Att."], ["def", "Déf."]].map(([k, l]) =>
+    '<div><b>' + E.stat(u, k) + '</b><span>' + l + '</span></div>').join("") + '</div>';
+  const tags = Ty.tags.filter(t => E.TAGS[t] && E.TAGS[t].desc);
+  if (tags.length) html += '<div class="chips">' + tags.map(t => '<span class="chip" title="' + esc(E.TAGS[t].desc) + '">' + esc(E.TAGS[t].name) + '</span>').join("") + '</div>';
+  if (Ty.ability) html += '<div class="ability"><b>' + esc(Ty.ability.name) + ' · ' + (u.uses[Ty.ability.id] || 0) + '/' + Ty.ability.uses + '</b><span>' + esc(Ty.ability.desc) + '</span></div>';
+  html += '<p class="desc">' + esc(Ty.desc) + '</p>';
+  return html;
+}
+
+function oddsHtml(a, t, special){
+  const p = E.profile(G, a, t, { special });
+  return '<div class="odds"><div class="big">' + esc(a.name) + ' → ' + esc(t.name) + '</div>' +
+    '<div class="mono">' + p.dice + ' dés · touche sur ' + p.need + '+ · ' + p.defDice + ' dés de défense sur ' + p.defNeed + '+' + (p.dmg > 1 ? ' · ' + p.dmg + ' dégâts par touche' : '') + '</div>' +
+    '<div class="mono">Dégâts attendus ≈ ' + p.expected.toFixed(1) + ' (cible : ' + t.hp + ' PV)</div>' +
+    (p.notes.length ? '<ul>' + p.notes.map(n => '<li>' + esc(n) + '</li>').join("") + '</ul>' : '') +
+    '<div class="actions"><button class="btn primary sm" data-act="fire">Tirer</button><button class="btn sm ghost" data-act="cancel-target">Annuler</button></div></div>';
+}
+
+function renderConsole(){
+  const box = $("#console");
+  const u = ui.sel != null ? E.byUid(G, ui.sel) : null;
+  let html = '<div class="box">' + sideSummary() + '</div>';
+  if (G.mode === "regles") html += rulesPanel(u);
+  else html += freePanel(u);
+  html += '<div class="box"><h3>Journal</h3><div class="log" id="log">' + logHtml() + '</div></div>';
+  const scroll = box.scrollTop;
+  box.innerHTML = html;
+  box.scrollTop = scroll;
+}
+
+function rulesPanel(u){
+  let html = '<div class="box">';
+  if (!u) {
+    if (G.over) html += '<p class="hint">La bataille est terminée. Passez en mode Libre pour continuer à jouer la scène, ou revenez à l\'accueil.</p>';
+    else if (isHumanTurn()) html += '<h3>À vous de jouer</h3><p class="hint">Sélectionnez une unité de votre camp (anneau ' + (G.active === 0 ? "bleu" : "rouge") + '). Les cases bleues montrent où elle peut aller, les cibles en pointillés rouges celles qu\'elle peut toucher. Chaque unité se déplace puis tire, une fois par tour.</p>';
+    else html += '<h3>L\'IA réfléchit</h3><p class="hint">' + esc(G.sides[G.active].name) + ' joue son tour.</p>';
+    return html + '</div>';
+  }
+  html += unitCard(u);
+  const own = isMyTurnUnit(u);
+  if (own) {
+    const Ty = T[u.type];
+    html += '<div class="status">' + (u.acted ? "Activation terminée." : u.moved ? "A bougé, peut encore tirer." : "Peut se déplacer puis tirer.") + '</div>';
+    html += '<div class="actions">';
+    if (!u.acted && Ty.ability && Ty.ability.type === "shot" && (u.uses[Ty.ability.id] || 0) > 0)
+      html += '<button class="btn sm' + (ui.special ? ' primary' : '') + '" data-act="special" aria-pressed="' + ui.special + '">' + esc(Ty.ability.name) + '</button>';
+    if (!u.acted && Ty.ability && Ty.ability.type === "spawn")
+      html += '<button class="btn sm" data-act="spawn"' + (E.canUseAbility(G, u) ? '' : ' disabled') + '>' + esc(Ty.ability.name) + '</button>';
+    if (!u.acted) html += '<button class="btn sm ghost" data-act="done">Terminer l\'activation</button>';
+    html += '</div>';
+    if (!u.acted && !ui.targets.length) html += '<p class="hint">Aucune cible à portée' + (u.moved ? "." : " : déplacez-vous d'abord.") + '</p>';
+    const t = ui.pending != null ? E.byUid(G, ui.pending) : null;
+    if (t) html += oddsHtml(u, t, ui.special);
+    else if (ui.targets.length) html += '<p class="hint">Cliquez une cible pour voir les chances, puis tirez.</p>';
+  }
+  return html + '</div>';
+}
+
+function freePanel(u){
+  const tabs = [["select", "Pion"], ["units", "Unités"], ["terrain", "Terrain"], ["dice", "Dés"]];
+  let html = '<div class="box"><div class="seg" role="tablist">' + tabs.map(([id, l]) =>
+    '<button data-tab="' + id + '" aria-pressed="' + (ui.tab === id) + '">' + l + '</button>').join("") + '</div>';
+  if (ui.tab === "select") html += selectTab(u);
+  if (ui.tab === "units") html += unitsTab();
+  if (ui.tab === "terrain") html += terrainTab();
+  if (ui.tab === "dice") html += diceTab();
+  return html + '</div>';
+}
+
+function selectTab(u){
+  if (!u) return '<p class="hint">Cliquez un pion pour le modifier. Glissez-le, ou cliquez une case vide après l\'avoir choisi, pour le déplacer librement. Échap désélectionne.</p>';
+  const Ty = T[u.type];
+  let html = unitCard(u);
+  html += '<div class="field"><label for="ed-name">Nom</label><input id="ed-name" value="' + esc(u.name) + '" maxlength="40"></div>';
+  html += '<div class="hpedit"><button class="btn sm icon" data-act="hp-" title="Retirer 1 PV">−</button><div class="field"><label for="ed-hp">Points de vie</label><input id="ed-hp" type="number" min="0" max="99" value="' + u.hp + '"></div><button class="btn sm icon" data-act="hp+" title="Ajouter 1 PV">+</button></div>';
+  html += '<div class="form-grid">';
+  html += '<div class="field"><label for="ed-side">Camp</label><select id="ed-side">' + [0, 1, 2].map(i => '<option value="' + i + '"' + (u.side === i ? " selected" : "") + '>' + esc(i < 2 ? G.sides[i].name : "Neutre") + '</option>').join("") + '</select></div>';
+  if (Ty.sprites.length > 1) html += '<div class="field"><label for="ed-spr">Apparence</label><select id="ed-spr">' + Ty.sprites.map((s, i) => '<option value="' + s + '"' + (u.sprite === s ? " selected" : "") + '>' + esc(Ty.variants ? Ty.variants[i] : "Modèle " + (i + 1)) + '</option>').join("") + '</select></div>';
+  html += '</div>';
+  html += '<div class="edit-grid">' + [["hp", "PV max"], ["mv", "Mouv."], ["rng", "Portée"], ["att", "Att."], ["def", "Déf."]].map(([k, l]) =>
+    '<div class="field"><label for="ov-' + k + '">' + l + '</label><input id="ov-' + k + '" data-ov="' + k + '" type="number" min="0" max="99" value="' + E.stat(u, k) + '"></div>').join("") + '</div>';
+  html += '<div class="actions">' +
+    '<button class="btn sm' + (ui.targeting ? ' primary' : '') + '" data-act="target">' + (ui.targeting ? "Choisissez la cible…" : "Faire tirer") + '</button>' +
+    (Ty.ability && Ty.ability.type === "spawn" ? '<button class="btn sm" data-act="spawn"' + ((u.uses[Ty.ability.id] || 0) > 0 ? '' : ' disabled') + '>' + esc(Ty.ability.name) + '</button>' : '') +
+    '<button class="btn sm" data-act="dup">Dupliquer</button>' +
+    '<button class="btn sm danger" data-act="del">Retirer</button></div>';
+  if (ui.targeting) {
+    const t = ui.pending != null ? E.byUid(G, ui.pending) : null;
+    if (t) html += oddsHtml(u, t, false);
+    else html += '<p class="hint">Cliquez le pion visé. En mode libre, la portée n\'est pas imposée : à vous d\'arbitrer.</p>';
+  }
+  return html;
+}
+
+function unitsTab(){
+  const theater = G.map.theater;
+  let html = '<div class="field"><label>Poser pour</label><div class="seg">' + [0, 1, 2].map(i =>
+    '<button data-place-side="' + i + '" aria-pressed="' + (ui.placeSide === i) + '" style="color:' + SIDE_COLORS[i] + '">' + esc(i < 2 ? G.sides[i].name : "Neutre") + '</button>').join("") + '</div></div>';
+  const groups = {};
+  for (const id in T) {
+    const Ty = T[id];
+    if (Ty.theater !== theater && Ty.theater !== "any") continue;
+    (groups[Ty.faction] = groups[Ty.faction] || []).push(id);
+  }
+  for (const f of ["rebels", "empire", "republic", "separatists", "free"]) {
+    if (!groups[f]) continue;
+    html += '<h3>' + esc(factionName(f)) + '</h3><div class="palette">' + groups[f].map(id => {
+      const Ty = T[id], s = Ty.sprites[0];
+      const pic = spriteOk(s) ? '<img src="' + sprUrl(s) + '" alt="">' : '<span class="tok">' + esc(initials(Ty.name)) + '</span>';
+      return '<button data-place="' + id + '" aria-pressed="' + (ui.tool === "place" && ui.place === id) + '">' + pic + '<span>' + esc(Ty.name) + '</span><small>' + Ty.cost + ' pts</small></button>';
+    }).join("") + '</div>';
+  }
+  html += '<p class="hint">' + (ui.tool === "place" ? "Cliquez des cases libres pour poser des " + esc(T[ui.place].name) + ". Cliquez à nouveau le bouton pour arrêter." : "Choisissez un pion, puis cliquez sur la carte.") + '</p>';
+  return html;
+}
+
+function terrainTab(){
+  const theater = G.map.theater;
+  const ids = Object.keys(E.TERRAIN).filter(id => E.TERRAIN[id].theater === theater);
+  let html = '<div class="terrains">' + ids.map(id =>
+    '<button data-paint="' + id + '" aria-pressed="' + (ui.tool === "paint" && ui.paint === id) + '" style="--c:' + terrainColor(id) + '"><i></i><span>' + esc(terrainLabel(id)) + '</span></button>').join("") + '</div>';
+  html += '<p class="hint">' + (ui.tool === "paint" ? esc(terrainLabel(ui.paint)) + " : " + esc(terrainRules(ui.paint)) + ". Cliquez ou glissez sur la carte pour peindre." : "Choisissez un terrain, puis peignez la carte.") + '</p>';
+  html += '<div class="form-grid"><div class="field"><label for="ed-biome">Carte</label><select id="ed-biome">' +
+    Object.keys(E.BIOMES).map(b => '<option value="' + b + '"' + (G.map.biome === b ? " selected" : "") + '>' + esc(E.BIOMES[b].name) + '</option>').join("") + '</select></div></div>';
+  html += '<div class="actions"><button class="btn sm" data-act="regen">Nouvelle carte aléatoire</button><button class="btn sm ghost" data-act="clear-map">Carte vierge</button><button class="btn sm ghost" data-act="export">Exporter / importer</button></div>';
+  return html;
+}
+
+function diceTab(){
+  let html = '<div class="form-grid">' +
+    '<div class="field"><label for="dc-n">Dés à six faces</label><input id="dc-n" type="number" min="1" max="30" value="' + (ui.diceN || 3) + '"></div>' +
+    '<div class="field"><label for="dc-need">Réussite sur</label><select id="dc-need">' + [2, 3, 4, 5, 6].map(n => '<option value="' + n + '"' + ((ui.diceNeed || 4) === n ? " selected" : "") + '>' + n + '+</option>').join("") + '</select></div></div>' +
+    '<div class="actions"><button class="btn sm primary" data-act="roll-pool">Lancer la réserve</button><button class="btn sm" data-roll="d20">d20</button><button class="btn sm" data-roll="d100">d100</button><button class="btn sm" data-roll="2d6">2d6</button></div>' +
+    '<div class="field"><label for="dc-f">Formule libre</label><div class="actions"><input id="dc-f" placeholder="3d6+2" value="' + esc(ui.diceF || "") + '" style="flex:1;min-width:0"><button class="btn sm" data-act="roll-f">Lancer</button></div></div>';
+  if (ui.lastDice) html += '<div class="diceout">' + ui.lastDice + '</div>';
+  return html;
+}
+
+function diceRow(rolls, cls, color){
+  return rolls.map(r => '<span class="die ' + cls(r) + '"' + (color ? ' style="--c:' + color + '"' : '') + '>' + r + '</span>').join("");
+}
+function logHtml(){
+  return G.log.slice(-60).reverse().map(e => {
+    if (e.k === "turn") return '<div class="e turn"><span></span><span>' + esc(e.text) + '</span></div>';
+    const color = e.side != null ? SIDE_COLORS[e.side] : "var(--muted)";
+    let html = '<div class="e" style="--c:' + color + '"><i></i><div>' + esc(e.text);
+    if (e.dice) {
+      const dd = e.dice;
+      html += '<div class="dice"><span class="lbl">ATT</span>' + diceRow(dd.rolls, r => r === 6 ? "crit" : r >= dd.need ? "hit" : "", color) +
+        '<span class="lbl" style="margin-left:6px">DÉF</span>' + diceRow(dd.defRolls, r => r >= dd.defNeed ? "save" : "") + '</div>';
+    }
+    if (e.roll) html += '<div class="dice">' + diceRow(e.roll.rolls, r => e.roll.need && r >= e.roll.need ? "hit" : "", "var(--holo)") + '</div>';
+    return html + '</div></div>';
+  }).join("");
+}
+
+// ---------------------------------------------------------------- Effets
+function tween(ms, fn){
+  if (REDUCED) { fn(1); return Promise.resolve(); }
+  return new Promise(res => {
+    const t0 = performance.now();
+    const step = (now) => { const k = Math.min(1, (now - t0) / ms); fn(k); if (k < 1) requestAnimationFrame(step); else res(); };
+    requestAnimationFrame(step);
+  });
+}
+async function animateMove(u, path){
+  const g = unitEls.get(u.uid);
+  if (!g || path.length < 2) return;
+  g._anim = true;
+  const per = path.length > 5 ? 80 : 120;
+  for (let i = 1; i < path.length; i++) {
+    const a = E.center(path[i - 1].c, path[i - 1].r, R), b = E.center(path[i].c, path[i].r, R);
+    setFacing(g, u, E.facingTo(path[i - 1], path[i]));
+    await tween(per, k => g.setAttribute("transform", "translate(" + (a.x + (b.x - a.x) * k).toFixed(1) + "," + (a.y + (b.y - a.y) * k).toFixed(1) + ")"));
+  }
+  g._anim = false;
+}
+async function animateAttack(a, t, res, from, to){
+  const fx = $("#L-fx"), color = (E.FACTIONS[G.sides[a.side] ? G.sides[a.side].faction : "free"] || E.FACTIONS.free).bolt;
+  const ga = unitEls.get(a.uid);
+  if (ga && T[a.type].rotate) setFacing(ga, a, E.facingTo(from, to));
+  const p = E.center(from.c, from.r, R), q = E.center(to.c, to.r, R);
+  const len = Math.hypot(q.x - p.x, q.y - p.y);
+  const bolts = Math.min(4, Math.max(2, res.rolls.length >> 1));
+  const shots = [];
+  for (let i = 0; i < bolts; i++) {
+    const jx = (Math.random() - .5) * 10, jy = (Math.random() - .5) * 10;
+    const line = svgEl("line", { x1: p.x, y1: p.y, x2: q.x + jx, y2: q.y + jy, stroke: color, "stroke-width": 3, "stroke-linecap": "round", "stroke-dasharray": "16 " + (len + 40), "stroke-dashoffset": 0, style: "filter:drop-shadow(0 0 4px " + color + ")" });
+    fx.appendChild(line);
+    shots.push(wait(i * 70).then(() => tween(220, k => line.setAttribute("stroke-dashoffset", (-k * len).toFixed(1)))).then(() => line.remove()));
+  }
+  await Promise.all(shots);
+  const flash = svgEl("circle", { cx: q.x, cy: q.y, r: 4, fill: "url(#boom)" });
+  fx.appendChild(flash);
+  const txt = svgEl("text", { class: "pop", x: q.x, y: q.y - 10, fill: res.dmg ? "#ffcf5a" : "#bfe9ff" });
+  txt.textContent = res.dmg ? "−" + res.dmg : (res.crits + res.norm ? "Esquivé" : "Raté");
+  fx.appendChild(txt);
+  const gt = unitEls.get(t.uid);
+  const big = res.killed ? R * (T[t.type].size > 1.5 ? 2.2 : 1.3) : R * .6;
+  if (res.killed && gt) gt._dying = true;
+  await tween(res.killed ? 600 : 380, k => {
+    flash.setAttribute("r", (4 + big * k).toFixed(1));
+    flash.setAttribute("opacity", (1 - k).toFixed(2));
+    txt.setAttribute("y", (q.y - 10 - 18 * k).toFixed(1));
+    if (res.killed && gt) gt.setAttribute("opacity", (1 - k).toFixed(2));
+  });
+  flash.remove();
+  await wait(250);
+  txt.remove();
+  if (res.killed && gt) { gt.remove(); unitEls.delete(t.uid); }
+}
+
+function banner(){
+  if (G.mode !== "regles" || G.over) return;
+  const wrap = $(".board-wrap");
+  const old = wrap.querySelector(".banner"); if (old) old.remove();
+  const b = document.createElement("div");
+  b.className = "banner";
+  b.style.setProperty("--c", SIDE_COLORS[G.active]);
+  b.textContent = "Tour " + G.turn + " · " + G.sides[G.active].name;
+  wrap.appendChild(b);
+  setTimeout(() => b.remove(), 1700);
+}
+
+// ---------------------------------------------------------------- Actions
+async function doMove(u, c, r){
+  const path = E.pathTo(ui.reach, c, r);
+  ui.busy = true; ui.reach = null; ui.targets = []; renderOverlay();
+  await animateMove(u, path);
+  E.moveUnit(G, u, c, r, path);
+  ui.busy = false;
+  commit();
+  // Après un déplacement, on propose directement la cible la plus proche.
+}
+async function doAttack(a, t, special){
+  const from = { c: a.c, r: a.r }, to = { c: t.c, r: t.r };
+  ui.busy = true; ui.pending = null; ui.targets = []; ui.reach = null; renderOverlay();
+  const res = E.attack(G, a, t, { special });
+  ui.special = false; ui.targeting = false;
+  render();
+  await animateAttack(a, t, res, from, to);
+  ui.busy = false;
+  if (G.mode === "regles" && a.acted && ui.sel === a.uid) ui.sel = null;
+  commit();
+}
+function doSpawn(u){
+  const n = E.useAbility(G, u);
+  if (!n && G.mode === "libre") {
+    const ab = T[u.type].ability;
+    E.log(G, { k: "info", text: "Aucune case libre autour de " + u.name + " pour " + ab.name.toLowerCase() + "." });
+  }
+  ui.spawnPreview = false;
+  if (G.mode === "regles") ui.sel = null;
+  commit();
+}
+function endTurn(){
+  if (G.mode === "libre") { E.nextRound(G); commit(); return; }
+  if (!isHumanTurn() || ui.busy) return;
+  ui.sel = null;
+  E.endTurn(G);
+  commit();
+  banner();
+}
+
+function maybeRunAI(){
+  if (!G || G.mode !== "regles" || G.over || ui.aiRunning) return;
+  if (G.sides[G.active].control !== "ai") return;
+  runAI();
+}
+async function runAI(){
+  ui.aiRunning = true;
+  const token = ++ui.aiToken;
+  const alive = () => token === ui.aiToken && G && G.mode === "regles" && !G.over && G.sides[G.active].control === "ai";
+  await wait(650);
+  while (alive()) {
+    const act = E.aiNext(G, G.active);
+    const u = act.uid != null ? E.byUid(G, act.uid) : null;
+    if (act.type === "end") {
+      ui.sel = null;
+      E.endTurn(G);
+      commit(false);
+      banner();
+      await wait(900);
+      continue;
+    }
+    ui.sel = u.uid; ui.busy = true;
+    if (act.type !== "wait") render();
+    if (act.type === "move") {
+      await wait(120);
+      const reach = E.reachable(G, u);
+      const path = E.pathTo(reach, act.c, act.r);
+      await animateMove(u, path);
+      E.moveUnit(G, u, act.c, act.r, path);
+    } else if (act.type === "attack") {
+      const t = E.byUid(G, act.target);
+      ui.pending = t.uid; ui.targets = [t]; renderOverlay();
+      await wait(200);
+      const from = { c: u.c, r: u.r }, to = { c: t.c, r: t.r };
+      const res = E.attack(G, u, t, { special: act.special });
+      ui.targets = []; ui.pending = null;
+      render();
+      await animateAttack(u, t, res, from, to);
+    } else if (act.type === "ability") {
+      E.useAbility(G, u);
+      await wait(300);
+    } else {
+      E.endActivation(G, u);
+    }
+    ui.busy = false;
+    if (token !== ui.aiToken) break;
+    ui.sel = null;
+    commit(false);
+    if (act.type !== "wait") await wait(120);
+  }
+  if (token === ui.aiToken) { ui.aiRunning = false; ui.sel = null; if (G) commit(false); }
+}
+
+// ---------------------------------------------------------------- Plateau : pointeur
+function eventHex(ev){
+  const svg = $("#board"), pt = svg.createSVGPoint();
+  pt.x = ev.clientX; pt.y = ev.clientY;
+  const m = svg.getScreenCTM(); if (!m) return null;
+  const p = pt.matrixTransform(m.inverse());
+  return E.pixelToHex(p.x, p.y, R);
+}
+function setHover(h){
+  const same = ui.hover && h && ui.hover.c === h.c && ui.hover.r === h.r;
+  if (same) return;
+  ui.hover = h && E.inBounds(G.map, h.c, h.r) ? h : null;
+  renderOverlay();
+  const info = $("#hexinfo");
+  if (!ui.hover) { info.innerHTML = "Survolez une case pour voir le terrain."; return; }
+  const id = E.terrainId(G.map, h.c, h.r), u = E.unitAt(G, h.c, h.r);
+  let html = '<span><b>' + esc(terrainLabel(id)) + '</b> · ' + esc(terrainRules(id, true)) + '</span>';
+  if (u) html += '<span><b style="color:' + SIDE_COLORS[u.side] + '">' + esc(u.name) + '</b> · ' + u.hp + '/' + E.maxHp(u) + ' PV</span>';
+  const s = ui.sel != null ? E.byUid(G, ui.sel) : null;
+  if (s && (s.c !== h.c || s.r !== h.r)) html += '<span>Distance <b>' + E.dist(s, h) + '</b>' + (E.lineOfSight(G.map, s, h) ? '' : ' · <b>hors de vue</b>') + '</span>';
+  info.innerHTML = html;
+}
+
+function onBoardDown(ev){
+  if (!G || ui.busy) return;
+  const h = eventHex(ev); if (!h || !E.inBounds(G.map, h.c, h.r)) return;
+  ui.down = { h, x: ev.clientX, y: ev.clientY, moved: false };
+  if (G.mode === "libre" && ui.tool === "paint") { paintAt(h); ui.painting = true; return; }
+  const u = E.unitAt(G, h.c, h.r);
+  if (G.mode === "libre" && ui.tool === "select" && u && !ui.targeting) ui.drag = { uid: u.uid };
+}
+function onBoardMove(ev){
+  if (!G) return;
+  const h = eventHex(ev);
+  setHover(h);
+  if (!ui.down || !h) return;
+  if (Math.hypot(ev.clientX - ui.down.x, ev.clientY - ui.down.y) > 6) ui.down.moved = true;
+  if (ui.painting && E.inBounds(G.map, h.c, h.r)) paintAt(h);
+  if (ui.drag && ui.down.moved) {
+    const g = unitEls.get(ui.drag.uid), svg = $("#board"), pt = svg.createSVGPoint();
+    pt.x = ev.clientX; pt.y = ev.clientY;
+    const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+    if (g) { g._anim = true; g.setAttribute("transform", "translate(" + p.x.toFixed(1) + "," + p.y.toFixed(1) + ")"); }
+  }
+}
+function onBoardUp(ev){
+  if (!G || !ui.down) return;
+  const down = ui.down; ui.down = null;
+  if (ui.painting) { ui.painting = false; save(); return; }
+  const h = eventHex(ev);
+  if (ui.drag) {
+    const u = E.byUid(G, ui.drag.uid), g = unitEls.get(ui.drag.uid);
+    ui.drag = null;
+    if (g) g._anim = false;
+    if (down.moved && u) {
+      if (h && E.inBounds(G.map, h.c, h.r) && !E.unitAt(G, h.c, h.r)) E.moveUnit(G, u, h.c, h.r);
+      ui.sel = u.uid; ui.tab = "select";
+      commit();
+      return;
+    }
+  }
+  if (h && E.inBounds(G.map, h.c, h.r)) clickHex(h);
+}
+function paintAt(h){
+  const i = h.r * G.map.cols + h.c;
+  if (G.map.hexes[i] === ui.paint) return;
+  G.map.hexes[i] = ui.paint;
+  drawTerrain();
+}
+
+function clickHex(h){
+  if (ui.busy) return;
+  const u = E.unitAt(G, h.c, h.r);
+  const sel = ui.sel != null ? E.byUid(G, ui.sel) : null;
+  if (G.mode === "regles") {
+    if (G.over) { ui.sel = u ? u.uid : null; commit(false); return; }
+    if (sel && isMyTurnUnit(sel)) {
+      if (u && ui.targets.some(t => t.uid === u.uid)) {
+        if (ui.pending === u.uid) { doAttack(sel, u, ui.special); return; }
+        ui.pending = u.uid; render(); return;
+      }
+      if (!u && ui.reach && ui.reach.dest.has(E.key(h.c, h.r))) { doMove(sel, h.c, h.r); return; }
+    }
+    ui.sel = u ? u.uid : null; ui.pending = null; ui.special = false; ui.spawnPreview = false;
+    commit(false);
+    return;
+  }
+  // Mode libre
+  if (ui.tool === "place") {
+    if (!u && E.inBounds(G.map, h.c, h.r)) {
+      const n = E.addUnit(G, ui.place, ui.placeSide, h.c, h.r);
+      if (ui.placeSide === 1) n.facing = 270;
+      commit(); return;
+    }
+    if (u) { ui.tool = "select"; ui.tab = "select"; ui.sel = u.uid; commit(); }
+    return;
+  }
+  if (ui.targeting && sel) {
+    if (u && u !== sel && u.side !== sel.side) {
+      if (ui.pending === u.uid) { doAttack(sel, u, false); return; }
+      ui.pending = u.uid; render(); return;
+    }
+    ui.targeting = false; ui.pending = null;
+  }
+  if (u) { ui.sel = u.uid; ui.tab = "select"; commit(); return; }
+  if (sel) { E.moveUnit(G, sel, h.c, h.r); commit(); return; }
+  ui.sel = null; commit();
+}
+
+// ---------------------------------------------------------------- Console : événements
+function onConsoleClick(ev){
+  const b = ev.target.closest("button"); if (!b || !G) return;
+  const u = ui.sel != null ? E.byUid(G, ui.sel) : null;
+  const act = b.dataset.act;
+  if (b.dataset.tab) { ui.tab = b.dataset.tab; if (ui.tab !== "units" && ui.tool === "place") ui.tool = "select"; if (ui.tab !== "terrain" && ui.tool === "paint") ui.tool = "select"; render(); return; }
+  if (b.dataset.placeSide != null) { ui.placeSide = +b.dataset.placeSide; render(); return; }
+  if (b.dataset.place) { const same = ui.tool === "place" && ui.place === b.dataset.place; ui.tool = same ? "select" : "place"; ui.place = b.dataset.place; ui.sel = null; render(); return; }
+  if (b.dataset.paint) { const same = ui.tool === "paint" && ui.paint === b.dataset.paint; ui.tool = same ? "select" : "paint"; ui.paint = b.dataset.paint; render(); return; }
+  if (b.dataset.roll) { rollFormula(b.dataset.roll); return; }
+  if (act === "fire" && u && ui.pending != null) { const t = E.byUid(G, ui.pending); if (t) doAttack(u, t, ui.special); return; }
+  if (act === "cancel-target") { ui.pending = null; ui.targeting = false; render(); return; }
+  if (act === "special" && u) { ui.special = !ui.special; ui.pending = null; refreshSelection(); render(); return; }
+  if (act === "spawn" && u) { doSpawn(u); return; }
+  if (act === "done" && u) { E.endActivation(G, u); ui.sel = null; commit(); return; }
+  if (act === "hp-" && u) { u.hp = Math.max(0, u.hp - 1); commit(); return; }
+  if (act === "hp+" && u) { u.hp = Math.min(99, u.hp + 1); commit(); return; }
+  if (act === "target" && u) { ui.targeting = !ui.targeting; ui.pending = null; commit(false); return; }
+  if (act === "dup" && u) {
+    const spot = E.neighbors(G.map, u.c, u.r).find(h => !E.unitAt(G, h.c, h.r));
+    if (spot) { const n = E.addUnit(G, u.type, u.side, spot.c, spot.r, { sprite: u.sprite }); n.ov = u.ov ? Object.assign({}, u.ov) : null; n.hp = u.hp; n.facing = u.facing; ui.sel = n.uid; }
+    commit(); return;
+  }
+  if (act === "del" && u) { G.units.splice(G.units.indexOf(u), 1); ui.sel = null; commit(); return; }
+  if (act === "regen") { askConfirm("Générer une nouvelle carte ?", "Le terrain actuel sera remplacé. Les pions restent en place.", "Générer", () => { const m = E.generateMap(G.map.biome, Math.floor(Math.random() * 1e9)); G.map = m; buildBoard(); commit(); }); return; }
+  if (act === "clear-map") { askConfirm("Effacer le terrain ?", "Toutes les cases redeviennent dégagées. Les pions restent en place.", "Effacer", () => { G.map.hexes.fill(G.map.theater === "space" ? "vide" : "plaine"); buildBoard(); commit(); }); return; }
+  if (act === "export") { showExport(); return; }
+  if (act === "roll-pool") {
+    const n = Math.max(1, Math.min(30, +$("#dc-n").value || 1)), need = +$("#dc-need").value;
+    ui.diceN = n; ui.diceNeed = need;
+    const rolls = []; for (let i = 0; i < n; i++) rolls.push(E.d(G, 6));
+    const ok = rolls.filter(r => r >= need).length;
+    ui.lastDice = '<div class="dice">' + rolls.map(r => '<span class="die big ' + (r >= need ? "hit" : "") + '" style="--c:var(--holo)">' + r + '</span>').join("") + '</div><div class="tot">' + ok + ' réussite' + (ok > 1 ? "s" : "") + '</div>';
+    E.log(G, { k: "roll", text: n + "d6, réussite sur " + need + "+ : " + ok + " réussite" + (ok > 1 ? "s" : ""), roll: { rolls, need } });
+    commit(); return;
+  }
+  if (act === "roll-f") { rollFormula($("#dc-f").value); return; }
+}
+function rollFormula(text){
+  ui.diceF = text;
+  const r = E.rollFormula(G, text);
+  if (!r) { ui.lastDice = '<p class="hint">Formule non reconnue. Écrivez par exemple 3d6+2, d20 ou 2d10-1.</p>'; render(); return; }
+  const label = r.n + "d" + r.f + (r.mod ? (r.mod > 0 ? "+" : "") + r.mod : "");
+  ui.lastDice = (r.n > 1 && r.n <= 12 ? '<div class="dice">' + r.rolls.map(x => '<span class="die big">' + x + '</span>').join("") + '</div>' : '') + '<div class="tot">' + r.total + '</div>';
+  E.log(G, { k: "roll", text: label + " = " + r.total + (r.n > 1 || r.mod ? " (" + r.rolls.join(" + ") + (r.mod ? (r.mod > 0 ? " + " : " − ") + Math.abs(r.mod) : "") + ")" : ""), roll: r.n <= 12 ? { rolls: r.rolls } : null });
+  commit();
+}
+function onConsoleChange(ev){
+  const el = ev.target, u = ui.sel != null ? E.byUid(G, ui.sel) : null;
+  if (el.id === "ed-biome") {
+    const theater = E.BIOMES[el.value].theater;
+    if (theater === G.map.theater) { G.map.biome = el.value; buildBoard(); commit(); }
+    else { G.map = E.generateMap(el.value, Math.floor(Math.random() * 1e9)); ui.tool = "select"; buildBoard(); commit(); }
+    return;
+  }
+  if (el.id === "dc-n" || el.id === "dc-need" || el.id === "dc-f") return;
+  if (!u) return;
+  if (el.id === "ed-name") { u.name = el.value.trim() || T[u.type].name; commit(); }
+  else if (el.id === "ed-hp") { u.hp = Math.max(0, Math.min(99, Math.round(+el.value || 0))); commit(); }
+  else if (el.id === "ed-side") { u.side = +el.value; const g = unitEls.get(u.uid); if (g) { g.remove(); unitEls.delete(u.uid); } commit(); }
+  else if (el.id === "ed-spr") { u.sprite = el.value; const g = unitEls.get(u.uid); if (g) { g.remove(); unitEls.delete(u.uid); } commit(); }
+  else if (el.dataset.ov) {
+    const k = el.dataset.ov, v = Math.max(0, Math.min(99, Math.round(+el.value || 0)));
+    u.ov = u.ov || {};
+    if (v === T[u.type][k]) delete u.ov[k]; else u.ov[k] = v;
+    if (k === "hp") u.hp = Math.min(u.hp, v) || u.hp;
+    commit();
+  }
+}
+
+// ---------------------------------------------------------------- Fenêtres
+function openModal(html){
+  $("#modal-card").innerHTML = html;
+  $("#modal").hidden = false;
+  const f = $("#modal-card").querySelector("button,input,select,textarea"); if (f) f.focus();
+}
+function closeModal(){ $("#modal").hidden = true; $("#modal-card").innerHTML = ""; }
+let confirmFn = null;
+function askConfirm(title, text, label, fn){
+  confirmFn = fn;
+  openModal('<header><h2>' + esc(title) + '</h2></header><p class="hint">' + esc(text) + '</p><div class="actions"><button class="btn primary" data-m="confirm">' + esc(label) + '</button><button class="btn ghost" data-m="close">Annuler</button></div>');
+}
+
+function showRules(){
+  const rows = Object.keys(T).map(id => {
+    const Ty = T[id];
+    return '<tr><td>' + esc(Ty.name) + '</td><td>' + esc(E.FACTIONS[Ty.faction].short) + '</td><td>' + (Ty.theater === "space" ? "Espace" : Ty.theater === "ground" ? "Sol" : "Tous") + '</td>' +
+      ['hp', 'mv', 'rng', 'att', 'def', 'cost'].map(k => '<td class="n">' + Ty[k] + '</td>').join("") +
+      '<td>' + esc(Ty.tags.filter(t => E.TAGS[t] && E.TAGS[t].desc).map(t => E.TAGS[t].name).concat(Ty.ability ? [Ty.ability.name] : []).join(", ")) + '</td></tr>';
+  }).join("");
+  const ter = Object.keys(E.TERRAIN).map(id => '<li><b>' + esc(E.TERRAIN[id].name) + '</b> (' + (E.TERRAIN[id].theater === "space" ? "espace" : "sol") + ') : ' + esc(terrainRulesRaw(id)) + '</li>').join("");
+  openModal('<header><h2>Règles de l\'Holotable</h2><button class="btn sm ghost" data-m="close">Fermer</button></header><div class="rules">' +
+    '<section><h3>Le tour</h3><p>Les camps jouent chacun leur tour. Pendant votre tour, chaque unité peut <b>se déplacer puis tirer</b>, une fois. Tirer termine l\'activation : on ne bouge plus après. Une bataille se gagne en détruisant toute l\'armée adverse, ou aux points (valeur des unités détruites) à la fin du dernier tour.</p></section>' +
+    '<section><h3>Déplacement</h3><p>Une unité dépense sa valeur de Mouvement case par case. Le terrain peut coûter plus cher ou être interdit. On traverse ses alliés, jamais l\'ennemi, et on ne s\'arrête pas sur une case occupée.</p></section>' +
+    '<section><h3>Tir</h3><ul><li>La cible doit être à portée et en ligne de vue (les rochers et nébuleuses coupent la vue).</li><li>Lancez autant de d6 que l\'Attaque. Chaque dé égal ou supérieur au seuil touche. Seuil de base : <b>4+</b>, +1 si la cible est à couvert, +1 si une arme lourde vise une cible agile.</li><li>Les <b>6 sont critiques</b> : ils touchent toujours et ne s\'esquivent pas.</li><li>Contre une cible <b>blindée</b>, seuls les 6 touchent, sauf avec une arme perforante.</li><li>La cible lance ses dés de Défense : chaque 5+ annule une touche normale.</li><li>Chaque touche restante retire 1 PV (2 pour certaines armes spéciales).</li></ul></section>' +
+    '<section><h3>Terrain</h3><ul>' + ter + '</ul></section>' +
+    '<section><h3>Unités</h3><div class="tbl-wrap"><table><thead><tr><th>Unité</th><th>Faction</th><th>Théâtre</th><th>PV</th><th>Mv</th><th>Port.</th><th>Att</th><th>Déf</th><th>Pts</th><th>Particularités</th></tr></thead><tbody>' + rows + '</tbody></table></div></section>' +
+    '<section><h3>À la table de jeu de rôle</h3><ul><li>Ouvrez une <b>Table du MJ</b> et posez les pions au fil de la scène. Le pion <b>Personnage</b> représente un PJ ou un PNJ : renommez-le et réglez ses caractéristiques.</li><li>En mode <b>Libre</b>, tout se déplace à la main, les PV s\'ajustent avec + et −, et « Faire tirer » résout un tir avec les règles ci-dessus sans imposer la portée.</li><li>Passez en mode <b>Règles</b> quand la bataille doit se jouer d\'elle-même, avec l\'IA aux commandes d\'un camp si vous le voulez (bouton Camps).</li><li>L\'onglet <b>Dés</b> lance des réserves de d6 ou n\'importe quelle formule (d20, 3d6+2…) pour votre propre système.</li></ul></section>' +
+    '</div>');
+}
+function terrainRulesRaw(id){
+  const t = E.TERRAIN[id], out = [];
+  if (t.cover) out.push("couvert");
+  if (t.blocksLOS) out.push("bloque la vue");
+  if (t.impassable) out.push("infranchissable");
+  else if (t.water) out.push("seules les unités à répulseurs le franchissent");
+  else if (t.cost > 1) out.push("coûte " + t.cost + " mouvements");
+  if (t.vehCost) out.push("coûte " + t.vehCost + " aux véhicules");
+  if (t.noCapital) out.push("interdit aux vaisseaux capitaux");
+  return out.join(", ") || "aucun effet";
+}
+
+function showSides(){
+  const fopts = (sel) => Object.keys(E.FACTIONS).map(f => '<option value="' + f + '"' + (f === sel ? " selected" : "") + '>' + esc(E.FACTIONS[f].name) + '</option>').join("");
+  openModal('<header><h2>Camps</h2><button class="btn sm ghost" data-m="close">Fermer</button></header>' +
+    [0, 1].map(i => '<div class="panel-card" style="border-color:' + SIDE_COLORS[i] + '"><div class="form-grid">' +
+      '<div class="field"><label for="sd-name-' + i + '">Nom du ' + SIDE_LABEL[i].toLowerCase() + '</label><input id="sd-name-' + i + '" value="' + esc(G.sides[i].name) + '" maxlength="32"></div>' +
+      '<div class="field"><label for="sd-fac-' + i + '">Faction (couleur des tirs)</label><select id="sd-fac-' + i + '">' + fopts(G.sides[i].faction) + '</select></div>' +
+      '<div class="field"><label for="sd-ctl-' + i + '">Contrôle</label><select id="sd-ctl-' + i + '"><option value="human"' + (G.sides[i].control === "human" ? " selected" : "") + '>Joueur</option><option value="ai"' + (G.sides[i].control === "ai" ? " selected" : "") + '>IA</option></select></div>' +
+      '</div></div>').join("") +
+    '<div class="field"><label for="sd-limit">Limite de tours</label><select id="sd-limit">' + [0, 6, 8, 10, 12, 15, 20].map(n => '<option value="' + n + '"' + (G.turnLimit === n ? " selected" : "") + '>' + (n ? n + " tours" : "Aucune") + '</option>').join("") + '</select></div>' +
+    '<div class="actions"><button class="btn primary" data-m="apply-sides">Appliquer</button></div>');
+}
+function applySides(){
+  for (const i of [0, 1]) {
+    G.sides[i].name = $("#sd-name-" + i).value.trim() || SIDE_LABEL[i];
+    G.sides[i].faction = $("#sd-fac-" + i).value;
+    G.sides[i].control = $("#sd-ctl-" + i).value;
+  }
+  G.turnLimit = +$("#sd-limit").value;
+  if (G.turnLimit && G.turn > G.turnLimit) G.turnLimit = G.turn;
+  closeModal();
+  ui.aiToken++; ui.aiRunning = false;
+  commit();
+}
+
+function showExport(){
+  openModal('<header><h2>Exporter ou importer</h2><button class="btn sm ghost" data-m="close">Fermer</button></header>' +
+    '<p class="hint">Copiez ce texte pour garder la table (carte, pions, PV) ou la transmettre à un autre MJ. Pour charger une table, collez son texte ici ou choisissez un fichier.</p>' +
+    '<div class="field"><label for="ex-text">Table au format JSON</label><textarea id="ex-text" spellcheck="false">' + esc(JSON.stringify(G)) + '</textarea></div>' +
+    '<div class="actions"><button class="btn primary" data-m="copy">Copier</button><button class="btn" data-m="import">Charger ce texte</button><label class="btn ghost" for="ex-file">Choisir un fichier</label><input id="ex-file" type="file" accept=".json,application/json,text/plain" hidden></div>' +
+    '<p class="hint" id="ex-msg"></p>');
+}
+function importText(txt){
+  try {
+    const s = JSON.parse(txt);
+    if (!s || !s.map || !Array.isArray(s.units) || !s.sides) throw new Error("format");
+    s.units = s.units.filter(u => T[u.type]);
+    closeModal();
+    launch(s);
+  } catch (e) {
+    const m = $("#ex-msg"); if (m) m.textContent = "Ce texte n'est pas une table Holotable valide. Vérifiez qu'il a été copié en entier.";
+  }
+}
+
+function showVictory(){
+  if (!G || !G.over) return;
+  const w = G.over.winner;
+  const title = w < 0 ? "Match nul" : "Victoire";
+  const who = w < 0 ? "Aucun camp ne l'emporte." : G.sides[w].name + (G.over.reason === "points" ? " l'emporte aux points." : " a anéanti l'armée adverse.");
+  openModal('<div class="victory" style="--c:' + (w < 0 ? "var(--holo)" : SIDE_COLORS[w]) + ';display:grid;gap:14px">' +
+    '<div class="eyebrow">Tour ' + G.turn + '</div><h2>' + title + '</h2><p class="hint">' + esc(who) + '</p>' +
+    '<div class="mono">' + esc(G.sides[0].name) + ' ' + G.score[0] + ' pts · ' + esc(G.sides[1].name) + ' ' + G.score[1] + ' pts</div>' +
+    '<div class="actions" style="justify-content:center">' + (G.scenario ? '<button class="btn primary" data-m="replay">Rejouer</button>' : '') +
+    '<button class="btn" data-m="free">Continuer en mode libre</button><button class="btn ghost" data-m="menu">Accueil</button></div></div>');
+}
+
+function onModalClick(ev){
+  if (ev.target.id === "modal") { closeModal(); return; }
+  const b = ev.target.closest("[data-m]"); if (!b) return;
+  const m = b.dataset.m;
+  if (m === "close") closeModal();
+  else if (m === "confirm") { const fn = confirmFn; confirmFn = null; closeModal(); if (fn) fn(); }
+  else if (m === "apply-sides") applySides();
+  else if (m === "copy") {
+    const ta = $("#ex-text");
+    const done = () => { $("#ex-msg").textContent = "Copié."; };
+    try { navigator.clipboard.writeText(ta.value).then(done, () => { ta.select(); $("#ex-msg").textContent = "Copie refusée par le navigateur : le texte est sélectionné, copiez-le à la main."; }); }
+    catch (e) { ta.select(); }
+  }
+  else if (m === "import") importText($("#ex-text").value);
+  else if (m === "replay") { const sc = G.scenario, ctl = G.sides.map(s => s.control); closeModal(); launch(E.createScenario(sc, ctl)); }
+  else if (m === "free") { closeModal(); setMode("libre"); }
+  else if (m === "menu") { closeModal(); toMenu(); }
+}
+
+function setMode(mode){
+  if (!G || G.mode === mode || ui.busy) return;
+  G.mode = mode;
+  ui.sel = null; ui.pending = null; ui.targeting = false; ui.tool = "select";
+  ui.aiToken++; ui.aiRunning = false;
+  if (mode === "regles") {
+    G.over = null; ui.overShown = false;
+    for (const u of G.units) if (u.side === G.active) { u.moved = false; u.acted = false; }
+    E.log(G, { k: "info", text: "Règles activées : " + G.sides[G.active].name + " a la main." });
+    E.checkVictory(G);
+  } else {
+    for (const u of G.units) { u.moved = false; u.acted = false; }
+    E.log(G, { k: "info", text: "Mode libre : déplacez et modifiez les pions à volonté." });
+    ui.tab = G.units.length ? "select" : "units";
+  }
+  unitEls.forEach(g => g.remove()); unitEls.clear();
+  commit();
+  if (mode === "regles") banner();
+}
+
+function applyZoom(){ $("#board").style.setProperty("--zoom", ui.zoom); }
+
+// ---------------------------------------------------------------- Démarrage
+function bind(){
+  document.addEventListener("click", ev => {
+    const b = ev.target.closest("[data-scen]");
+    if (b) launch(E.createScenario(b.dataset.scen, ["human", b.dataset.ctrl]));
+  });
+  $("#btn-custom").addEventListener("click", startCustom);
+  $("#btn-gm").addEventListener("click", startGM);
+  $("#btn-rules").addEventListener("click", showRules);
+  $("#btn-resume").addEventListener("click", () => { const s = store(() => JSON.parse(localStorage.getItem(SAVE_KEY))); if (s && s.map) launch(s); });
+  $("#cu-biome").addEventListener("change", fillFactionSelects);
+  $("#b-menu").addEventListener("click", toMenu);
+  $("#b-help").addEventListener("click", showRules);
+  $("#b-sides").addEventListener("click", showSides);
+  $("#b-end").addEventListener("click", endTurn);
+  $("#m-rules").addEventListener("click", () => setMode("regles"));
+  $("#m-free").addEventListener("click", () => setMode("libre"));
+  $("#z-in").addEventListener("click", () => { ui.zoom = Math.min(3, +(ui.zoom + 0.25).toFixed(2)); applyZoom(); });
+  $("#z-out").addEventListener("click", () => { ui.zoom = Math.max(0.75, +(ui.zoom - 0.25).toFixed(2)); applyZoom(); });
+  const board = $("#board");
+  board.addEventListener("pointerdown", ev => { board.setPointerCapture && board.setPointerCapture(ev.pointerId); onBoardDown(ev); });
+  board.addEventListener("pointermove", onBoardMove);
+  board.addEventListener("pointerup", onBoardUp);
+  board.addEventListener("pointerleave", () => { if (!ui.down) setHover(null); });
+  $("#console").addEventListener("click", onConsoleClick);
+  $("#console").addEventListener("change", onConsoleChange);
+  $("#modal").addEventListener("click", onModalClick);
+  $("#modal").addEventListener("change", ev => {
+    if (ev.target.id !== "ex-file" || !ev.target.files[0]) return;
+    const r = new FileReader();
+    r.onload = () => { $("#ex-text").value = r.result; importText(r.result); };
+    r.readAsText(ev.target.files[0]);
+  });
+  document.addEventListener("keydown", ev => {
+    if (ev.key === "Escape") {
+      if (!$("#modal").hidden) { closeModal(); return; }
+      if (G && !ui.busy) { ui.sel = null; ui.pending = null; ui.targeting = false; ui.tool = "select"; commit(false); }
+    }
+  });
+}
+
+function start(data){
+  preload();
+  renderMenu();
+  bind();
+  if (data && data.state && data.state.map) launch(data.state);
+}
+if (window.claude && window.claude.hot) window.claude.hot.snapshot && window.claude.hot.snapshot(() => ({ state: G && !$("#battle").hidden ? G : null }));
+if (window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(start);
+else start((window.claude && window.claude.hot && window.claude.hot.data) || {});
+})();
+</script>
+</body>
+</html>
