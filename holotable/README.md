@@ -25,16 +25,17 @@ Aucune dépendance, aucun build pour jouer en local.
 
 | Faction | Espace | Sol |
 |---|---|---|
-| Alliance rebelle | X-wing, croiseur Mon Calamari | Soldats rebelles |
-| Empire galactique | TIE/ln, Destroyer stellaire | Stormtroopers |
-| République galactique | Destroyer Venator* | Clones (6 légions), AT-TE, AT-RT, TX-130 |
-| Confédération séparatiste | Vaisseau de contrôle droïde* | Droïdes B1, char AAT |
-| Indépendants | Personnage (pion libre) | Personnage (pion libre) |
+| Alliance rebelle | X-wing, croiseur Mon Calamari (2 modèles), frégate Nebulon-B | Soldats rebelles |
+| Empire galactique | TIE/ln, Destroyer stellaire, super destroyer stellaire | Stormtroopers, AT-ST / AT-DP, Sith |
+| République galactique | Venator, destroyer Victory, croiseur Arquitens | Clones (6 légions), Jedi, AT-TE (2 modèles), AT-RT, AT-AP, TX-130 |
+| Confédération séparatiste | Destroyer Recusant, frégate Munificent | Droïdes B1 et B2, droïdekas, char AAT |
+| Clans mandaloriens | Cuirassé, destroyer, porte-chasseurs, chasseur Fang | Guerriers mandaloriens (4 clans), super commandos |
+| Pègre et chasseurs de primes | Croiseur hutt, croiseur pirate, canonnière | Chasseurs de primes, Trandoshans, gardes gamorréens |
+| Indépendants | Yacht royal | Personnage : pion libre qui peut prendre l'apparence de n'importe quelle figurine |
 
-\* Ces deux vaisseaux viennent de la planche `flotte-capitale.webp`. Tant qu'elle
-n'est pas dans `assets/source/`, le jeu les affiche sous forme de jeton (voir plus bas).
-
-Théâtres : espace profond (astéroïdes, nébuleuses), désert, lune forestière, monde glacé.
+Dix escarmouches prêtes à jouer, et des batailles sur mesure entre n'importe quelles
+factions. Théâtres : espace profond (astéroïdes, nébuleuses), désert, lune forestière,
+monde glacé.
 
 ## Règles en bref
 
@@ -43,7 +44,10 @@ Théâtres : espace profond (astéroïdes, nébuleuses), désert, lune forestiè
   +1 si une arme lourde vise une cible agile). Les **6 sont critiques** : impossibles
   à esquiver. Une cible **blindée** n'est touchée que sur 6, sauf arme perforante.
 - Défense : la cible lance ses dés de Défense, chaque 5+ annule une touche normale.
-- Victoire par anéantissement, ou aux points à la fin du dernier tour.
+- Les Jedi et les Sith frappent au contact et renvoient les tirs (esquive sur 4+),
+  les droïdekas ont un bouclier, les Mandaloriens volent au réacteur dorsal.
+- Victoire par anéantissement, ou aux points à la fin du dernier tour : chaque PV
+  retiré rapporte une part du coût de l'unité touchée.
 
 Le détail complet, avec le tableau de toutes les unités, est dans le jeu (bouton *Règles*).
 

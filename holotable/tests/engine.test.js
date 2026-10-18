@@ -82,7 +82,7 @@ check(GAMES + " batailles IA contre IA par scénario", () => {
 });
 
 check("batailles sur mesure, toutes factions", () => {
-  const F = ["rebels", "empire", "republic", "separatists"];
+  const F = Object.keys(E.FACTIONS).filter(f => f !== "free");
   let n = 0;
   for (const theater of ["space", "ground"]) for (const a of F) for (const b of F) {
     const ua = E.randomArmy(a, theater, 200, n + 1), ub = E.randomArmy(b, theater, 200, n + 2);

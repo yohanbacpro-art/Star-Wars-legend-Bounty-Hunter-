@@ -18,7 +18,9 @@ var Engine = (function () {
     empire:      { name: "Empire galactique",         short: "Empire",       era: "Guerre civile galactique", bolt: "#72ff7e" },
     republic:    { name: "République galactique",     short: "République",   era: "Guerre des clones",        bolt: "#5ab8ff" },
     separatists: { name: "Confédération séparatiste", short: "Séparatistes", era: "Guerre des clones",        bolt: "#ff3d3d" },
-    free:        { name: "Indépendants",              short: "Indépendants", era: "Toutes époques",           bolt: "#ffc94a" },
+    mandalorians:{ name: "Clans mandaloriens",        short: "Mandaloriens", era: "Toutes époques",           bolt: "#ff8a3c" },
+    underworld:  { name: "Pègre et chasseurs de primes", short: "Pègre",     era: "Toutes époques",           bolt: "#ffd23f" },
+    free:        { name: "Indépendants",              short: "Indépendants", era: "Toutes époques",           bolt: "#e8e1c8" },
   };
 
   // Lettres aurebesh, pour baptiser les escouades.
@@ -41,6 +43,11 @@ var Engine = (function () {
     infantry: { name: "Infanterie",  desc: "" },
     vehicle:  { name: "Véhicule",    desc: "Les ruines lui coûtent 2 mouvements." },
     hero:     { name: "Personnage",  desc: "" },
+    deflect:  { name: "Sabre laser", desc: "Renvoie les tirs : esquive sur 4+ contre les tirs à distance." },
+    shield:   { name: "Bouclier",    desc: "Esquive sur 4+ contre tous les tirs." },
+    hunter:   { name: "Traqueur",    desc: "+1 dé contre une cible déjà blessée." },
+    jetpack:  { name: "Réacteur dorsal", desc: "Le terrain ne coûte qu'1 mouvement, l'eau se franchit." },
+    melee:    { name: "Corps à corps", desc: "Ne frappe qu'au contact (portée 1)." },
   };
 
   // size : plus grand côté du sprite, en largeurs d'hexagone.
@@ -49,7 +56,7 @@ var Engine = (function () {
     xwing: {
       name: "X-wing T-65", faction: "rebels", theater: "space", kind: "Chasseur",
       sprites: ["xwing-1", "xwing-2", "xwing-3"], rotate: true, base: 0, size: 1.0,
-      hp: 4, mv: 5, rng: 3, att: 3, def: 2, cost: 20, tags: ["agile", "ap"],
+      hp: 5, mv: 5, rng: 3, att: 3, def: 2, cost: 22, tags: ["agile", "ap"],
       ability: { id: "torpedo", type: "shot", name: "Torpilles à protons", uses: 1, bonus: 2,
         desc: "Une fois par bataille : tir avec 2 dés de plus." },
       desc: "Chasseur polyvalent de l'Alliance. Ses canons laser percent le blindage des vaisseaux capitaux.",
@@ -64,8 +71,8 @@ var Engine = (function () {
     },
     destroyer: {
       name: "Destroyer stellaire", faction: "empire", theater: "space", kind: "Vaisseau capital",
-      sprites: ["destroyer", "destroyer-2"], rotate: true, base: 90, size: 2.7,
-      hp: 26, mv: 2, rng: 5, att: 8, def: 2, cost: 120, tags: ["capital", "heavy", "armored", "ap", "large"],
+      sprites: ["destroyer"], rotate: true, base: 90, size: 2.7,
+      hp: 24, mv: 2, rng: 5, att: 7, def: 2, cost: 120, tags: ["capital", "heavy", "armored", "ap", "large"],
       ability: { id: "launch", type: "spawn", name: "Lancer une escadrille", uses: 2, spawn: "tie",
         desc: "Action : déploie un TIE sur une case adjacente libre. Deux fois par bataille." },
       desc: "Classe Impérial. Une forteresse volante de 1 600 mètres.",
@@ -73,7 +80,7 @@ var Engine = (function () {
     },
     moncal: {
       name: "Croiseur Mon Calamari", faction: "rebels", theater: "space", kind: "Vaisseau capital",
-      sprites: ["moncal", "moncal-2"], rotate: true, base: -90, size: 2.5,
+      sprites: ["moncal", "moncal-2"], variants: ["Croiseur en croissant", "Croiseur MC80B"], rotate: true, base: -90, size: 2.5,
       spriteBase: { "moncal-2": 90 },
       hp: 20, mv: 2, rng: 5, att: 7, def: 3, cost: 115, tags: ["capital", "heavy", "armored", "ap", "large", "regen"],
       desc: "Croiseur MC80. Ses boucliers redondants se régénèrent en plein combat.",
@@ -82,18 +89,11 @@ var Engine = (function () {
     venator: {
       name: "Destroyer Venator", faction: "republic", theater: "space", kind: "Vaisseau capital",
       sprites: ["venator"], rotate: true, base: 90, size: 2.7,
-      hp: 22, mv: 2, rng: 5, att: 7, def: 2, cost: 115, tags: ["capital", "heavy", "armored", "ap", "large"],
+      hp: 25, mv: 2, rng: 5, att: 7, def: 2, cost: 115, tags: ["capital", "heavy", "armored", "ap", "large"],
       ability: { id: "broadside", type: "shot", name: "Bordée de turbolasers", uses: 2, bonus: 3,
         desc: "Deux fois par bataille : tir avec 3 dés de plus." },
       desc: "Porte-chasseurs et navire de ligne de la République.",
       naming: (n) => ["Résolu", "Négociateur", "Vigilance", "Tranquillité", "Intégrité", "Guarlara"][(n - 1) % 6],
-    },
-    lucrehulk: {
-      name: "Vaisseau de contrôle droïde", faction: "separatists", theater: "space", kind: "Vaisseau capital",
-      sprites: ["lucrehulk"], rotate: false, size: 2.7,
-      hp: 28, mv: 1, rng: 4, att: 6, def: 3, cost: 120, tags: ["capital", "heavy", "armored", "ap", "large"],
-      desc: "Cargo Lucrehulk converti. Lent, énorme, presque impossible à abattre.",
-      naming: (n) => ["Saak'ak", "Profit", "Revenu", "Dividende"][(n - 1) % 4],
     },
     storm: {
       name: "Stormtroopers", faction: "empire", theater: "ground", kind: "Infanterie",
@@ -127,7 +127,7 @@ var Engine = (function () {
     },
     atte: {
       name: "AT-TE", faction: "republic", theater: "ground", kind: "Marcheur lourd",
-      sprites: ["atte"], rotate: true, base: 90, size: 1.9,
+      sprites: ["atte", "atte-2"], rotate: true, base: 90, size: 1.9,
       hp: 14, mv: 2, rng: 6, att: 6, def: 3, cost: 80, tags: ["vehicle", "armored", "ap", "large"],
       ability: { id: "mass", type: "shot", name: "Canon à projection de masse", uses: 2, dice: 4, dmg: 2, rng: 8,
         desc: "Deux fois par bataille : tir à portée 8, 4 dés, 2 dégâts par touche." },
@@ -155,11 +155,210 @@ var Engine = (function () {
       desc: "Char d'assaut blindé de la Fédération du Commerce.",
       naming: (n) => "AAT-" + (n * 11 + 1),
     },
+    // ---------------- Empire
+    executor: {
+      name: "Super destroyer stellaire", faction: "empire", theater: "space", kind: "Vaisseau amiral",
+      sprites: ["executor"], rotate: true, base: 90, size: 4.2,
+      hp: 36, mv: 1, rng: 6, att: 11, def: 3, cost: 230, tags: ["capital", "heavy", "armored", "ap", "large"],
+      ability: { id: "launch", type: "spawn", name: "Lancer une escadrille", uses: 3, spawn: "tie",
+        desc: "Action : déploie un TIE sur une case adjacente libre. Trois fois par bataille." },
+      desc: "Classe Exécuteur. Dix-neuf kilomètres de coque et l'arsenal d'une flotte entière.",
+      naming: (n) => ["Exécuteur", "Ravageur", "Arrogant", "Annihilateur"][(n - 1) % 4],
+    },
+    atst: {
+      name: "Marcheur éclaireur", faction: "empire", theater: "ground", kind: "Marcheur bipède",
+      sprites: ["atst", "atdp"], variants: ["AT-ST", "AT-DP"], rotate: false, size: 1.1,
+      hp: 8, mv: 4, rng: 4, att: 4, def: 2, cost: 40, tags: ["vehicle", "armored", "ap"],
+      desc: "Marcheur bipède de patrouille. Blindé contre les blasters, vulnérable aux armes lourdes.",
+      naming: (n) => "Marcheur " + AUREBESH[(n - 1) % 26],
+    },
+    sith: {
+      name: "Seigneur sith", faction: "empire", theater: "ground", kind: "Utilisateur de la Force",
+      sprites: ["sith-1", "sith-2"], variants: ["Inquisitrice", "Seigneur noir"], rotate: false, size: 1.05,
+      hp: 6, mv: 5, rng: 1, att: 6, def: 2, cost: 45, tags: ["hero", "melee", "ap", "deflect"],
+      ability: { id: "lightning", type: "shot", name: "Éclair de Force", uses: 2, dice: 4, rng: 3, ap: true,
+        desc: "Deux fois par bataille : tir à portée 3, 4 dés perforants." },
+      desc: "Frappe au sabre laser et renvoie les tirs de blaster.",
+      naming: (n) => ["Dark Nihara", "Dark Vesh", "Dark Kaal", "Dark Soryn"][(n - 1) % 4],
+    },
+    // ---------------- Alliance
+    nebulon: {
+      name: "Frégate Nebulon-B", faction: "rebels", theater: "space", kind: "Frégate",
+      sprites: ["nebulon"], rotate: true, base: 90, size: 2.0,
+      hp: 12, mv: 3, rng: 4, att: 5, def: 2, cost: 60, tags: ["capital", "heavy", "armored", "ap", "large"],
+      ability: { id: "medic", type: "heal", name: "Frégate médicale", uses: 2, heal: 2,
+        desc: "Action : rend 2 PV à chaque allié adjacent. Deux fois par bataille." },
+      desc: "Escorteur polyvalent, souvent reconverti en navire-hôpital.",
+      naming: (n) => ["Rédemption", "Espérance", "Vigilant", "Salut"][(n - 1) % 4],
+    },
+    // ---------------- République
+    victory: {
+      name: "Destroyer Victory", faction: "republic", theater: "space", kind: "Vaisseau capital",
+      sprites: ["victory"], rotate: true, base: 90, size: 2.4,
+      hp: 18, mv: 2, rng: 5, att: 7, def: 2, cost: 100, tags: ["capital", "heavy", "armored", "ap", "large"],
+      desc: "Destroyer stellaire de première génération, taillé pour les combats en orbite.",
+      naming: (n) => ["Persévérance", "Fidélité", "Constance", "Ténacité"][(n - 1) % 4],
+    },
+    arquitens: {
+      name: "Croiseur léger Arquitens", faction: "republic", theater: "space", kind: "Croiseur léger",
+      sprites: ["arquitens"], rotate: true, base: 90, size: 1.8,
+      hp: 11, mv: 3, rng: 4, att: 5, def: 2, cost: 55, tags: ["capital", "heavy", "armored", "ap", "large"],
+      desc: "Croiseur rapide d'escorte, hérissé de turbolasers.",
+      naming: (n) => ["Fulgurant", "Sentinelle", "Éclair", "Rempart"][(n - 1) % 4],
+    },
+    jedi: {
+      name: "Jedi", faction: "republic", theater: "ground", kind: "Utilisateur de la Force",
+      sprites: ["jedi-1", "jedi-2"], variants: ["Chevalière jedi", "Maître jedi"], rotate: false, size: 1.05,
+      hp: 6, mv: 5, rng: 1, att: 5, def: 3, cost: 45, tags: ["hero", "melee", "ap", "deflect"],
+      ability: { id: "push", type: "shot", name: "Poussée de Force", uses: 2, dice: 4, rng: 3, ap: true,
+        desc: "Deux fois par bataille : tir à portée 3, 4 dés perforants." },
+      desc: "Gardien de la paix. Son sabre laser renvoie les tirs de blaster.",
+      naming: (n) => ["Aelis Varo", "Tarn Okeda", "Ilena Sorr", "Kaeden Vos"][(n - 1) % 4],
+    },
+    atap: {
+      name: "Marcheur AT-AP", faction: "republic", theater: "ground", kind: "Marcheur d'artillerie",
+      sprites: ["atap"], rotate: true, base: 180, size: 1.6,
+      hp: 12, mv: 2, rng: 6, att: 5, def: 3, cost: 75, tags: ["vehicle", "armored", "ap", "large"],
+      ability: { id: "artillery", type: "shot", name: "Tir d'artillerie", uses: 2, dice: 4, dmg: 2, rng: 9, indirect: true,
+        desc: "Deux fois par bataille : tir à portée 9, sans ligne de vue, 4 dés, 2 dégâts par touche." },
+      desc: "Pièce d'artillerie sur pattes. Frappe par-dessus les obstacles.",
+      naming: (n) => "AT-AP " + n,
+    },
+    // ---------------- Séparatistes
+    recusant: {
+      name: "Destroyer Recusant", faction: "separatists", theater: "space", kind: "Vaisseau capital",
+      sprites: ["recusant"], rotate: true, base: 90, size: 2.8,
+      hp: 18, mv: 2, rng: 5, att: 7, def: 2, cost: 100, tags: ["capital", "heavy", "armored", "ap", "large"],
+      desc: "Destroyer léger de la Confédération, tout en canons.",
+      naming: (n) => ["Malveillance", "Rapace", "Implacable", "Scalpel"][(n - 1) % 4],
+    },
+    munificent: {
+      name: "Frégate Munificent", faction: "separatists", theater: "space", kind: "Frégate",
+      sprites: ["munificent"], rotate: true, base: -90, size: 2.4,
+      hp: 12, mv: 2, rng: 5, att: 5, def: 2, cost: 65, tags: ["capital", "heavy", "armored", "ap", "large"],
+      desc: "Frégate du Clan bancaire, robuste et bien protégée.",
+      naming: (n) => ["Usure", "Créance", "Intérêt", "Hypothèque"][(n - 1) % 4],
+    },
+    b2: {
+      name: "Super droïdes B2", faction: "separatists", theater: "ground", kind: "Infanterie lourde",
+      sprites: ["b2-1", "b2-2", "b2-3", "b2-4"], rotate: false, size: 1.05,
+      hp: 4, mv: 3, rng: 3, att: 4, def: 2, cost: 14, tags: ["infantry"],
+      desc: "Blindés, lents, et un canon blaster dans chaque poignet.",
+      naming: (n) => "Unité SBD-" + (n * 13 + 5),
+    },
+    droideka: {
+      name: "Droïdekas", faction: "separatists", theater: "ground", kind: "Droïde destroyer",
+      sprites: ["droideka-1", "droideka-2", "droideka-3", "droideka-4"], rotate: false, size: 1.0,
+      hp: 4, mv: 4, rng: 3, att: 4, def: 2, cost: 24, tags: ["shield"],
+      desc: "Arrive en roulant, se déploie derrière son bouclier et ouvre le feu.",
+      naming: (n) => "Droïdeka " + AUREBESH[(n - 1) % 26],
+    },
+    // ---------------- Mandaloriens
+    mando: {
+      name: "Guerriers mandaloriens", faction: "mandalorians", theater: "ground", kind: "Infanterie d'élite",
+      sprites: ["mando-rouge", "mando-vert", "mando-bleu", "mando-acier"],
+      variants: ["Clan rouge", "Clan vert", "Clan bleu", "Beskar nu"], rotate: false, size: 0.95,
+      hp: 5, mv: 5, rng: 4, att: 4, def: 3, cost: 30, tags: ["infantry", "jetpack"],
+      desc: "Armure de beskar, réacteur dorsal : ils frappent là où on ne les attend pas.",
+      naming: (n) => ["Ordo", "Vizsla", "Kryze", "Fett", "Wren", "Skirata"][(n - 1) % 6] + (n > 6 ? " " + Math.ceil(n / 6) : ""),
+    },
+    commando: {
+      name: "Super commandos", faction: "mandalorians", theater: "ground", kind: "Infanterie",
+      sprites: ["commando-1", "commando-2"], rotate: false, size: 1.05,
+      hp: 4, mv: 4, rng: 4, att: 4, def: 3, cost: 18, tags: ["infantry"],
+      desc: "Troupes de choc en armure noire, disciplinées et bien armées.",
+      naming: (n) => "Escouade " + AUREBESH[(n - 1) % 26],
+    },
+    mandocuirasse: {
+      name: "Cuirassé mandalorien", faction: "mandalorians", theater: "space", kind: "Vaisseau capital",
+      sprites: ["mando-cuirasse"], rotate: true, base: 90, size: 3.2,
+      hp: 26, mv: 2, rng: 5, att: 8, def: 2, cost: 125, tags: ["capital", "heavy", "armored", "ap", "large"],
+      desc: "Vaisseau amiral des clans, effilé comme une lame.",
+      naming: (n) => ["Kote", "Aliit", "Beskar'gam", "Verd'goten"][(n - 1) % 4],
+    },
+    mandodestroyer: {
+      name: "Destroyer mandalorien", faction: "mandalorians", theater: "space", kind: "Destroyer",
+      sprites: ["mando-destroyer"], rotate: true, base: 90, size: 2.3,
+      hp: 15, mv: 3, rng: 5, att: 6, def: 2, cost: 80, tags: ["capital", "heavy", "armored", "ap", "large"],
+      desc: "Destroyer rapide, taillé pour les raids.",
+      naming: (n) => ["Ka'ra", "Haar'chak", "Oya", "Vod"][(n - 1) % 4],
+    },
+    mandoporteur: {
+      name: "Porte-chasseurs mandalorien", faction: "mandalorians", theater: "space", kind: "Porte-chasseurs",
+      sprites: ["mando-porteur"], rotate: true, base: 0, size: 2.2,
+      hp: 18, mv: 2, rng: 4, att: 5, def: 3, cost: 95, tags: ["capital", "heavy", "armored", "ap", "large"],
+      ability: { id: "launch", type: "spawn", name: "Lancer un Fang", uses: 3, spawn: "fang",
+        desc: "Action : déploie un chasseur Fang sur une case adjacente libre. Trois fois par bataille." },
+      desc: "Base volante des escadrilles de Fang.",
+      naming: (n) => ["Gaan", "Ruus", "Kar'ta"][(n - 1) % 3],
+    },
+    fang: {
+      name: "Chasseur Fang", faction: "mandalorians", theater: "space", kind: "Chasseur",
+      sprites: ["fang"], rotate: true, base: 0, size: 1.15,
+      hp: 4, mv: 6, rng: 3, att: 3, def: 2, cost: 18, tags: ["agile", "ap"],
+      desc: "Chasseur d'interception rapide aux ailes repliées.",
+      naming: (n) => "Fang " + n,
+    },
+    // ---------------- Pègre
+    gamorreen: {
+      name: "Gardes gamorréens", faction: "underworld", theater: "ground", kind: "Brutes",
+      sprites: ["gamorreen-1", "gamorreen-2"], rotate: false, size: 1.05,
+      hp: 5, mv: 3, rng: 1, att: 4, def: 2, cost: 9, tags: ["infantry", "melee"],
+      desc: "Gardes du corps à la hache vibrante. Costauds, pas très vifs.",
+      naming: (n) => ["Gorg", "Brug", "Ortugg", "Gakk", "Rogua", "Thok"][(n - 1) % 6],
+    },
+    trando: {
+      name: "Chasseurs trandoshans", faction: "underworld", theater: "ground", kind: "Infanterie",
+      sprites: ["trando-1", "trando-2"], rotate: false, size: 1.05,
+      hp: 4, mv: 4, rng: 4, att: 3, def: 2, cost: 12, tags: ["infantry", "hunter"],
+      desc: "Chasseurs reptiliens qui ne lâchent jamais une proie blessée.",
+      naming: (n) => ["Ssorak", "Garsk", "Krassk", "Bossh", "Vhesk", "Tssar"][(n - 1) % 6],
+    },
+    chasseur: {
+      name: "Chasseur de primes", faction: "underworld", theater: "ground", kind: "Mercenaire",
+      sprites: ["chasseur-1", "chasseur-2"], variants: ["Chasseur", "Chasseuse"], rotate: false, size: 1.05,
+      hp: 5, mv: 4, rng: 5, att: 4, def: 3, cost: 28, tags: ["hero", "hunter"],
+      ability: { id: "aim", type: "shot", name: "Tir de précision", uses: 2, bonus: 2, ap: true,
+        desc: "Deux fois par bataille : tir avec 2 dés de plus, perforant." },
+      desc: "Professionnel du contrat. Vise juste et achève les blessés.",
+      naming: (n) => ["Varek Sol", "Mira Dax", "Tobin Krell", "Sela Vonn"][(n - 1) % 4],
+    },
+    hutt: {
+      name: "Croiseur hutt", faction: "underworld", theater: "space", kind: "Vaisseau capital",
+      sprites: ["hutt"], rotate: true, base: 90, size: 3.0,
+      hp: 22, mv: 2, rng: 5, att: 6, def: 3, cost: 105, tags: ["capital", "heavy", "armored", "ap", "large"],
+      ability: { id: "launch", type: "spawn", name: "Lâcher une canonnière", uses: 1, spawn: "canonniere",
+        desc: "Action, une fois par bataille : déploie une canonnière pirate sur une case adjacente libre." },
+      desc: "Palais flottant d'un seigneur du crime, cuirassé d'or.",
+      naming: (n) => ["Faveur de Desilijic", "Splendeur", "Opulence"][(n - 1) % 3],
+    },
+    pirate: {
+      name: "Croiseur pirate", faction: "underworld", theater: "space", kind: "Croiseur",
+      sprites: ["pirate"], rotate: true, base: 90, size: 2.4,
+      hp: 15, mv: 3, rng: 4, att: 6, def: 2, cost: 70, tags: ["capital", "heavy", "armored", "ap", "large"],
+      desc: "Coque rapiécée, canons surchargés. Frappe fort, encaisse mal.",
+      naming: (n) => ["Rouille", "Charognard", "Dernière Chance"][(n - 1) % 3],
+    },
+    canonniere: {
+      name: "Canonnière pirate", faction: "underworld", theater: "space", kind: "Canonnière",
+      sprites: ["canonniere"], rotate: true, base: 90, size: 1.35,
+      hp: 7, mv: 5, rng: 3, att: 4, def: 2, cost: 32, tags: ["ap"],
+      desc: "Cargo armé jusqu'aux dents, rapide et solide.",
+      naming: (n) => ["Vautour", "Poisse", "Contrebande", "Dette"][(n - 1) % 4],
+    },
+    // ---------------- Indépendants
+    yacht: {
+      name: "Yacht royal", faction: "free", theater: "space", kind: "Vaisseau diplomatique",
+      sprites: ["yacht"], rotate: true, base: 90, size: 2.6,
+      hp: 14, mv: 4, rng: 3, att: 3, def: 4, cost: 60, tags: ["capital", "armored", "large", "regen"],
+      desc: "Vaisseau d'apparat aux boucliers puissants. Une cible à escorter.",
+      naming: (n) => ["Étoile d'argent", "Couronne", "Ambassadrice"][(n - 1) % 3],
+    },
     hero: {
       name: "Personnage", faction: "free", theater: "any", kind: "Pion libre",
-      sprites: [], token: true, rotate: false, size: 0.9,
+      sprites: [], token: true, anySprite: true, rotate: false, size: 0.9,
       hp: 6, mv: 4, rng: 4, att: 3, def: 3, cost: 25, tags: ["hero"],
-      desc: "Pion pour vos personnages de jeu de rôle. Renommez-le et ajustez ses caractéristiques.",
+      desc: "Pion pour vos personnages de jeu de rôle : renommez-le, ajustez ses caractéristiques et donnez-lui l'apparence de n'importe quel personnage.",
       naming: (n) => "Personnage " + n,
     },
   };
@@ -194,16 +393,16 @@ var Engine = (function () {
       id: "ceinture", name: "Embuscade dans la ceinture", biome: "espace", turnLimit: 12,
       blurb: "Un croiseur Mon Calamari et son escorte tombent sur un Destroyer stellaire en patrouille. Les astéroïdes protègent les chasseurs, pas les gros vaisseaux.",
       sides: [
-        { faction: "rebels", units: ["moncal", "xwing", "xwing", "xwing", "xwing"] },
+        { faction: "rebels", units: ["moncal", "xwing", "xwing", "xwing", "xwing", "xwing"] },
         { faction: "empire", units: ["destroyer", "tie", "tie", "tie", "tie", "tie", "tie"] },
       ],
     },
     {
       id: "duel", name: "Duel d'escadrilles", biome: "espace", turnLimit: 10,
-      blurb: "Pas de vaisseau capital : cinq X-wing contre sept TIE, dans une nébuleuse qui coupe les lignes de tir. Une partie courte.",
+      blurb: "Pas de vaisseau capital : cinq X-wing contre huit TIE, dans une nébuleuse qui coupe les lignes de tir. Une partie courte.",
       sides: [
         { faction: "rebels", units: ["xwing", "xwing", "xwing", "xwing", "xwing"] },
-        { faction: "empire", units: ["tie", "tie", "tie", "tie", "tie", "tie", "tie"] },
+        { faction: "empire", units: ["tie", "tie", "tie", "tie", "tie", "tie", "tie", "tie"] },
       ],
       map: { blobs: [["nebuleuse", 4, 6], ["asteroides", 3, 5]] },
     },
@@ -221,6 +420,54 @@ var Engine = (function () {
       sides: [
         { faction: "rebels", units: ["rebel", "rebel", "rebel", "rebel", "rebel", "rebel", "rebel", "rebel"] },
         { faction: "empire", units: ["storm", "storm", "storm", "storm", "storm", "storm", "storm", "storm", "storm"] },
+      ],
+    },
+    {
+      id: "contrat", name: "Le contrat", biome: "desert", turnLimit: 12,
+      blurb: "Une prime, deux prétendants. Les chasseurs de primes et leurs hommes de main affrontent une escouade mandalorienne équipée de réacteurs dorsaux.",
+      sides: [
+        { faction: "underworld", units: ["chasseur", "chasseur", "trando", "trando", "gamorreen", "gamorreen"] },
+        { faction: "mandalorians", units: ["mando", "mando", "mando", "commando", "commando", "commando"] },
+      ],
+    },
+    {
+      id: "sabres", name: "Lames de lumière", biome: "foret", turnLimit: 12,
+      blurb: "Deux Jedi et leurs clones croisent la route de deux Sith escortés de stormtroopers. Les sabres renvoient les tirs : il faudra aller au contact.",
+      sides: [
+        { faction: "republic", units: ["jedi", "jedi", "clone", "clone", "clone", "clone"] },
+        { faction: "empire", units: ["sith", "sith", "storm", "storm", "storm", "storm", "storm"] },
+      ],
+    },
+    {
+      id: "droides", name: "Le mur de droïdes", biome: "neige", turnLimit: 12,
+      blurb: "Les droïdekas tiennent la ligne derrière leurs boucliers, épaulées par les super droïdes. L'artillerie de l'AT-AP peut tirer par-dessus les glaciers.",
+      sides: [
+        { faction: "republic", units: ["atap", "atrt", "clone", "clone", "clone", "clone", "clone", "clone"] },
+        { faction: "separatists", units: ["droideka", "droideka", "droideka", "droideka", "droideka", "b2", "b2", "b2", "b2", "b2", "b2", "b1", "b1", "b1", "b1", "b1", "b1"] },
+      ],
+    },
+    {
+      id: "flottes", name: "Choc des flottes", biome: "espace", turnLimit: 12,
+      blurb: "Guerre des clones : un Venator et son escorte contre une escadre séparatiste. Pas de chasseurs, rien que des bordées de turbolasers.",
+      sides: [
+        { faction: "republic", units: ["venator", "venator", "arquitens"] },
+        { faction: "separatists", units: ["recusant", "munificent", "munificent"] },
+      ],
+    },
+    {
+      id: "amiral", name: "Le vaisseau amiral", biome: "espace", turnLimit: 14,
+      blurb: "La flotte rebelle tente d'abattre un super destroyer stellaire avant que ses escadrilles de TIE ne la submergent.",
+      sides: [
+        { faction: "rebels", units: ["moncal", "nebulon", "xwing", "xwing", "xwing", "xwing"] },
+        { faction: "empire", units: ["executor", "tie", "tie", "tie", "tie", "tie", "tie"] },
+      ],
+    },
+    {
+      id: "clans", name: "Guerre des clans", biome: "espace", turnLimit: 12,
+      blurb: "Un clan mandalorien attaque le croiseur d'un seigneur hutt et ses pirates. Les Fang décollent du porte-chasseurs pendant la bataille.",
+      sides: [
+        { faction: "mandalorians", units: ["mandodestroyer", "mandoporteur", "fang", "fang", "fang"] },
+        { faction: "underworld", units: ["hutt", "pirate", "canonniere"] },
       ],
     },
   ];
@@ -360,6 +607,7 @@ var Engine = (function () {
 
   function moveCost(T, ter) {
     if (ter.impassable) return Infinity;
+    if (has(T, "jetpack")) return 1;
     if (ter.water) return has(T, "hover") ? 1 : Infinity;
     if (ter.noCapital && has(T, "capital")) return Infinity;
     if (ter === TERRAIN.foret && has(T, "scout")) return 1;
@@ -533,7 +781,7 @@ var Engine = (function () {
   }
 
   function finishByPoints(state) {
-    const [a, b] = state.score;
+    const [a, b] = state.score.map(Math.round);
     state.over = { winner: a > b ? 0 : b > a ? 1 : -1, reason: "points" };
     log(state, { k: "info", text: "Fin de la bataille aux points : " + a + " contre " + b + "." });
     return state.over;
@@ -612,12 +860,16 @@ var Engine = (function () {
       dice++; notes.push("Tir coordonné +1 dé");
     }
     if (has(A, "ambush") && terrainAt(map, from.c, from.r).cover) { dice++; notes.push("Embuscade +1 dé"); }
+    if (has(A, "hunter") && t.hp < maxHp(t)) { dice++; notes.push("Traqueur +1 dé"); }
     let need = 4;
     if (terrainAt(map, tpos.c, tpos.r).cover && !has(T, "large")) { need++; notes.push("Cible à couvert"); }
     if (has(A, "heavy") && has(T, "agile")) { need++; notes.push("Cible agile"); }
     if (has(T, "armored") && !ap) { need = 6; notes.push("Blindage : seuls les 6 touchent"); }
     need = Math.min(6, need);
-    const p = { dice, need, defDice: stat(t, "def"), defNeed: 5, dmg, rng, notes };
+    let defNeed = 5;
+    if (has(T, "shield")) { defNeed = 4; notes.push("Bouclier : esquive sur 4+"); }
+    else if (has(T, "deflect") && dist(from, tpos) > 1) { defNeed = 4; notes.push("Tir renvoyé au sabre : esquive sur 4+"); }
+    const p = { dice, need, defDice: stat(t, "def"), defNeed, dmg, rng, notes };
     p.expected = expected(p);
     return p;
   }
@@ -636,7 +888,8 @@ var Engine = (function () {
     if (opts.special && !(A.ability && A.ability.type === "shot" && (a.uses[A.ability.id] || 0) > 0)) return false;
     const from = opts.from || a;
     const rng = opts.special && A.ability.rng ? A.ability.rng : stat(a, "rng");
-    return dist(from, t) <= rng && lineOfSight(state.map, from, t);
+    const indirect = opts.special && A.ability.indirect;
+    return dist(from, t) <= rng && (indirect || lineOfSight(state.map, from, t));
   }
 
   function targets(state, a, opts) {
@@ -653,6 +906,10 @@ var Engine = (function () {
     for (let i = 0; i < p.defDice; i++) defRolls.push(d(state, 6));
     const saves = Math.min(norm, defRolls.filter(x => x >= p.defNeed).length);
     const dmg = (crits + norm - saves) * p.dmg;
+    // Points : chaque PV retiré vaut une part du coût de la cible. Une unité
+    // détruite rapporte donc tout son coût, une unité entamée une fraction.
+    const lost = Math.min(dmg, t.hp);
+    if (a.side < 2 && t.side < 2) state.score[a.side] += TYPES[t.type].cost * lost / maxHp(t);
     t.hp = Math.max(0, t.hp - dmg);
     if (TYPES[a.type].rotate) a.facing = facingTo(a, t);
     a.moved = true; a.acted = true; a.plan = null;
@@ -666,7 +923,6 @@ var Engine = (function () {
     log(state, { k: "attack", side: a.side, text, dice: { rolls, need: p.need, defRolls, defNeed: p.defNeed }, notes: p.notes });
     if (killed) {
       state.units.splice(state.units.indexOf(t), 1);
-      if (a.side < 2 && t.side < 2) state.score[a.side] += TYPES[t.type].cost;
       checkVictory(state);
     }
     return res;
@@ -678,14 +934,29 @@ var Engine = (function () {
     return neighbors(state.map, u.c, u.r).filter(h => canStand(state, ab.spawn, h.c, h.r));
   }
 
+  function isAction(ab) { return !!ab && (ab.type === "spawn" || ab.type === "heal"); }
+
+  function healTargets(state, u) {
+    return state.units.filter(o => o !== u && o.side === u.side && o.hp < maxHp(o) && dist(o, u) === 1);
+  }
+
   function canUseAbility(state, u) {
     const ab = TYPES[u.type].ability;
-    return !!(ab && ab.type === "spawn" && !u.acted && (u.uses[ab.id] || 0) > 0 && spawnHexes(state, u).length);
+    if (!isAction(ab) || u.acted || (u.uses[ab.id] || 0) <= 0) return false;
+    return ab.type === "spawn" ? spawnHexes(state, u).length > 0 : healTargets(state, u).length > 0;
   }
 
   function useAbility(state, u) {
     if (!canUseAbility(state, u)) return null;
     const ab = TYPES[u.type].ability;
+    if (ab.type === "heal") {
+      const healed = healTargets(state, u);
+      for (const o of healed) o.hp = Math.min(maxHp(o), o.hp + ab.heal);
+      u.uses[ab.id]--;
+      endActivation(state, u);
+      log(state, { k: "info", side: u.side, text: u.name + " soigne " + healed.map(o => o.name).join(", ") + " (+" + ab.heal + " PV)." });
+      return healed;
+    }
     const foes = state.units.filter(o => isEnemy(u, o));
     const hexes = spawnHexes(state, u).sort((a, b) => nearest(foes, a) - nearest(foes, b));
     const h = hexes[0];
@@ -749,7 +1020,13 @@ var Engine = (function () {
     mine.sort((a, b) => (bestShot(state, b, b) ? 1 : 0) - (bestShot(state, a, a) ? 1 : 0) || stat(b, "mv") - stat(a, "mv"));
     const u = mine[0];
     const here = bestShot(state, u, u);
-    if (canUseAbility(state, u) && (!here || state.turn <= 2)) return { type: "ability", uid: u.uid };
+    if (canUseAbility(state, u)) {
+      const ab = TYPES[u.type].ability;
+      const worth = ab.type === "heal"
+        ? healTargets(state, u).reduce((m, o) => m + Math.min(ab.heal, maxHp(o) - o.hp), 0) >= 3 || !here
+        : !here || state.turn <= 2;
+      if (worth) return { type: "ability", uid: u.uid };
+    }
 
     const reach = reachable(state, u);
     const T = TYPES[u.type];
@@ -759,7 +1036,10 @@ var Engine = (function () {
       const shot = bestShot(state, u, pos);
       let s = shot ? shot.value : 0;
       if (terrainAt(state.map, pos.c, pos.r).cover && !has(T, "large")) s += 0.8;
-      s -= threatAt(state, u, pos, foes) * 0.3;
+      // La prudence s'émousse au fil des tours, sinon deux flottes
+      // s'observent hors de portée jusqu'à la fin de la bataille.
+      const caution = state.turn <= 4 ? 1 : Math.max(0.25, 1 - (state.turn - 4) / 6);
+      s -= threatAt(state, u, pos, foes) * 0.3 * caution;
       const gap = Math.max(0, nearest(foes, pos) - stat(u, "rng"));
       s -= gap * (shot ? 0.1 : 0.6);
       s -= v.cost * 0.01; // à valeur égale, on bouge le moins possible
@@ -800,7 +1080,7 @@ var Engine = (function () {
     stat, maxHp, unitAt, byUid, addUnit, deploy, rosters, randomArmy,
     blankState, createGame, createScenario, log, startTurn, endTurn, nextRound, checkVictory, alive,
     reachable, pathTo, moveUnit, endActivation, isEnemy, profile, expected, canShoot, targets, attack,
-    canUseAbility, useAbility, aiNext, apply, rollFormula, d, sideOf,
+    isAction, canUseAbility, useAbility, aiNext, apply, rollFormula, d, sideOf,
   };
 })();
 

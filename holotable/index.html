@@ -333,6 +333,21 @@ const ui = { sel:null, reach:null, targets:[], pending:null, special:false, spaw
 const unitEls = new Map();
 const SPR = {};
 
+// Apparences proposées au pion Personnage : toutes les figurines à pied.
+const LOOKS = [];
+for (const id in T) {
+  const Ty = T[id];
+  if (Ty.theater !== "ground" || Ty.size > 1.1 || !Ty.sprites.length) continue;
+  Ty.sprites.forEach((s, i) => LOOKS.push({ sprite: s, label: (Ty.variants ? Ty.variants[i] : Ty.name + (Ty.sprites.length > 1 ? " " + (i + 1) : "")) }));
+}
+function lookLabel(u){
+  const Ty = T[u.type];
+  const i = Ty.sprites.indexOf(u.sprite);
+  if (Ty.variants && i >= 0) return Ty.variants[i];
+  if (Ty.anySprite && u.sprite) { const l = LOOKS.find(x => x.sprite === u.sprite); return l ? l.label : ""; }
+  return "";
+}
+
 const $ = (s, el) => (el || document).querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
 const wait = (ms) => new Promise(r => setTimeout(r, REDUCED ? Math.min(ms, 60) : ms));
@@ -391,7 +406,7 @@ function renderMenuThumbs(){
 }
 function fillFactionSelects(){
   const theater = E.BIOMES[$("#cu-biome").value].theater;
-  const opts = ["rebels", "empire", "republic", "separatists"].filter(f => E.rosters(f, theater).length)
+  const opts = Object.keys(E.FACTIONS).filter(f => f !== "free").filter(f => E.rosters(f, theater).length)
     .map(f => '<option value="' + f + '">' + esc(E.FACTIONS[f].name) + '</option>').join("");
   const a = $("#cu-a").value, b = $("#cu-b").value;
   $("#cu-a").innerHTML = opts; $("#cu-b").innerHTML = opts;
@@ -711,7 +726,7 @@ function renderBar(){
 
 function sideSummary(){
   return '<div class="sides">' + [0, 1].map(i => {
-    const n = E.alive(G, i), pts = G.score[i];
+    const n = E.alive(G, i), pts = Math.round(G.score[i]);
     return '<div class="sideline' + (G.mode === "regles" && G.active === i ? " active" : "") + '" style="--c:' + SIDE_COLORS[i] + '"><i></i><b>' + esc(G.sides[i].name) + '</b>' +
       '<span class="mono">' + n + ' unité' + (n > 1 ? "s" : "") + (G.mode === "regles" ? ' · ' + pts + ' pts' : '') + '</span></div>';
   }).join("") + '</div>';
@@ -725,7 +740,7 @@ function thumbHtml(u){
 function unitCard(u){
   const Ty = T[u.type], max = E.maxHp(u), frac = Math.max(0, u.hp / max);
   const color = frac <= .34 ? "var(--bad)" : frac <= .67 ? "var(--gold)" : "var(--good)";
-  const variant = Ty.variants && Ty.sprites.indexOf(u.sprite) >= 0 ? Ty.variants[Ty.sprites.indexOf(u.sprite)] + " · " : "";
+  const look = lookLabel(u), variant = look ? look + " · " : "";
   let html = '<div class="ucard">' + thumbHtml(u) + '<div><h2>' + esc(u.name) + '</h2><div class="sub">' + esc(variant + Ty.name) + ' · <span style="color:' + SIDE_COLORS[u.side] + '">' + esc(u.side < 2 ? G.sides[u.side].name : "Neutre") + '</span></div></div></div>';
   html += '<div class="hpline"><div class="hpbar"><i style="width:' + (frac * 100).toFixed(0) + '%;background:' + color + '"></i></div><span>' + u.hp + ' / ' + max + ' PV</span></div>';
   html += '<div class="stats">' + [["mv", "Mouv."], ["rng", "Portée"], ["att", "Att."], ["def", "Déf."]].map(([k, l]) =>
@@ -774,7 +789,7 @@ function rulesPanel(u){
     html += '<div class="actions">';
     if (!u.acted && Ty.ability && Ty.ability.type === "shot" && (u.uses[Ty.ability.id] || 0) > 0)
       html += '<button class="btn sm' + (ui.special ? ' primary' : '') + '" data-act="special" aria-pressed="' + ui.special + '">' + esc(Ty.ability.name) + '</button>';
-    if (!u.acted && Ty.ability && Ty.ability.type === "spawn")
+    if (!u.acted && E.isAction(Ty.ability))
       html += '<button class="btn sm" data-act="spawn"' + (E.canUseAbility(G, u) ? '' : ' disabled') + '>' + esc(Ty.ability.name) + '</button>';
     if (!u.acted) html += '<button class="btn sm ghost" data-act="done">Terminer l\'activation</button>';
     html += '</div>';
@@ -805,13 +820,14 @@ function selectTab(u){
   html += '<div class="hpedit"><button class="btn sm icon" data-act="hp-" title="Retirer 1 PV">−</button><div class="field"><label for="ed-hp">Points de vie</label><input id="ed-hp" type="number" min="0" max="99" value="' + u.hp + '"></div><button class="btn sm icon" data-act="hp+" title="Ajouter 1 PV">+</button></div>';
   html += '<div class="form-grid">';
   html += '<div class="field"><label for="ed-side">Camp</label><select id="ed-side">' + [0, 1, 2].map(i => '<option value="' + i + '"' + (u.side === i ? " selected" : "") + '>' + esc(i < 2 ? G.sides[i].name : "Neutre") + '</option>').join("") + '</select></div>';
-  if (Ty.sprites.length > 1) html += '<div class="field"><label for="ed-spr">Apparence</label><select id="ed-spr">' + Ty.sprites.map((s, i) => '<option value="' + s + '"' + (u.sprite === s ? " selected" : "") + '>' + esc(Ty.variants ? Ty.variants[i] : "Modèle " + (i + 1)) + '</option>').join("") + '</select></div>';
+  if (Ty.anySprite) html += '<div class="field"><label for="ed-spr">Apparence</label><select id="ed-spr"><option value="">Jeton à initiales</option>' + LOOKS.map(l => '<option value="' + l.sprite + '"' + (u.sprite === l.sprite ? " selected" : "") + '>' + esc(l.label) + '</option>').join("") + '</select></div>';
+  else if (Ty.sprites.length > 1) html += '<div class="field"><label for="ed-spr">Apparence</label><select id="ed-spr">' + Ty.sprites.map((s, i) => '<option value="' + s + '"' + (u.sprite === s ? " selected" : "") + '>' + esc(Ty.variants ? Ty.variants[i] : "Modèle " + (i + 1)) + '</option>').join("") + '</select></div>';
   html += '</div>';
   html += '<div class="edit-grid">' + [["hp", "PV max"], ["mv", "Mouv."], ["rng", "Portée"], ["att", "Att."], ["def", "Déf."]].map(([k, l]) =>
     '<div class="field"><label for="ov-' + k + '">' + l + '</label><input id="ov-' + k + '" data-ov="' + k + '" type="number" min="0" max="99" value="' + E.stat(u, k) + '"></div>').join("") + '</div>';
   html += '<div class="actions">' +
     '<button class="btn sm' + (ui.targeting ? ' primary' : '') + '" data-act="target">' + (ui.targeting ? "Choisissez la cible…" : "Faire tirer") + '</button>' +
-    (Ty.ability && Ty.ability.type === "spawn" ? '<button class="btn sm" data-act="spawn"' + ((u.uses[Ty.ability.id] || 0) > 0 ? '' : ' disabled') + '>' + esc(Ty.ability.name) + '</button>' : '') +
+    (E.isAction(Ty.ability) ? '<button class="btn sm" data-act="spawn"' + ((u.uses[Ty.ability.id] || 0) > 0 ? '' : ' disabled') + '>' + esc(Ty.ability.name) + '</button>' : '') +
     '<button class="btn sm" data-act="dup">Dupliquer</button>' +
     '<button class="btn sm danger" data-act="del">Retirer</button></div>';
   if (ui.targeting) {
@@ -832,7 +848,7 @@ function unitsTab(){
     if (Ty.theater !== theater && Ty.theater !== "any") continue;
     (groups[Ty.faction] = groups[Ty.faction] || []).push(id);
   }
-  for (const f of ["rebels", "empire", "republic", "separatists", "free"]) {
+  for (const f of Object.keys(E.FACTIONS)) {
     if (!groups[f]) continue;
     html += '<h3>' + esc(factionName(f)) + '</h3><div class="palette">' + groups[f].map(id => {
       const Ty = T[id], s = Ty.sprites[0];
@@ -977,7 +993,7 @@ function doSpawn(u){
   const n = E.useAbility(G, u);
   if (!n && G.mode === "libre") {
     const ab = T[u.type].ability;
-    E.log(G, { k: "info", text: "Aucune case libre autour de " + u.name + " pour " + ab.name.toLowerCase() + "." });
+    E.log(G, { k: "info", text: ab.type === "heal" ? "Aucun allié blessé au contact de " + u.name + "." : "Aucune case libre autour de " + u.name + " pour " + ab.name.toLowerCase() + "." });
   }
   ui.spawnPreview = false;
   if (G.mode === "regles") ui.sel = null;
@@ -1214,7 +1230,7 @@ function onConsoleChange(ev){
   if (el.id === "ed-name") { u.name = el.value.trim() || T[u.type].name; commit(); }
   else if (el.id === "ed-hp") { u.hp = Math.max(0, Math.min(99, Math.round(+el.value || 0))); commit(); }
   else if (el.id === "ed-side") { u.side = +el.value; const g = unitEls.get(u.uid); if (g) { g.remove(); unitEls.delete(u.uid); } commit(); }
-  else if (el.id === "ed-spr") { u.sprite = el.value; const g = unitEls.get(u.uid); if (g) { g.remove(); unitEls.delete(u.uid); } commit(); }
+  else if (el.id === "ed-spr") { u.sprite = el.value || null; const g = unitEls.get(u.uid); if (g) { g.remove(); unitEls.delete(u.uid); } commit(); }
   else if (el.dataset.ov) {
     const k = el.dataset.ov, v = Math.max(0, Math.min(99, Math.round(+el.value || 0)));
     u.ov = u.ov || {};
@@ -1246,7 +1262,7 @@ function showRules(){
   }).join("");
   const ter = Object.keys(E.TERRAIN).map(id => '<li><b>' + esc(E.TERRAIN[id].name) + '</b> (' + (E.TERRAIN[id].theater === "space" ? "espace" : "sol") + ') : ' + esc(terrainRulesRaw(id)) + '</li>').join("");
   openModal('<header><h2>Règles de l\'Holotable</h2><button class="btn sm ghost" data-m="close">Fermer</button></header><div class="rules">' +
-    '<section><h3>Le tour</h3><p>Les camps jouent chacun leur tour. Pendant votre tour, chaque unité peut <b>se déplacer puis tirer</b>, une fois. Tirer termine l\'activation : on ne bouge plus après. Une bataille se gagne en détruisant toute l\'armée adverse, ou aux points (valeur des unités détruites) à la fin du dernier tour.</p></section>' +
+    '<section><h3>Le tour</h3><p>Les camps jouent chacun leur tour. Pendant votre tour, chaque unité peut <b>se déplacer puis tirer</b>, une fois. Tirer termine l\'activation : on ne bouge plus après. Une bataille se gagne en détruisant toute l\'armée adverse, ou aux points à la fin du dernier tour : chaque PV retiré rapporte une part du coût de l\'unité touchée, une unité détruite rapporte tout son coût.</p></section>' +
     '<section><h3>Déplacement</h3><p>Une unité dépense sa valeur de Mouvement case par case. Le terrain peut coûter plus cher ou être interdit. On traverse ses alliés, jamais l\'ennemi, et on ne s\'arrête pas sur une case occupée.</p></section>' +
     '<section><h3>Tir</h3><ul><li>La cible doit être à portée et en ligne de vue (les rochers et nébuleuses coupent la vue).</li><li>Lancez autant de d6 que l\'Attaque. Chaque dé égal ou supérieur au seuil touche. Seuil de base : <b>4+</b>, +1 si la cible est à couvert, +1 si une arme lourde vise une cible agile.</li><li>Les <b>6 sont critiques</b> : ils touchent toujours et ne s\'esquivent pas.</li><li>Contre une cible <b>blindée</b>, seuls les 6 touchent, sauf avec une arme perforante.</li><li>La cible lance ses dés de Défense : chaque 5+ annule une touche normale.</li><li>Chaque touche restante retire 1 PV (2 pour certaines armes spéciales).</li></ul></section>' +
     '<section><h3>Terrain</h3><ul>' + ter + '</ul></section>' +
@@ -1316,7 +1332,7 @@ function showVictory(){
   const who = w < 0 ? "Aucun camp ne l'emporte." : G.sides[w].name + (G.over.reason === "points" ? " l'emporte aux points." : " a anéanti l'armée adverse.");
   openModal('<div class="victory" style="--c:' + (w < 0 ? "var(--holo)" : SIDE_COLORS[w]) + ';display:grid;gap:14px">' +
     '<div class="eyebrow">Tour ' + G.turn + '</div><h2>' + title + '</h2><p class="hint">' + esc(who) + '</p>' +
-    '<div class="mono">' + esc(G.sides[0].name) + ' ' + G.score[0] + ' pts · ' + esc(G.sides[1].name) + ' ' + G.score[1] + ' pts</div>' +
+    '<div class="mono">' + esc(G.sides[0].name) + ' ' + Math.round(G.score[0]) + ' pts · ' + esc(G.sides[1].name) + ' ' + Math.round(G.score[1]) + ' pts</div>' +
     '<div class="actions" style="justify-content:center">' + (G.scenario ? '<button class="btn primary" data-m="replay">Rejouer</button>' : '') +
     '<button class="btn" data-m="free">Continuer en mode libre</button><button class="btn ghost" data-m="menu">Accueil</button></div></div>');
 }
