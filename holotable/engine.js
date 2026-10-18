@@ -72,7 +72,7 @@ var Engine = (function () {
     destroyer: {
       name: "Destroyer stellaire", faction: "empire", theater: "space", kind: "Vaisseau capital",
       sprites: ["destroyer"], rotate: true, base: 90, size: 2.7,
-      hp: 24, mv: 2, rng: 5, att: 7, def: 2, cost: 120, tags: ["capital", "heavy", "armored", "ap", "large"],
+      hp: 22, mv: 2, rng: 5, att: 7, def: 2, cost: 120, tags: ["capital", "heavy", "armored", "ap", "large"],
       ability: { id: "launch", type: "spawn", name: "Lancer une escadrille", uses: 2, spawn: "tie",
         desc: "Action : déploie un TIE sur une case adjacente libre. Deux fois par bataille." },
       desc: "Classe Impérial. Une forteresse volante de 1 600 mètres.",
@@ -239,6 +239,13 @@ var Engine = (function () {
       desc: "Frégate du Clan bancaire, robuste et bien protégée.",
       naming: (n) => ["Usure", "Créance", "Intérêt", "Hypothèque"][(n - 1) % 4],
     },
+    lucrehulk: {
+      name: "Vaisseau de contrôle droïde", faction: "separatists", theater: "space", kind: "Vaisseau capital",
+      sprites: ["lucrehulk"], rotate: false, size: 2.9,
+      hp: 34, mv: 1, rng: 5, att: 7, def: 3, cost: 125, tags: ["capital", "heavy", "armored", "ap", "large"],
+      desc: "Cargo Lucrehulk converti en base de commandement. Lent, énorme, presque impossible à abattre.",
+      naming: (n) => ["Saak'ak", "Profit", "Revenu", "Dividende"][(n - 1) % 4],
+    },
     b2: {
       name: "Super droïdes B2", faction: "separatists", theater: "ground", kind: "Infanterie lourde",
       sprites: ["b2-1", "b2-2", "b2-3", "b2-4"], rotate: false, size: 1.05,
@@ -399,10 +406,10 @@ var Engine = (function () {
     },
     {
       id: "duel", name: "Duel d'escadrilles", biome: "espace", turnLimit: 10,
-      blurb: "Pas de vaisseau capital : cinq X-wing contre huit TIE, dans une nébuleuse qui coupe les lignes de tir. Une partie courte.",
+      blurb: "Pas de vaisseau capital : quatre X-wing contre six TIE, dans une nébuleuse qui coupe les lignes de tir. Une partie courte.",
       sides: [
-        { faction: "rebels", units: ["xwing", "xwing", "xwing", "xwing", "xwing"] },
-        { faction: "empire", units: ["tie", "tie", "tie", "tie", "tie", "tie", "tie", "tie"] },
+        { faction: "rebels", units: ["xwing", "xwing", "xwing", "xwing"] },
+        { faction: "empire", units: ["tie", "tie", "tie", "tie", "tie", "tie"] },
       ],
       map: { blobs: [["nebuleuse", 4, 6], ["asteroides", 3, 5]] },
     },
@@ -416,10 +423,10 @@ var Engine = (function () {
     },
     {
       id: "lune", name: "Raid sur la lune forestière", biome: "foret", turnLimit: 12,
-      blurb: "Les rebelles connaissent les bois mieux que la garnison impériale. Huit sections rebelles contre neuf escouades de stormtroopers : le couvert décide de tout.",
+      blurb: "Les rebelles connaissent les bois mieux que la garnison impériale. Huit sections rebelles contre huit escouades de stormtroopers : le couvert décide de tout.",
       sides: [
         { faction: "rebels", units: ["rebel", "rebel", "rebel", "rebel", "rebel", "rebel", "rebel", "rebel"] },
-        { faction: "empire", units: ["storm", "storm", "storm", "storm", "storm", "storm", "storm", "storm", "storm"] },
+        { faction: "empire", units: ["storm", "storm", "storm", "storm", "storm", "storm", "storm", "storm"] },
       ],
     },
     {
@@ -450,15 +457,23 @@ var Engine = (function () {
       id: "flottes", name: "Choc des flottes", biome: "espace", turnLimit: 12,
       blurb: "Guerre des clones : un Venator et son escorte contre une escadre séparatiste. Pas de chasseurs, rien que des bordées de turbolasers.",
       sides: [
-        { faction: "republic", units: ["venator", "venator", "arquitens"] },
+        { faction: "republic", units: ["venator", "arquitens", "arquitens"] },
         { faction: "separatists", units: ["recusant", "munificent", "munificent"] },
+      ],
+    },
+    {
+      id: "blocus", name: "Le blocus", biome: "espace", turnLimit: 12,
+      blurb: "Un vaisseau de contrôle droïde tient l'orbite d'une planète. Une escadre de la République doit percer le blocus avant que l'escorte séparatiste ne l'use.",
+      sides: [
+        { faction: "republic", units: ["venator", "victory", "arquitens"] },
+        { faction: "separatists", units: ["lucrehulk", "recusant", "munificent", "munificent"] },
       ],
     },
     {
       id: "amiral", name: "Le vaisseau amiral", biome: "espace", turnLimit: 14,
       blurb: "La flotte rebelle tente d'abattre un super destroyer stellaire avant que ses escadrilles de TIE ne la submergent.",
       sides: [
-        { faction: "rebels", units: ["moncal", "nebulon", "xwing", "xwing", "xwing", "xwing"] },
+        { faction: "rebels", units: ["moncal", "nebulon", "xwing", "xwing", "xwing", "xwing", "xwing"] },
         { faction: "empire", units: ["executor", "tie", "tie", "tie", "tie", "tie", "tie"] },
       ],
     },
@@ -1005,6 +1020,28 @@ var Engine = (function () {
     return Math.min(th, u.hp) * value(u);
   }
 
+  // Distance de chaque case à l'ennemi le plus proche, en contournant le
+  // terrain infranchissable pour ce type d'unité : sans elle, un vaisseau
+  // capital reste collé derrière un champ d'astéroïdes, à vol d'oiseau tout près.
+  function approachField(state, T, foes) {
+    const map = state.map, field = new Map(), open = [];
+    for (const f of foes) { field.set(key(f.c, f.r), 0); open.push({ c: f.c, r: f.r, d: 0 }); }
+    while (open.length) {
+      open.sort((a, b) => a.d - b.d);
+      const cur = open.shift();
+      if (cur.d > field.get(key(cur.c, cur.r))) continue;
+      for (const n of neighbors(map, cur.c, cur.r)) {
+        const mc = moveCost(T, terrainAt(map, n.c, n.r));
+        if (!isFinite(mc)) continue;
+        const k = key(n.c, n.r), nd = cur.d + mc;
+        if (field.has(k) && field.get(k) <= nd) continue;
+        field.set(k, nd);
+        open.push({ c: n.c, r: n.r, d: nd });
+      }
+    }
+    return field;
+  }
+
   function aiNext(state, side) {
     const foes = state.units.filter(o => o.side === 1 - side);
     const mine = state.units.filter(o => o.side === side && !o.acted);
@@ -1030,6 +1067,7 @@ var Engine = (function () {
 
     const reach = reachable(state, u);
     const T = TYPES[u.type];
+    const field = approachField(state, T, foes);
     let best = null;
     for (const v of reach.dest.values()) {
       const pos = { c: v.c, r: v.r };
@@ -1040,8 +1078,9 @@ var Engine = (function () {
       // s'observent hors de portée jusqu'à la fin de la bataille.
       const caution = state.turn <= 4 ? 1 : Math.max(0.25, 1 - (state.turn - 4) / 6);
       s -= threatAt(state, u, pos, foes) * 0.3 * caution;
-      const gap = Math.max(0, nearest(foes, pos) - stat(u, "rng"));
-      s -= gap * (shot ? 0.1 : 0.6);
+      const far = field.has(key(pos.c, pos.r)) ? field.get(key(pos.c, pos.r)) : nearest(foes, pos);
+      const gap = Math.max(0, far - stat(u, "rng"));
+      s -= gap * (shot ? 0.1 : 0.6 * (1 + Math.max(0, state.turn - 4) * 0.25));
       s -= v.cost * 0.01; // à valeur égale, on bouge le moins possible
       if (!best || s > best.s) best = { s, pos };
     }

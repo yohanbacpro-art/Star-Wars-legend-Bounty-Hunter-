@@ -28,12 +28,12 @@ Aucune dépendance, aucun build pour jouer en local.
 | Alliance rebelle | X-wing, croiseur Mon Calamari (2 modèles), frégate Nebulon-B | Soldats rebelles |
 | Empire galactique | TIE/ln, Destroyer stellaire, super destroyer stellaire | Stormtroopers, AT-ST / AT-DP, Sith |
 | République galactique | Venator, destroyer Victory, croiseur Arquitens | Clones (6 légions), Jedi, AT-TE (2 modèles), AT-RT, AT-AP, TX-130 |
-| Confédération séparatiste | Destroyer Recusant, frégate Munificent | Droïdes B1 et B2, droïdekas, char AAT |
+| Confédération séparatiste | Vaisseau de contrôle droïde, destroyer Recusant, frégate Munificent | Droïdes B1 et B2, droïdekas, char AAT |
 | Clans mandaloriens | Cuirassé, destroyer, porte-chasseurs, chasseur Fang | Guerriers mandaloriens (4 clans), super commandos |
 | Pègre et chasseurs de primes | Croiseur hutt, croiseur pirate, canonnière | Chasseurs de primes, Trandoshans, gardes gamorréens |
 | Indépendants | Yacht royal | Personnage : pion libre qui peut prendre l'apparence de n'importe quelle figurine |
 
-Dix escarmouches prêtes à jouer, et des batailles sur mesure entre n'importe quelles
+Onze escarmouches prêtes à jouer, et des batailles sur mesure entre n'importe quelles
 factions. Théâtres : espace profond (astéroïdes, nébuleuses), désert, lune forestière,
 monde glacé.
 
@@ -60,6 +60,7 @@ Le détail complet, avec le tableau de toutes les unités, est dans le jeu (bout
 | `assets/source/` | Planches d'origine (autocollants sur fond blanc) |
 | `assets/sprites/` | Pions détourés, générés par `tools/extract_sprites.py` |
 | `tools/extract_sprites.py` | Découpe les planches en sprites WebP transparents |
+| `tools/draw_lucrehulk.py` | Dessine le vaisseau de contrôle droïde, dont la planche manque |
 | `tools/build.js` | Produit `dist/holotable/index.html` pour une publication en Artifact |
 | `tests/engine.test.js` | Batailles IA contre IA et invariants du moteur |
 
