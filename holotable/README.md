@@ -11,8 +11,34 @@ Un jeu de bataille tactique sur plateau hexagonal, dans l'univers Star Wars, qui
   *bac à sable* (armées unité par unité, factions mélangées, déploiement
   automatique ou à la main), enregistrées dans *Mes batailles*.
 
-Un **rapport de bataille** en texte brut, à copier dans les notes du MJ, résume
-l'issue, les PV restants des personnages, les pertes de chaque camp et les faits
+La **note de bataille** fait le lien avec la partie de JDR : on y colle le passage
+où le combat éclate, et le jeu en tire les deux camps, les effectifs, les noms et les
+caractéristiques des personnages (PV restants compris), puis lance la bataille après
+un aperçu. Deux lectures :
+
+- **par Claude**, pour un récit libre, dans la version publiée sur claude.ai (capacité
+  `sample` : la page demande à Claude, avec l'accord du joueur, de traduire le texte
+  en ordre de bataille JSON) ;
+- **locale**, partout et hors ligne, pour un ordre de bataille au format donné au MJ
+  (`parseOrder` dans `engine.js`) :
+
+```
+BATAILLE : Embuscade au spatioport de Mos Pelgo
+CARTE : désert
+TOURS : 10
+CAMP BLEU : L'équipage du Razor (joueur)
+- Varek Sol | chasseur de primes | PV 4/7 | Tir 5 | Portée 6
+- 2 x Trandoshans
+CAMP ROUGE : Garnison impériale (IA)
+- 6 x stormtroopers
+- Inquisitrice Varla | Sith | PV 9
+```
+
+Dans les deux cas, `planFromSpec` vérifie et corrige l'ordre de bataille (types
+inconnus, unités spatiales au sol, effectifs excessifs) et explique ce qu'il a changé.
+
+Un **rapport de bataille** en texte brut, à coller dans la conversation avec le MJ,
+résume l'issue, les PV restants des personnages, les pertes de chaque camp et les faits
 d'armes (bouton *Rapport*, ou à la fin de la bataille).
 
 ## Lancer le jeu

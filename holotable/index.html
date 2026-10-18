@@ -67,7 +67,7 @@ h1,h2,h3{font-family:var(--f-display);font-weight:600;letter-spacing:.02em;text-
 .field textarea{font-family:var(--f-data);font-size:.78rem;min-height:140px;resize:vertical}
 
 /* ---------- Écran d'accueil */
-#menu,#builder{min-height:100%;position:relative;padding-block:28px 48px;padding-left:var(--gutter-l);padding-right:var(--gutter-r);
+#menu,#builder,#briefing{min-height:100%;position:relative;padding-block:28px 48px;padding-left:var(--gutter-l);padding-right:var(--gutter-r);
   background:linear-gradient(180deg,rgba(6,10,17,.35),var(--void) 420px),url("assets/carte-espace.jpg") center top/cover no-repeat,var(--void)}
 .menu-inner{max-width:1180px;margin:0 auto;display:grid;gap:36px}
 .masthead{display:grid;gap:10px;padding-top:24px}
@@ -93,7 +93,7 @@ h1,h2,h3{font-family:var(--f-display);font-weight:600;letter-spacing:.02em;text-
 .scen p{margin:0;color:var(--muted);font-size:.9rem}
 .scen .meta{font:.74rem/1.2 var(--f-data);color:var(--holo);letter-spacing:.04em}
 .scen .row{display:flex;flex-wrap:wrap;gap:8px}
-.two-col{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:14px}
+.two-col{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:14px}
 .panel-card{padding:16px;background:rgba(12,19,32,.88);border:1px solid var(--seam);border-radius:10px;display:grid;gap:14px;align-content:start;min-width:0}
 .panel-card p{margin:0;color:var(--muted)}
 .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
@@ -118,6 +118,13 @@ h1,h2,h3{font-family:var(--f-display);font-weight:600;letter-spacing:.02em;text-
 .bd-total{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid var(--seam);padding-top:10px}
 .bd-total b{font:1rem/1 var(--f-data);color:var(--c)}
 .bd-foot{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.bf-text{min-height:300px!important;font:.92rem/1.5 var(--f-body)!important}
+.bf-result{border-top:3px solid var(--holo)}
+.bf-sides{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px}
+.bf-side h3{color:var(--c);font-size:1.05rem}
+.bf-side ul{margin:6px 0 0;padding-left:1.1em;display:grid;gap:3px;font-size:.9rem}
+.bf-side li small{color:var(--muted);font-family:var(--f-data)}
+.bf-notes{margin:0;padding-left:1.1em;color:var(--gold);font-size:.88rem}
 .report{white-space:pre-wrap;font:.8rem/1.55 var(--f-data);background:var(--void);border:1px solid var(--seam);border-radius:8px;padding:12px;max-height:52vh;overflow:auto;margin:0;user-select:text}
 @media (max-width: 520px){ .bd-row{grid-template-columns:34px minmax(0,1fr) auto} .bd-row .cost{display:none} }
 
@@ -284,6 +291,13 @@ td.n{font-family:var(--f-data);text-align:right}
     </section>
 
     <div class="two-col">
+      <section class="panel-card" aria-labelledby="h-brief">
+        <div class="eyebrow">Depuis votre partie</div>
+        <h2 id="h-brief">Note de bataille</h2>
+        <p>Collez le passage de votre partie où le combat éclate : le jeu en tire les deux camps, les effectifs exacts, les noms et les caractéristiques des personnages, puis lance la bataille. Vous vérifiez tout avant de jouer.</p>
+        <div class="row"><button class="btn primary" id="btn-brief">Ouvrir la note</button></div>
+      </section>
+
       <section class="panel-card" aria-labelledby="h-custom">
         <div class="eyebrow">Stratégie</div>
         <h2 id="h-custom">Bac à sable</h2>
@@ -327,6 +341,36 @@ td.n{font-family:var(--f-data);text-align:right}
       <button class="btn" id="bd-save">Enregistrer dans Mes batailles</button>
       <span class="hint" id="bd-msg" role="status"></span>
     </div>
+  </div>
+</section>
+
+<section id="briefing" aria-label="Note de bataille" hidden>
+  <div class="menu-inner">
+    <header class="bd-head">
+      <button class="btn sm ghost" id="bf-back">◂ Accueil</button>
+      <div><div class="eyebrow">Depuis votre partie</div><h1>Note de bataille</h1></div>
+    </header>
+    <div class="two-col">
+      <section class="panel-card" aria-label="Contexte de la scène">
+        <div class="field"><label for="bf-text">Contexte de la scène</label>
+          <textarea id="bf-text" class="bf-text" spellcheck="true" placeholder="Collez ici le passage de votre partie : qui est là, combien d'ennemis, les blessures des personnages… ou un ordre de bataille au format du MJ (voir à droite)."></textarea></div>
+        <div class="actions">
+          <button class="btn primary" id="bf-claude" hidden>Faire lire par Claude</button>
+          <button class="btn" id="bf-local">Lire l'ordre de bataille</button>
+          <button class="btn ghost" id="bf-stop" hidden>Arrêter</button>
+          <button class="btn ghost" id="bf-example">Exemple</button>
+        </div>
+        <p class="hint" id="bf-status" role="status"></p>
+      </section>
+      <section class="panel-card" aria-label="Consigne pour le MJ">
+        <h2>Consigne pour votre MJ</h2>
+        <p>Donnez cette consigne une fois à votre MJ, humain ou IA. Quand un combat éclate, il ajoute l'ordre de bataille dans ce format : le bouton « Lire l'ordre de bataille » le reprend tel quel, sans Claude et même hors ligne.</p>
+        <pre class="report" id="bf-format"></pre>
+        <div class="actions"><button class="btn" id="bf-copy">Copier la consigne</button></div>
+        <p class="hint" id="bf-copy-msg" role="status"></p>
+      </section>
+    </div>
+    <section class="panel-card bf-result" id="bf-result" hidden aria-live="polite"></section>
   </div>
 </section>
 
@@ -479,12 +523,15 @@ function draftFromScenario(sc){
   });
   return d;
 }
+// Unités d'un camp : les effectifs par type, puis les unités sur mesure
+// ({type, name, sprite, ov}) venues d'une note de bataille.
 function draftUnits(sd){
   const out = [];
   for (const t in sd.units) if (T[t]) for (let i = 0; i < sd.units[t]; i++) out.push(t);
+  for (const c of sd.custom || []) if (T[c.type]) out.push(c);
   return out;
 }
-function draftPoints(sd){ return draftUnits(sd).reduce((a, t) => a + T[t].cost, 0); }
+function draftPoints(sd){ return draftUnits(sd).reduce((a, x) => a + T[x.type || x].cost, 0); }
 
 // Types proposés à un camp : ceux du théâtre, de sa faction (ou de toutes),
 // plus le pion Personnage, toujours disponible.
@@ -500,6 +547,8 @@ function pruneDraft(){
   for (const sd of BD.sides) {
     const ok = draftTypes(sd);
     for (const t in sd.units) if (ok.indexOf(t) < 0 || !sd.units[t]) delete sd.units[t];
+    const theater = E.BIOMES[BD.biome].theater;
+    sd.custom = (sd.custom || []).filter(c => T[c.type] && (T[c.type].theater === theater || T[c.type].theater === "any"));
   }
 }
 
@@ -543,6 +592,15 @@ function renderBuilder(){
       }).join("");
     }
     if (!list) list = '<p class="hint">Cette faction n\'a pas d\'unités pour ce théâtre. Cochez « Toutes les factions » ou changez de faction.</p>';
+    if ((sd.custom || []).length) {
+      list = '<div class="bd-group">Unités sur mesure</div>' + sd.custom.map((c, k) => {
+        const Ty = T[c.type], s0 = c.sprite || Ty.sprites[0];
+        const pic = spriteOk(s0) ? '<img src="' + sprUrl(s0) + '" alt="">' : '<span class="tok">' + esc(initials(c.name || Ty.name)) + '</span>';
+        return '<div class="bd-row on">' + pic + '<div><b>' + esc(c.name || Ty.name) + '</b><small>' + esc(statLine(c)) + '</small></div>' +
+          '<span class="cost">' + Ty.cost + ' pts</span>' +
+          '<button class="btn sm ghost icon" data-del-custom="' + i + ':' + k + '" aria-label="Retirer ' + esc(c.name || Ty.name) + '">×</button></div>';
+      }).join("") + '<div class="bd-group">Renforts</div>' + list;
+    }
     const units = draftUnits(sd);
     return '<section class="panel-card bd-side" style="--c:' + SIDE_COLORS[i] + '">' +
       '<h2>' + SIDE_LABEL[i] + '</h2>' +
@@ -561,8 +619,20 @@ function renderBuilder(){
   saveDraft();
 }
 
+// « Chasseur de primes · PV 9 · Mv 4 · Tir 5/6 · Mêl 3 · Déf 4 », avec les
+// caractéristiques sur mesure à la place de celles du type.
+function statLine(c){
+  const Ty = T[c.type], ov = c.ov || {}, v = (k) => ov[k] != null ? ov[k] : Ty[k];
+  return Ty.name + ' · PV ' + (c.now != null ? c.now + '/' : '') + v("hp") + ' · Mv ' + v("mv") + ' · Tir ' + (v("att") ? v("att") + '/' + v("rng") : '—') + ' · Mêl ' + (v("cac") || '—') + ' · Déf ' + v("def");
+}
+
 function onBuilderClick(ev){
   const b = ev.target.closest("button"); if (!b) return;
+  if (b.dataset.delCustom) {
+    const [i, k] = b.dataset.delCustom.split(":").map(Number);
+    BD.sides[i].custom.splice(k, 1);
+    renderBuilder(); return;
+  }
   if (b.dataset.d) {
     const sd = BD.sides[+b.dataset.side], t = b.dataset.type;
     sd.units[t] = Math.max(0, Math.min(40, (sd.units[t] || 0) + +b.dataset.d));
@@ -577,7 +647,7 @@ function onBuilderClick(ev){
     $("#bd-msg").textContent = "";
     renderBuilder(); return;
   }
-  if (b.dataset.clear != null) { BD.sides[+b.dataset.clear].units = {}; renderBuilder(); }
+  if (b.dataset.clear != null) { BD.sides[+b.dataset.clear].units = {}; BD.sides[+b.dataset.clear].custom = []; renderBuilder(); }
 }
 function onBuilderChange(ev){
   const el = ev.target;
@@ -637,7 +707,7 @@ function renderMine(){
   const list = loadMine();
   $("#mine-section").hidden = !list.length;
   $("#mine-grid").innerHTML = list.map(d => {
-    const strip = (sd) => Object.keys(sd.units).filter(t => T[t] && sd.units[t] && T[t].sprites[0]).sort((a, b) => T[b].cost - T[a].cost)
+    const strip = (sd) => Object.keys(sd.units).concat((sd.custom || []).map(c => c.type)).filter((t, k, all) => all.indexOf(t) === k && T[t] && T[t].sprites[0]).sort((a, b) => T[b].cost - T[a].cost)
       .slice(0, 3).map(t => '<img data-spr="' + T[t].sprites[0] + '" alt="' + esc(T[t].name) + '">').join("");
     const n = d.sides.map(sd => draftUnits(sd).length), pts = d.sides.map(draftPoints);
     const who = d.sides.map(sd => sd.name || E.FACTIONS[sd.faction].short);
@@ -650,6 +720,201 @@ function renderMine(){
       '</article>';
   }).join("");
   renderMenuThumbs();
+}
+
+// ---------------------------------------------------------------- Note de bataille
+// Un passage de la partie de JDR devient un brouillon de bac à sable. Deux
+// lectures : par Claude (texte libre, dans la version publiée sur claude.ai),
+// ou locale (ordre de bataille au format donné au MJ, partout et hors ligne).
+const BRIEF_KEY = "holotable.brief.v1";
+let SAMPLE = null, briefCtl = null, BP = null;
+
+const THEATER_NAME = { space: "espace", ground: "sol", any: "partout" };
+
+function briefFormat(){
+  const ground = Object.keys(T).filter(t => T[t].theater === "ground").map(t => T[t].name);
+  const space = Object.keys(T).filter(t => T[t].theater === "space").map(t => T[t].name);
+  return [
+    "Quand un combat éclate, ajoute à ta réponse un ordre de bataille pour Holotable, dans ce format exact :",
+    "",
+    "BATAILLE : <nom de la scène>",
+    "CARTE : espace | désert | forêt | neige",
+    "TOURS : <nombre de tours, 0 = jusqu'au bout>",
+    "CAMP BLEU : <nom du camp des joueurs> (joueur)",
+    "- <Nom du personnage> | <type d'unité> | PV <restants>/<maximum> | Mv <n> | Tir <n> | Portée <n> | Mêlée <n> | Déf <n>",
+    "- <nombre> x <type d'unité>",
+    "CAMP ROUGE : <nom des adversaires> (IA)",
+    "- <nombre> x <type d'unité>",
+    "",
+    "Un pion = un combattant, un véhicule ou un vaisseau : donne les effectifs exacts.",
+    "Les caractéristiques sont facultatives ; pour un personnage blessé, écris ses PV « restants/maximum » (PV 4/7).",
+    "Échelle : un stormtrooper a PV 3, Tir 3, Déf 3 ; un Jedi PV 6, Mêlée 6 ; un personnage aguerri PV 6 à 10.",
+    "",
+    "Types au sol : " + ground.join(", ") + ", Personnage.",
+    "Types dans l'espace : " + space.join(", ") + ".",
+  ].join("\n");
+}
+
+const BRIEF_EXAMPLE = [
+  "BATAILLE : Embuscade au spatioport de Mos Pelgo",
+  "CARTE : désert",
+  "TOURS : 10",
+  "CAMP BLEU : L'équipage du Razor (joueur)",
+  "- Varek Sol | chasseur de primes | PV 4/7 | Tir 5 | Portée 6",
+  "- Ilena « la Grise » | Jedi | PV 6",
+  "- 2 x Trandoshans",
+  "CAMP ROUGE : Garnison impériale (IA)",
+  "- 6 x stormtroopers",
+  "- Inquisitrice Varla | Sith | PV 9",
+  "- 1 x AT-ST",
+].join("\n");
+
+function briefPrompt(text){
+  const cat = Object.keys(T).map(id => {
+    const Ty = T[id];
+    return id + " — " + Ty.name + ", " + E.FACTIONS[Ty.faction].short + ", " + THEATER_NAME[Ty.theater] +
+      " : PV " + Ty.hp + ", mv " + Ty.mv + ", att " + Ty.att + ", rng " + Ty.rng + ", cac " + Ty.cac + ", def " + Ty.def +
+      (Ty.ability ? " ; " + Ty.ability.name : "");
+  }).join("\n");
+  const looks = LOOKS.map(l => l.sprite + " (" + l.label + ")").join(", ");
+  return [
+    "Tu prépares une bataille pour Holotable, un jeu de figurines Star Wars sur un plateau hexagonal de 20 × 13 cases.",
+    "Lis le contexte de jeu de rôle ci-dessous et traduis le combat qu'il décrit (ou qui va éclater) en ordre de bataille.",
+    "",
+    "Règles de traduction :",
+    "- Deux camps. Index 0, camp bleu : les personnages joueurs et leurs alliés, control \"human\". Index 1, camp rouge : leurs adversaires, control \"ai\".",
+    "- Un pion = un combattant, un véhicule ou un vaisseau. Respecte les effectifs exacts du texte ; s'ils sont vagues (« une patrouille »), choisis un nombre plausible et dis-le dans notes. 40 pions au plus par camp.",
+    "- Pour chaque combattant, prends le type du catalogue le plus proche. Les personnages nommés gardent leur nom dans \"name\".",
+    "- \"stats\" remplace des caractéristiques du type : mets-y ce que le texte permet d'établir, à l'échelle du catalogue. stats.hp est le maximum de PV ; pour un personnage blessé, ajoute stats.now, ses PV restants.",
+    "- Un personnage sans type adapté prend le type \"hero\", avec une apparence \"look\" choisie parmi les figurines listées.",
+    "- biome : \"espace\" pour un combat spatial, sinon \"desert\", \"foret\" ou \"neige\" selon le lieu. Jamais d'unités spatiales au sol, ni l'inverse.",
+    "- turnLimit : 12 par défaut, 0 si le combat doit aller jusqu'au bout.",
+    "- summary : une phrase qui résume la situation. notes : ce que tu n'as pas pu représenter fidèlement, en phrases courtes. En français.",
+    "",
+    "Caractéristiques : hp (points de vie), mv (cases par tour), att (dés de tir), rng (portée en cases), cac (dés de corps à corps), def (dés de défense).",
+    "",
+    "Catalogue (type — nom, faction, théâtre : caractéristiques) :",
+    cat,
+    "",
+    "Figurines pour \"look\" : " + looks,
+    "Factions : rebels, empire, republic, separatists, mandalorians, underworld, free.",
+    "",
+    "Réponds uniquement avec un objet JSON de cette forme :",
+    '{"name":"…","biome":"desert","turnLimit":12,"summary":"…","sides":[{"name":"…","faction":"underworld","control":"human","units":[{"type":"chasseur","count":1,"name":"Varek Sol","stats":{"hp":7,"now":4,"att":5,"rng":6}},{"type":"trando","count":2}]},{"name":"…","faction":"empire","control":"ai","units":[{"type":"storm","count":6}]}],"notes":[]}',
+    "",
+    "Contexte :",
+    '"""',
+    String(text).slice(0, 12000),
+    '"""',
+  ].join("\n");
+}
+
+function openBriefing(){
+  $("#menu").hidden = true; $("#builder").hidden = true; $("#battle").hidden = true; $("#briefing").hidden = false;
+  const saved = store(() => localStorage.getItem(BRIEF_KEY));
+  if (saved != null && !$("#bf-text").value) $("#bf-text").value = saved;
+  $("#bf-format").textContent = briefFormat();
+  updateBriefButtons();
+  window.scrollTo(0, 0);
+}
+function closeBriefing(){
+  if (briefCtl) briefCtl.abort();
+  $("#briefing").hidden = true; $("#menu").hidden = false;
+  window.scrollTo(0, 0);
+}
+function updateBriefButtons(){
+  $("#bf-claude").hidden = !SAMPLE;
+  if (!SAMPLE && !$("#bf-status").textContent) $("#bf-status").textContent = "Lecture du texte libre par Claude : disponible dans la version publiée sur claude.ai. Ici, le jeu lit les ordres de bataille au format du MJ.";
+}
+function briefBusy(on){
+  $("#bf-claude").disabled = on; $("#bf-local").disabled = on; $("#bf-stop").hidden = !on;
+}
+
+async function readWithClaude(){
+  const text = $("#bf-text").value.trim();
+  if (!text) { $("#bf-status").textContent = "Collez d'abord le passage de votre partie."; return; }
+  if (!SAMPLE) return;
+  briefCtl = new AbortController();
+  briefBusy(true);
+  $("#bf-status").textContent = "Claude lit la scène… (souvent entre dix secondes et une minute)";
+  try {
+    const spec = await SAMPLE.json(briefPrompt(text), { signal: briefCtl.signal });
+    showPlan(E.planFromSpec(spec, LOOKS.map(l => l.sprite)), "Claude");
+    $("#bf-status").textContent = "";
+  } catch (e) {
+    const code = e && e.code;
+    const msg = {
+      cancelled: "Lecture arrêtée.",
+      not_granted: "Claude n'a pas été autorisé pour cette page. Utilisez le format du MJ et « Lire l'ordre de bataille ».",
+      sampling_disabled: "Claude n'est pas disponible pour ce compte. Utilisez le format du MJ et « Lire l'ordre de bataille ».",
+      rate_limited: "Trop de demandes pour l'instant : réessayez dans un moment.",
+      prompt_too_large: "Le texte est trop long : ne collez que le passage du combat.",
+      invalid_json: "La réponse de Claude n'a pas pu être lue. Réessayez, ou raccourcissez le passage.",
+      refused: "Claude n'a pas pu traiter ce passage. Reformulez-le, ou utilisez le format du MJ.",
+    }[code] || "La lecture a échoué. Réessayez dans un moment.";
+    $("#bf-status").textContent = msg;
+    if (code === "not_granted" || code === "sampling_disabled") { SAMPLE = null; updateBriefButtons(); }
+  } finally {
+    briefCtl = null;
+    briefBusy(false);
+  }
+}
+
+function readLocally(){
+  const text = $("#bf-text").value.trim();
+  if (!text) { $("#bf-status").textContent = "Collez d'abord un ordre de bataille, ou cliquez « Exemple »."; return; }
+  const spec = E.parseOrder(text);
+  const plan = E.planFromSpec(spec, LOOKS.map(l => l.sprite));
+  const count = plan.sides.reduce((a, sd) => a + draftUnits(sd).length, 0);
+  if (!count) {
+    $("#bf-result").hidden = true;
+    $("#bf-status").textContent = SAMPLE
+      ? "Aucune unité reconnue dans ce texte. Pour un récit libre, utilisez « Faire lire par Claude »."
+      : "Aucune unité reconnue. Écrivez la bataille au format du MJ (une unité par ligne, comme dans l'exemple).";
+    return;
+  }
+  $("#bf-status").textContent = "";
+  showPlan(plan, "le format du MJ");
+}
+
+function showPlan(plan, by){
+  BP = plan;
+  const box = $("#bf-result");
+  const sides = plan.sides.map((sd, i) => {
+    const counts = Object.keys(sd.units).map(t => '<li>' + sd.units[t] + ' × ' + esc(T[t].name) + '</li>').join("");
+    const custom = (sd.custom || []).map(c => '<li><b>' + esc(c.name || T[c.type].name) + '</b><br><small>' + esc(statLine(c)) + '</small></li>').join("");
+    const n = draftUnits(sd).length;
+    return '<div class="bf-side" style="--c:' + SIDE_COLORS[i] + '"><h3>' + esc(sd.name || E.FACTIONS[sd.faction].name) + '</h3>' +
+      '<div class="meta mono">' + (sd.control === "ai" ? "IA" : "Joueur") + ' · ' + n + ' unité' + (n > 1 ? "s" : "") + ' · ' + draftPoints(sd) + ' pts</div>' +
+      (custom || counts ? '<ul>' + custom + counts + '</ul>' : '<p class="hint">Aucune unité : ajoutez-en dans le bac à sable.</p>') + '</div>';
+  }).join("");
+  box.innerHTML = '<div class="eyebrow">Bataille comprise, lue par ' + esc(by) + '</div><h2>' + esc(plan.name) + '</h2>' +
+    (plan.summary ? '<p>' + esc(plan.summary) + '</p>' : '') +
+    '<div class="meta mono">' + esc(E.BIOMES[plan.biome].name) + ' · ' + (plan.turnLimit ? plan.turnLimit + ' tours' : 'sans limite de tours') + '</div>' +
+    '<div class="bf-sides">' + sides + '</div>' +
+    (plan.notes.length ? '<div><div class="eyebrow">À savoir</div><ul class="bf-notes">' + plan.notes.map(n => '<li>' + esc(n) + '</li>').join("") + '</ul></div>' : '') +
+    '<div class="form-grid"><div class="field"><label for="bf-deploy">Déploiement</label><select id="bf-deploy"><option value="auto">Automatique, la bataille démarre</option><option value="manual">À la main sur la table, puis Règles</option></select></div></div>' +
+    '<div class="actions"><button class="btn primary" id="bf-launch">Lancer la bataille</button><button class="btn" id="bf-adjust">Ajuster dans le bac à sable</button></div>' +
+    '<p class="hint" id="bf-result-msg" role="status"></p>';
+  box.hidden = false;
+  box.scrollIntoView({ behavior: REDUCED ? "auto" : "smooth", block: "start" });
+}
+
+function onBriefResultClick(ev){
+  const b = ev.target.closest("button"); if (!b || !BP) return;
+  BP.deploy = $("#bf-deploy").value;
+  if (b.id === "bf-adjust") { $("#briefing").hidden = true; openBuilder(JSON.parse(JSON.stringify(BP))); return; }
+  if (b.id === "bf-launch") {
+    const pb = draftProblem(BP);
+    if (pb) { $("#bf-result-msg").textContent = pb + " Passez par « Ajuster dans le bac à sable »."; return; }
+    $("#briefing").hidden = true;
+    launchDraft(BP);
+  }
+}
+
+function copyText(text, msgEl, done){
+  try { navigator.clipboard.writeText(text).then(() => { msgEl.textContent = done; }, () => { msgEl.textContent = "Copie refusée par le navigateur : sélectionnez le texte et copiez-le à la main."; }); }
+  catch (e) { msgEl.textContent = "Copie refusée par le navigateur : sélectionnez le texte et copiez-le à la main."; }
 }
 
 function startGM(){
@@ -669,7 +934,7 @@ function launch(state){
   ui.sel = null; ui.pending = null; ui.overShown = !!G.over; ui.targeting = false; ui.aiToken++;
   ui.aiRunning = false; ui.busy = false;
   if (G.mode === "libre" && ui.tab === "select" && !G.units.length) ui.tab = "units";
-  $("#menu").hidden = true; $("#builder").hidden = true; $("#battle").hidden = false;
+  $("#menu").hidden = true; $("#builder").hidden = true; $("#briefing").hidden = true; $("#battle").hidden = false;
   ui.zoom = window.innerWidth < 700 ? 2.1 : 1;
   applyZoom();
   buildBoard();
@@ -1714,6 +1979,15 @@ function bind(){
     }
   });
   $("#btn-builder").addEventListener("click", () => openBuilder());
+  $("#btn-brief").addEventListener("click", openBriefing);
+  $("#bf-back").addEventListener("click", closeBriefing);
+  $("#bf-claude").addEventListener("click", readWithClaude);
+  $("#bf-local").addEventListener("click", readLocally);
+  $("#bf-stop").addEventListener("click", () => { if (briefCtl) briefCtl.abort(); });
+  $("#bf-example").addEventListener("click", () => { $("#bf-text").value = BRIEF_EXAMPLE; store(() => localStorage.setItem(BRIEF_KEY, BRIEF_EXAMPLE)); readLocally(); });
+  $("#bf-text").addEventListener("input", () => store(() => localStorage.setItem(BRIEF_KEY, $("#bf-text").value)));
+  $("#bf-copy").addEventListener("click", () => copyText(briefFormat(), $("#bf-copy-msg"), "Consigne copiée : collez-la dans la conversation avec votre MJ."));
+  $("#bf-result").addEventListener("click", onBriefResultClick);
   $("#bd-back").addEventListener("click", closeBuilder);
   $("#bd-launch").addEventListener("click", onLaunchDraft);
   $("#bd-save").addEventListener("click", onSaveDraft);
@@ -1757,6 +2031,8 @@ function start(data){
   preload();
   renderMenu();
   bind();
+  // Lecture par Claude : seulement là où la page peut l'interroger.
+  if (window.claude && window.claude.use) window.claude.use("sample").then(fn => { SAMPLE = fn || null; if (!$("#briefing").hidden) updateBriefButtons(); }, () => {});
   if (data && data.state && data.state.map) launch(data.state);
 }
 if (window.claude && window.claude.hot) window.claude.hot.snapshot && window.claude.hot.snapshot(() => ({ state: G && !$("#battle").hidden ? G : null }));

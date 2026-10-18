@@ -670,15 +670,19 @@ var Engine = (function () {
     return r;
   }
 
-  // Place une liste de types dans la zone de déploiement d'un camp.
+  // Place une liste d'unités dans la zone de déploiement d'un camp. Chaque
+  // entrée est un type (« storm ») ou une unité sur mesure :
+  // { type, name?, sprite?, ov?, now? } — ov remplace des caractéristiques,
+  // now donne les PV restants d'une unité déjà blessée.
   function deploy(state, side, types) {
     const map = state.map, mid = (map.rows - 1) / 2;
-    const order = types.slice().sort((a, b) => TYPES[b].size - TYPES[a].size);
+    const order = types.map(x => typeof x === "string" ? { type: x } : x).filter(x => TYPES[x.type])
+      .sort((a, b) => TYPES[b.type].size - TYPES[a.type].size);
     const cols = [];
     for (let i = 0; i < map.cols; i++) cols.push(side === 0 ? i : map.cols - 1 - i);
     const placed = [];
-    for (const type of order) {
-      const T = TYPES[type];
+    for (const spec of order) {
+      const type = spec.type, T = TYPES[type];
       const prefer = has(T, "capital") || has(T, "large") ? 1 : 0;
       let best = null;
       for (let ci = 0; ci < cols.length && !best; ci++) {
@@ -695,7 +699,11 @@ var Engine = (function () {
         cands.sort((a, b) => a.s - b.s);
         if (cands.length) best = cands[0];
       }
-      if (best) placed.push(addUnit(state, type, side, best.c, best.r));
+      if (!best) continue;
+      const u = addUnit(state, type, side, best.c, best.r, { name: spec.name, sprite: spec.sprite });
+      if (spec.ov && Object.keys(spec.ov).length) { u.ov = Object.assign({}, spec.ov); u.hp = maxHp(u); }
+      if (spec.now != null) u.hp = Math.max(1, Math.min(maxHp(u), Math.round(+spec.now) || 1));
+      placed.push(u);
     }
     return placed;
   }
@@ -1233,6 +1241,7 @@ var Engine = (function () {
     const rec = state.record || {};
     for (const u of state.units) record(state, u).name = u.name;
     L.push("RAPPORT DE BATAILLE — " + state.name);
+    L.push("(Bataille jouée sur Holotable. À intégrer au récit : issue, blessures et PV restants des personnages, pertes.)");
     L.push((B ? B.name : "") + " · " + (state.mode === "libre" ? "manche " : "tour ") + state.turn + (state.turnLimit ? "/" + state.turnLimit : ""));
     if (state.over) {
       const w = state.over.winner;
@@ -1286,6 +1295,269 @@ var Engine = (function () {
     return L.join("\n");
   }
 
+  // ------------------------------------------------------------ Ordre de bataille
+
+  // Mots qui désignent chaque type d'unité dans un texte libre, sans accents
+  // ni majuscules. Les plus longs sont essayés d'abord : « super destroyer »
+  // avant « destroyer », « chasseur de primes » avant « chasseur ».
+  const KEYWORDS = {
+    storm: ["stormtroopers", "stormtrooper", "storm", "soldats imperiaux", "soldat imperial", "troupiers"],
+    rebel: ["soldats rebelles", "soldat rebelle", "rebelles", "rebelle"],
+    clone: ["clone troopers", "clone trooper", "clones", "clone", "soldats clones"],
+    b1: ["droides de combat", "droide de combat", "droides b1", "droide b1", "b1"],
+    b2: ["super droides", "super droide", "droides b2", "droide b2", "b2"],
+    droideka: ["droidekas", "droideka", "droides destroyers", "droide destroyer"],
+    mando: ["guerriers mandaloriens", "guerrier mandalorien", "mandaloriens", "mandalorien", "mandalorienne", "mandos", "mando"],
+    commando: ["super commandos", "super commando", "commandos", "commando", "gardes noirs"],
+    gamorreen: ["gamorreens", "gamorreen", "gamorreans", "gamorrean"],
+    trando: ["trandoshans", "trandoshan", "trandos", "trando"],
+    chasseur: ["chasseurs de primes", "chasseur de primes", "chasseuse de primes", "chasseuses de primes", "bounty hunters", "bounty hunter", "mercenaires", "mercenaire"],
+    jedi: ["chevaliers jedi", "chevalier jedi", "maitre jedi", "padawans", "padawan", "jedis", "jedi"],
+    sith: ["seigneurs sith", "seigneur sith", "inquisiteurs", "inquisiteur", "inquisitrice", "siths", "sith"],
+    atst: ["at-st", "at st", "atst", "at-dp", "at dp", "marcheurs eclaireurs", "marcheur eclaireur"],
+    atrt: ["at-rt", "at rt", "atrt"],
+    atte: ["at-te", "at te", "atte"],
+    atap: ["at-ap", "at ap", "atap"],
+    tx130: ["tx-130", "tx130", "tx 130", "saber"],
+    aat: ["aat", "chars droides", "char droide"],
+    xwing: ["x-wings", "x-wing", "xwings", "xwing", "x wing", "ailes x", "aile x"],
+    tie: ["chasseurs tie", "chasseur tie", "ties", "tie"],
+    executor: ["super destroyers", "super destroyer", "executor"],
+    mandocuirasse: ["cuirasse mandalorien", "cuirasses mandaloriens"],
+    mandodestroyer: ["destroyer mandalorien", "destroyers mandaloriens"],
+    mandoporteur: ["porte-chasseurs mandalorien", "porte chasseurs mandalorien", "porte-chasseurs", "porte chasseurs"],
+    destroyer: ["destroyers stellaires", "destroyer stellaire", "star destroyer", "destroyer imperial", "destroyers imperiaux", "destroyer"],
+    moncal: ["croiseurs mon calamari", "croiseur mon calamari", "mon calamari", "mon cal", "mc80"],
+    nebulon: ["nebulon-b", "nebulon b", "nebulon"],
+    venator: ["venators", "venator"],
+    victory: ["victory"],
+    arquitens: ["arquitens"],
+    recusant: ["recusant"],
+    munificent: ["munificent"],
+    lucrehulk: ["vaisseau de controle droide", "vaisseau de controle", "lucrehulk"],
+    fang: ["chasseurs fang", "chasseur fang", "fang"],
+    hutt: ["croiseur hutt", "vaisseau hutt", "hutt"],
+    pirate: ["croiseurs pirates", "croiseur pirate", "vaisseau pirate", "pirates", "pirate"],
+    canonniere: ["canonnieres", "canonniere", "cargo arme", "cargos armes"],
+    yacht: ["yacht royal", "yacht"],
+    hero: ["personnages", "personnage", "heros", "pnj", "pj"],
+  };
+  const KEYWORD_LIST = [];
+  for (const t in KEYWORDS) for (const k of KEYWORDS[t]) KEYWORD_LIST.push([k, t]);
+  KEYWORD_LIST.sort((a, b) => b[0].length - a[0].length);
+
+  const NUMBERS = { un: 1, une: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6, sept: 7, huit: 8, neuf: 9, dix: 10,
+    onze: 11, douze: 12, treize: 13, quatorze: 14, quinze: 15, seize: 16, vingt: 20, trente: 30, quarante: 40 };
+
+  function plain(text) {
+    return String(text).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  }
+
+  // Premier type d'unité nommé dans un bout de texte (null sinon), avec la
+  // position du mot trouvé.
+  function findType(text) {
+    const t = " " + plain(text).replace(/[^a-z0-9-]+/g, " ") + " ";
+    let best = null;
+    for (const [k, type] of KEYWORD_LIST) {
+      const i = t.indexOf(" " + k + " ");
+      if (i >= 0 && (!best || i < best.at || (i === best.at && k.length > best.k.length))) best = { type, at: i, k };
+    }
+    return best;
+  }
+
+  function guessBiome(text) {
+    const t = plain(text);
+    if (/espace|spatial|orbite|flotte|hyperespace|ceinture|asteroide|nebuleuse/.test(t)) return "espace";
+    if (/neige|glace|glaciaire|hoth|gele|toundra/.test(t)) return "neige";
+    if (/foret|endor|jungle|kashyyyk|yavin|marais|dagobah|lune forestiere/.test(t)) return "foret";
+    if (/desert|tatooine|geonosis|jakku|sable|dune|canyon/.test(t)) return "desert";
+    return null;
+  }
+
+  function guessFaction(text) {
+    const t = plain(text);
+    const table = [["mandalorians", /mandalor|clan /], ["underworld", /pegre|hutt|pirate|chasseurs? de primes|mercenaire|cartel|syndicat|aube ecarlate/],
+      ["separatists", /separatiste|confederation|droide|federation du commerce/], ["republic", /republique|clone|jedi/],
+      ["empire", /empire|imperial|imperiaux/], ["rebels", /rebelle|alliance|resistance/], ["free", /independant|neutre/]];
+    for (const [f, re] of table) if (re.test(t)) return f;
+    return null;
+  }
+
+  function readStats(text) {
+    const t = plain(text), ov = {};
+    const grab = (re, k) => { const m = t.match(re); if (m) ov[k] = +m[1]; };
+    // « PV 4/7 » : 4 PV restants sur 7 ; « PV 7 » : 7 PV, en pleine forme.
+    const hp = t.match(/\b(?:pv|hp|points? de vie|vie)\s*[:=]?\s*(\d+)(?:\s*\/\s*(\d+))?/);
+    if (hp && hp[2]) { ov.hp = +hp[2]; ov.now = +hp[1]; } else if (hp) ov.hp = +hp[1];
+    grab(/\b(?:mv|mouv(?:ement)?\.?|deplacement)\s*[:=]?\s*(\d+)/, "mv");
+    grab(/\b(?:tir|att(?:aque)?)\s*[:=]?\s*(\d+)/, "att");
+    grab(/\b(?:portee|port\.?|rng)\s*[:=]?\s*(\d+)/, "rng");
+    grab(/\b(?:melee|mel\.?|cac|corps a corps)\s*[:=]?\s*(\d+)/, "cac");
+    grab(/\b(?:def(?:ense)?\.?)\s*[:=]?\s*(\d+)/, "def");
+    return ov;
+  }
+
+  // Lit un ordre de bataille écrit à la main, au format proposé au MJ :
+  //   BATAILLE : …   CARTE : …   TOURS : …
+  //   CAMP BLEU : <nom> (joueur)       CAMP ROUGE : <nom> (IA)
+  //   - <Nom> | <type> | PV 8 | Tir 5 …     - 6 x stormtroopers
+  // Il se montre tolérant (accents, nombres en toutes lettres, puces) et
+  // rend la même forme que la lecture par Claude : voir planFromSpec.
+  function parseOrder(text) {
+    const spec = { name: "", biome: null, turnLimit: null, sides: [], notes: [] };
+    let side = null;
+    const sideAt = (i) => (spec.sides[i] = spec.sides[i] || { name: "", faction: null, control: i === 0 ? "human" : "ai", units: [] });
+    const lines = String(text).split(/\r?\n/);
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line) continue;
+      const p = plain(line);
+      const head = p.match(/^#*\s*([a-z0-9 ]+?)\s*[:=]\s*(.*)$/);
+      if (head) {
+        const key = head[1], v = line.replace(/^[^:=]*[:=]\s*/, "");
+        if (/^(bataille|titre|scene|nom)$/.test(key)) { spec.name = v; continue; }
+        if (/^(carte|theatre|terrain|lieu|decor)$/.test(key)) { spec.biome = guessBiome(v) || spec.biome; continue; }
+        if (/^(tours?|limite)$/.test(key)) { const n = parseInt(v, 10); if (!isNaN(n)) spec.turnLimit = n; continue; }
+        const which = /^(camp bleu|camp 1|camp a|joueurs?|allies|pj|equipe)$/.test(key) ? 0 : /^(camp rouge|camp 2|camp b|ennemis?|adversaires?|opposants?)$/.test(key) ? 1 : -1;
+        if (which >= 0) {
+          side = sideAt(which);
+          const ctl = v.match(/\(([^)]*)\)/);
+          side.name = v.replace(/\([^)]*\)/g, "").trim();
+          if (ctl && /\bia\b|ordinateur|auto/.test(plain(ctl[1]))) side.control = "ai";
+          if (ctl && /joueur|humain|moi|nous/.test(plain(ctl[1]))) side.control = "human";
+          side.faction = guessFaction(v);
+          continue;
+        }
+      }
+      // Ligne d'unité : un type reconnu, éventuellement un nombre, un nom, des
+      // caractéristiques. Avec des séparateurs (« | » ou « : »), le segment qui
+      // n'est qu'un type donne le type, et le premier segment en majuscule sans
+      // chiffre donne le nom, même s'il contient un mot-clé (« Inquisitrice Varla »).
+      const body = line.replace(/^[-*•·–]+\s*/, "");
+      const segs = body.split(/\s*[|:]\s*/).map(x => x.trim()).filter(Boolean);
+      let found = null, name = "";
+      if (segs.length > 1) {
+        const pure = segs.find(x => {
+          const f = findType(x);
+          return f && plain(x).replace(/[^a-z0-9 -]+/g, " ").trim().replace(/^\d+\s*x?\s*/, "").length <= f.k.length + 2;
+        });
+        if (pure) {
+          found = findType(pure);
+          name = segs.find(x => x !== pure && !/\d/.test(x) && /^[A-ZÀ-Ý«"“]/.test(x)) || "";
+        }
+      }
+      if (!found) found = findType(body);
+      if (!found) {
+        if (/^[-*•·–]/.test(line)) spec.notes.push("Ligne ignorée, aucun type d'unité reconnu : « " + line.slice(0, 80) + " »");
+        continue;
+      }
+      if (!name && segs.length > 1) name = segs.find(x => !findType(x) && !/\d/.test(x) && /^[A-ZÀ-Ý«"“]/.test(x)) || "";
+      if (!name) name = (body.match(/[«"“]([^»"”]+)[»"”]/) || [])[1] || "";
+      // Effectif : le dernier nombre (en chiffres ou en lettres) écrit avant
+      // le type, « 6 x stormtroopers », « une escouade de 4 droïdekas ».
+      let count = 1;
+      const norm = " " + plain(body).replace(/[^a-z0-9-]+/g, " ") + " ";
+      const at = norm.indexOf(" " + found.k + " ");
+      const words = (at >= 0 ? norm.slice(0, at) : "").trim().split(" ").filter(Boolean);
+      for (let w = words.length - 1; w >= 0; w--) {
+        const x = words[w].replace(/x$/, "");
+        if (/^\d+$/.test(x)) { count = +x; break; }
+        if (NUMBERS[words[w]]) { count = NUMBERS[words[w]]; break; }
+      }
+      name = name.trim();
+      const ov = readStats(body);
+      if (!side) side = sideAt(spec.sides.length ? spec.sides.length - 1 : 0);
+      const u = { type: found.type, count };
+      if (name) u.name = name.slice(0, 40);
+      if (Object.keys(ov).length) u.stats = ov;
+      side.units.push(u);
+    }
+    return spec;
+  }
+
+  // Transforme un ordre de bataille (lu par parseOrder ou écrit par Claude)
+  // en brouillon de bac à sable : types vérifiés, nombres et caractéristiques
+  // bornés, théâtre cohérent avec les unités. Tout ce qui a dû être corrigé
+  // ou écarté est expliqué dans notes.
+  function planFromSpec(spec, looks) {
+    spec = spec && typeof spec === "object" ? spec : {};
+    const notes = (Array.isArray(spec.notes) ? spec.notes : []).map(String).slice(0, 12);
+    const sidesIn = Array.isArray(spec.sides) ? spec.sides.filter(x => x && typeof x === "object") : [];
+    while (sidesIn.length < 2) sidesIn.push({ units: [] });
+    if (sidesIn.length > 2) {
+      notes.push("Plus de deux camps décrits : les camps suivants rejoignent le camp rouge.");
+      for (const extra of sidesIn.splice(2)) sidesIn[1].units = (sidesIn[1].units || []).concat(extra.units || []);
+    }
+    const lookOk = (type, s) => !!s && (TYPES[type].sprites.indexOf(s) >= 0 || (TYPES[type].anySprite && (looks || []).indexOf(s) >= 0));
+    // Théâtre : celui demandé, sinon celui de la majorité des unités.
+    let space = 0, ground = 0;
+    for (const sd of sidesIn) for (const u of sd.units || []) {
+      const T = TYPES[u && u.type] || TYPES[(findType(String(u && u.type || "")) || {}).type];
+      if (!T) continue;
+      if (T.theater === "space") space += +u.count || 1; else if (T.theater === "ground") ground += +u.count || 1;
+    }
+    let biome = BIOMES[spec.biome] ? spec.biome : guessBiome(String(spec.biome || "")) || null;
+    const want = space > ground ? "space" : "ground";
+    if (!biome || BIOMES[biome].theater !== want) {
+      if (biome) notes.push("Carte « " + BIOMES[biome].name + " » remplacée : la plupart des unités se battent " + (want === "space" ? "dans l'espace." : "au sol."));
+      biome = want === "space" ? "espace" : (biome && BIOMES[biome].theater === "ground" ? biome : "desert");
+    }
+    const theater = BIOMES[biome].theater;
+    const sides = sidesIn.slice(0, 2).map((sd, i) => {
+      const out = { name: String(sd.name || "").slice(0, 32), faction: FACTIONS[sd.faction] ? sd.faction : null,
+        control: sd.control === "ai" || sd.control === "human" ? sd.control : (i === 0 ? "human" : "ai"),
+        all: true, units: {}, custom: [] };
+      let total = 0;
+      const tally = {};
+      for (const u of sd.units || []) {
+        if (!u || typeof u !== "object") continue;
+        let type = TYPES[u.type] ? u.type : (findType(String(u.type || "")) || {}).type;
+        if (!type) { notes.push("Unité inconnue écartée : « " + String(u.type || "?").slice(0, 40) + " »."); continue; }
+        const T = TYPES[type];
+        if (T.theater !== theater && T.theater !== "any") { notes.push(T.name + " écarté : unité " + (T.theater === "space" ? "spatiale" : "terrestre") + " dans une bataille " + (theater === "space" ? "spatiale." : "au sol.")); continue; }
+        let count = Math.round(+u.count || 1);
+        count = Math.max(1, Math.min(40 - total, count));
+        if (count <= 0) { notes.push("Plus de 40 unités dans un camp : le surplus est écarté."); break; }
+        if (+u.count > count) notes.push("Effectif de " + T.name + " ramené à " + count + " (40 unités au plus par camp).");
+        total += count;
+        tally[T.faction] = (tally[T.faction] || 0) + count;
+        const ov = {};
+        if (u.stats && typeof u.stats === "object") {
+          for (const k of ["hp", "mv", "rng", "att", "cac", "def"]) {
+            const v = Math.round(+u.stats[k]);
+            if (!isNaN(v) && v !== T[k]) ov[k] = Math.max(k === "hp" ? 1 : 0, Math.min(99, v));
+          }
+        }
+        // PV restants d'un blessé (stats.now), bornés par son maximum.
+        const maxHpU = ov.hp != null ? ov.hp : T.hp;
+        const nowRaw = u.stats && typeof u.stats === "object" ? Math.round(+u.stats.now) : NaN;
+        const now = !isNaN(nowRaw) && nowRaw < maxHpU ? Math.max(1, nowRaw) : null;
+        const name = String(u.name || "").trim().slice(0, 40);
+        const sprite = lookOk(type, u.look) ? u.look : null;
+        if (!name && !sprite && !Object.keys(ov).length && now == null) { out.units[type] = (out.units[type] || 0) + count; continue; }
+        for (let k = 1; k <= count; k++) {
+          const c = { type };
+          if (name) c.name = count > 1 ? name + " " + k : name;
+          if (sprite) c.sprite = sprite;
+          if (Object.keys(ov).length) c.ov = Object.assign({}, ov);
+          if (now != null) c.now = now;
+          out.custom.push(c);
+        }
+      }
+      if (!out.faction) {
+        const top = Object.keys(tally).filter(f => f !== "free").sort((a, b) => tally[b] - tally[a])[0];
+        out.faction = top || (i === 0 ? "rebels" : "empire");
+      }
+      return out;
+    });
+    const turns = Math.round(+spec.turnLimit);
+    return {
+      id: null, name: String(spec.name || "").trim().slice(0, 48) || "Bataille de la séance",
+      biome, turnLimit: isNaN(turns) ? 12 : Math.max(0, Math.min(30, turns)), deploy: "auto", budget: 200,
+      summary: String(spec.summary || "").slice(0, 400), notes, sides,
+    };
+  }
+
   // ------------------------------------------------------------ Dés libres
 
   // « 3d6+2 », « d20 », « 2d10-1 »…
@@ -1306,6 +1578,7 @@ var Engine = (function () {
     blankState, createGame, createScenario, log, startTurn, endTurn, nextRound, checkVictory, alive,
     reachable, pathTo, moveUnit, endActivation, isEnemy, profile, expected, canShoot, targets, attack,
     meleeProfile, canMelee, meleeTargets, melee, removeUnit, record, report,
+    KEYWORDS, findType, parseOrder, planFromSpec,
     isAction, canUseAbility, useAbility, aiNext, apply, rollFormula, d, sideOf,
   };
 })();

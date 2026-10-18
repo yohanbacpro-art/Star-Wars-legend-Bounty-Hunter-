@@ -99,6 +99,67 @@ check("le rapport de bataille suit les pertes et les personnages", () => {
   for (const r of dead) assert(txt.includes(r.name));
 });
 
+check("ordre de bataille écrit par le MJ", () => {
+  const spec = E.parseOrder([
+    "BATAILLE : Embuscade au spatioport",
+    "CARTE : Tatooine, désert",
+    "TOURS : 10",
+    "CAMP BLEU : L'équipage du Razor (joueur)",
+    "- Boba Fett | chasseur de primes | PV 9 | Tir 5 | Portée 6 | Mêlée 3 | Déf 4",
+    "- Cad Vex | chasseur de primes | PV 3/7",
+    "- Kaelen « l'Exilé » : Jedi, PV 8",
+    "- 2 x Trandoshans",
+    "CAMP ROUGE : Garnison impériale (IA)",
+    "- une escouade de 6 stormtroopers",
+    "- Inquisitrice Varla | sith | PV 10",
+    "- deux AT-ST",
+    "- 3 chasseurs TIE",
+  ].join("\n"));
+  assert.strictEqual(spec.name, "Embuscade au spatioport");
+  assert.strictEqual(spec.biome, "desert");
+  assert.strictEqual(spec.turnLimit, 10);
+  const [a, b] = spec.sides;
+  assert.strictEqual(a.control, "human");
+  assert.strictEqual(b.control, "ai");
+  assert.deepStrictEqual(a.units[0], { type: "chasseur", count: 1, name: "Boba Fett", stats: { hp: 9, att: 5, rng: 6, cac: 3, def: 4 } });
+  assert.deepStrictEqual(a.units[1].stats, { hp: 7, now: 3 });
+  assert.strictEqual(a.units[2].name, "Kaelen « l'Exilé »");
+  assert.strictEqual(b.units[0].count, 6);
+  assert.strictEqual(b.units[1].name, "Inquisitrice Varla");
+  assert.strictEqual(b.units[2].count, 2);
+
+  const plan = E.planFromSpec(spec, []);
+  assert(plan.notes.some(n => /TIE/.test(n)), "les TIE n'ont rien à faire au sol");
+  assert.strictEqual(plan.sides[1].units.storm, 6);
+  const s = E.createGame({ seed: 5, biome: plan.biome, turnLimit: plan.turnLimit, sides: plan.sides.map(sd => ({
+    faction: sd.faction, control: sd.control,
+    units: Object.keys(sd.units).flatMap(t => Array(sd.units[t]).fill(t)).concat(sd.custom),
+  })) });
+  const boba = s.units.find(u => u.name === "Boba Fett");
+  assert(boba, "le personnage nommé est sur la carte");
+  assert.strictEqual(boba.hp, 9);
+  assert.strictEqual(E.stat(boba, "att"), 5);
+  const cad = s.units.find(u => u.name === "Cad Vex");
+  assert.strictEqual(cad.hp, 3, "un blessé arrive avec ses PV restants");
+  assert.strictEqual(E.maxHp(cad), 7);
+  assert.strictEqual(s.units.filter(u => u.type === "storm").length, 6);
+});
+
+check("un ordre de bataille fantaisiste est corrigé, pas refusé", () => {
+  const plan = E.planFromSpec({ biome: "lune", sides: [
+    { units: [{ type: "x-wing", count: 3 }, { type: "dragon", count: 1 }] },
+    { units: [{ type: "tie", count: 500, stats: { hp: -4, att: "7" } }] },
+    { units: [{ type: "destroyer" }] },
+  ] }, []);
+  assert.strictEqual(plan.biome, "espace");
+  assert.strictEqual(plan.sides[0].units.xwing, 3);
+  assert(plan.notes.some(n => /dragon/.test(n)));
+  const ties = plan.sides[1].custom.filter(c => c.type === "tie");
+  assert.strictEqual(ties.length, 40, "40 unités au plus par camp");
+  assert.strictEqual(ties[0].ov.hp, 1);
+  assert.strictEqual(ties[0].ov.att, 7);
+});
+
 check("formules de dés", () => {
   const s = E.blankState({ seed: 3, sides: [{ faction: "free" }, { faction: "free" }] });
   const r = E.rollFormula(s, "3d6+2");
