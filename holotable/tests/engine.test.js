@@ -55,6 +55,50 @@ check("le blindage n'est percé que par les 6 sans arme perforante", () => {
   assert(E.profile(s, tank, aat).need < 6);
 });
 
+check("corps à corps : charge, parade au sabre et riposte", () => {
+  const s = E.createGame({ seed: 9, biome: "foret", sides: [{ faction: "republic", units: [] }, { faction: "empire", units: [] }] });
+  for (let r = 0; r < s.map.rows; r++) for (let c = 0; c < s.map.cols; c++) s.map.hexes[r * s.map.cols + c] = "plaine";
+  const jedi = E.addUnit(s, "jedi", 0, 5, 5), sith = E.addUnit(s, "sith", 1, 6, 5), at = E.addUnit(s, "atst", 1, 5, 6);
+  assert(!E.canShoot(s, jedi, sith), "un Jedi n'a pas de blaster");
+  assert(E.canMelee(s, jedi, sith));
+  jedi.moved = true;
+  const p = E.meleeProfile(s, jedi, sith);
+  assert.strictEqual(p.dice, 7, "6 dés + charge");
+  assert.strictEqual(p.defNeed, 4, "le Sith pare au sabre");
+  assert(E.meleeProfile(s, jedi, at).need < 6, "le sabre tranche le blindage");
+  const clone = E.addUnit(s, "clone", 0, 7, 5);
+  assert.strictEqual(E.meleeProfile(s, clone, at).need, 6, "une crosse ne perce pas un AT-ST");
+  let ripostes = 0;
+  for (let i = 0; i < 20; i++) {
+    const t = E.createGame({ seed: 100 + i, biome: "foret", sides: [{ faction: "republic", units: [] }, { faction: "empire", units: [] }] });
+    const a = E.addUnit(t, "jedi", 0, 5, 5), b = E.addUnit(t, "sith", 1, 6, 5);
+    const res = E.melee(t, a, b);
+    if (res.riposte) ripostes++;
+    assert(a.acted && a.moved);
+  }
+  assert(ripostes > 10, "le Sith survit souvent et riposte");
+});
+
+check("le beskar protège des tirs comme du corps à corps", () => {
+  const s = E.createGame({ seed: 4, biome: "desert", sides: [{ faction: "underworld", units: [] }, { faction: "mandalorians", units: [] }] });
+  const tr = E.addUnit(s, "trando", 0, 5, 5), mando = E.addUnit(s, "mando", 1, 6, 5);
+  assert.strictEqual(E.profile(s, tr, mando).defNeed, 4);
+  assert.strictEqual(E.meleeProfile(s, tr, mando).defNeed, 4);
+});
+
+check("le rapport de bataille suit les pertes et les personnages", () => {
+  const s = E.createGame({ seed: 12, biome: "desert", turnLimit: 12, sides: [{ faction: "underworld", units: ["chasseur", "trando"], control: "ai" }, { faction: "mandalorians", units: ["mando"], control: "ai" }] });
+  const hero = s.units.find(u => u.type === "chasseur");
+  hero.name = "Boba Fett";
+  playOut(s);
+  const txt = E.report(s);
+  assert(/RAPPORT DE BATAILLE/.test(txt));
+  assert(/PERSONNAGES/.test(txt) && /Boba Fett/.test(txt), "le personnage figure dans le rapport");
+  assert(/Issue : .+/.test(txt));
+  const dead = Object.values(s.record).filter(r => r.fate);
+  for (const r of dead) assert(txt.includes(r.name));
+});
+
 check("formules de dés", () => {
   const s = E.blankState({ seed: 3, sides: [{ faction: "free" }, { faction: "free" }] });
   const r = E.rollFormula(s, "3d6+2");

@@ -43,11 +43,12 @@ var Engine = (function () {
     infantry: { name: "Infanterie",  desc: "" },
     vehicle:  { name: "Véhicule",    desc: "Les ruines lui coûtent 2 mouvements." },
     hero:     { name: "Personnage",  desc: "" },
-    deflect:  { name: "Sabre laser", desc: "Renvoie les tirs : esquive sur 4+ contre les tirs à distance." },
-    shield:   { name: "Bouclier",    desc: "Esquive sur 4+ contre tous les tirs." },
+    deflect:  { name: "Sabre laser", desc: "Esquive sur 4+ contre les tirs, pare sur 4+ au corps à corps, et tranche le blindage." },
+    beskar:   { name: "Beskar",      desc: "Armure mandalorienne : esquive sur 4+ contre les tirs comme au corps à corps." },
+    shield:   { name: "Bouclier",    desc: "Esquive sur 4+ contre les tirs (pas au corps à corps)." },
     hunter:   { name: "Traqueur",    desc: "+1 dé contre une cible déjà blessée." },
     jetpack:  { name: "Réacteur dorsal", desc: "Le terrain ne coûte qu'1 mouvement, l'eau se franchit." },
-    melee:    { name: "Corps à corps", desc: "Ne frappe qu'au contact (portée 1)." },
+    melee:    { name: "Combattant", desc: "Pas d'arme à distance : il doit aller au contact." },
   };
 
   // size : plus grand côté du sprite, en largeurs d'hexagone.
@@ -175,10 +176,10 @@ var Engine = (function () {
     sith: {
       name: "Seigneur sith", faction: "empire", theater: "ground", kind: "Utilisateur de la Force",
       sprites: ["sith-1", "sith-2"], variants: ["Inquisitrice", "Seigneur noir"], rotate: false, size: 1.05,
-      hp: 6, mv: 5, rng: 1, att: 6, def: 2, cost: 45, tags: ["hero", "melee", "ap", "deflect"],
+      hp: 6, mv: 5, rng: 0, att: 0, cac: 7, def: 2, cost: 45, tags: ["hero", "melee", "deflect"],
       ability: { id: "lightning", type: "shot", name: "Éclair de Force", uses: 2, dice: 4, rng: 3, ap: true,
         desc: "Deux fois par bataille : tir à portée 3, 4 dés perforants." },
-      desc: "Frappe au sabre laser et renvoie les tirs de blaster.",
+      desc: "Duelliste redoutable au sabre laser. Renvoie les tirs de blaster et frappe à distance par la Force.",
       naming: (n) => ["Dark Nihara", "Dark Vesh", "Dark Kaal", "Dark Soryn"][(n - 1) % 4],
     },
     // ---------------- Alliance
@@ -209,10 +210,10 @@ var Engine = (function () {
     jedi: {
       name: "Jedi", faction: "republic", theater: "ground", kind: "Utilisateur de la Force",
       sprites: ["jedi-1", "jedi-2"], variants: ["Chevalière jedi", "Maître jedi"], rotate: false, size: 1.05,
-      hp: 6, mv: 5, rng: 1, att: 5, def: 3, cost: 45, tags: ["hero", "melee", "ap", "deflect"],
+      hp: 6, mv: 5, rng: 0, att: 0, cac: 6, def: 3, cost: 45, tags: ["hero", "melee", "deflect"],
       ability: { id: "push", type: "shot", name: "Poussée de Force", uses: 2, dice: 4, rng: 3, ap: true,
         desc: "Deux fois par bataille : tir à portée 3, 4 dés perforants." },
-      desc: "Gardien de la paix. Son sabre laser renvoie les tirs de blaster.",
+      desc: "Gardien de la paix, maître du sabre laser. Renvoie les tirs de blaster et pare les coups.",
       naming: (n) => ["Aelis Varo", "Tarn Okeda", "Ilena Sorr", "Kaeden Vos"][(n - 1) % 4],
     },
     atap: {
@@ -265,14 +266,14 @@ var Engine = (function () {
       name: "Guerriers mandaloriens", faction: "mandalorians", theater: "ground", kind: "Infanterie d'élite",
       sprites: ["mando-rouge", "mando-vert", "mando-bleu", "mando-acier"],
       variants: ["Clan rouge", "Clan vert", "Clan bleu", "Beskar nu"], rotate: false, size: 0.95,
-      hp: 5, mv: 5, rng: 4, att: 4, def: 3, cost: 30, tags: ["infantry", "jetpack"],
-      desc: "Armure de beskar, réacteur dorsal : ils frappent là où on ne les attend pas.",
+      hp: 6, mv: 5, rng: 4, att: 4, cac: 3, def: 3, cost: 34, tags: ["infantry", "jetpack", "beskar"],
+      desc: "Armure de beskar presque impénétrable, réacteur dorsal : ils frappent là où on ne les attend pas.",
       naming: (n) => ["Ordo", "Vizsla", "Kryze", "Fett", "Wren", "Skirata"][(n - 1) % 6] + (n > 6 ? " " + Math.ceil(n / 6) : ""),
     },
     commando: {
       name: "Super commandos", faction: "mandalorians", theater: "ground", kind: "Infanterie",
       sprites: ["commando-1", "commando-2"], rotate: false, size: 1.05,
-      hp: 4, mv: 4, rng: 4, att: 4, def: 3, cost: 18, tags: ["infantry"],
+      hp: 5, mv: 4, rng: 4, att: 4, cac: 2, def: 3, cost: 20, tags: ["infantry"],
       desc: "Troupes de choc en armure noire, disciplinées et bien armées.",
       naming: (n) => "Escouade " + AUREBESH[(n - 1) % 26],
     },
@@ -310,7 +311,7 @@ var Engine = (function () {
     gamorreen: {
       name: "Gardes gamorréens", faction: "underworld", theater: "ground", kind: "Brutes",
       sprites: ["gamorreen-1", "gamorreen-2"], rotate: false, size: 1.05,
-      hp: 5, mv: 3, rng: 1, att: 4, def: 2, cost: 9, tags: ["infantry", "melee"],
+      hp: 5, mv: 3, rng: 0, att: 0, cac: 5, def: 2, cost: 9, tags: ["infantry", "melee"],
       desc: "Gardes du corps à la hache vibrante. Costauds, pas très vifs.",
       naming: (n) => ["Gorg", "Brug", "Ortugg", "Gakk", "Rogua", "Thok"][(n - 1) % 6],
     },
@@ -369,6 +370,11 @@ var Engine = (function () {
       naming: (n) => "Personnage " + n,
     },
   };
+
+  // Dés de corps à corps (cac) des unités qui ne les déclarent pas : crosse,
+  // poings, coups de patte. Les véhicules lourds et les vaisseaux n'en ont pas.
+  const MELEE = { storm: 1, rebel: 1, clone: 2, b1: 1, b2: 2, trando: 2, chasseur: 2, hero: 2, atst: 2, atrt: 2 };
+  for (const id in TYPES) if (TYPES[id].cac == null) TYPES[id].cac = MELEE[id] || 0;
 
   const TERRAIN = {
     vide:       { name: "Espace",              theater: "space",  cost: 1 },
@@ -433,7 +439,7 @@ var Engine = (function () {
       id: "contrat", name: "Le contrat", biome: "desert", turnLimit: 12,
       blurb: "Une prime, deux prétendants. Les chasseurs de primes et leurs hommes de main affrontent une escouade mandalorienne équipée de réacteurs dorsaux.",
       sides: [
-        { faction: "underworld", units: ["chasseur", "chasseur", "trando", "trando", "gamorreen", "gamorreen"] },
+        { faction: "underworld", units: ["chasseur", "chasseur", "trando", "trando", "gamorreen", "gamorreen", "gamorreen"] },
         { faction: "mandalorians", units: ["mando", "mando", "mando", "commando", "commando", "commando"] },
       ],
     },
@@ -651,7 +657,17 @@ var Engine = (function () {
       ov: null,
     };
     state.units.push(u);
+    record(state, u);
     return u;
+  }
+
+  // Fiche de suivi d'une unité, qui survit à sa destruction : le rapport de
+  // bataille s'en sert. Créée à la volée pour les parties sauvegardées avant.
+  function record(state, u) {
+    state.record = state.record || {};
+    let r = state.record[u.uid];
+    if (!r) r = state.record[u.uid] = { uid: u.uid, type: u.type, side: u.side, name: u.name, dealt: 0, taken: 0, kills: 0, attacks: 0, fate: null };
+    return r;
   }
 
   // Place une liste de types dans la zone de déploiement d'un camp.
@@ -883,6 +899,7 @@ var Engine = (function () {
     need = Math.min(6, need);
     let defNeed = 5;
     if (has(T, "shield")) { defNeed = 4; notes.push("Bouclier : esquive sur 4+"); }
+    else if (has(T, "beskar")) { defNeed = 4; notes.push("Beskar : esquive sur 4+"); }
     else if (has(T, "deflect") && dist(from, tpos) > 1) { defNeed = 4; notes.push("Tir renvoyé au sabre : esquive sur 4+"); }
     const p = { dice, need, defDice: stat(t, "def"), defNeed, dmg, rng, notes };
     p.expected = expected(p);
@@ -899,6 +916,7 @@ var Engine = (function () {
   function canShoot(state, a, t, opts) {
     opts = opts || {};
     if (!isEnemy(a, t)) return false;
+    if (!opts.special && stat(a, "att") <= 0) return false;
     const A = TYPES[a.type];
     if (opts.special && !(A.ability && A.ability.type === "shot" && (a.uses[A.ability.id] || 0) > 0)) return false;
     const from = opts.from || a;
@@ -911,9 +929,9 @@ var Engine = (function () {
     return state.units.filter(t => canShoot(state, a, t, opts));
   }
 
-  function attack(state, a, t, opts) {
-    opts = opts || {};
-    const p = profile(state, a, t, opts);
+  // Jette les dés d'un profil et applique les dégâts, sans retirer la cible
+  // détruite : l'appelant s'en charge, une fois tous les coups résolus.
+  function resolve(state, a, t, p, how) {
     const rolls = [], defRolls = [];
     for (let i = 0; i < p.dice; i++) rolls.push(d(state, 6));
     const crits = rolls.filter(x => x === 6).length;
@@ -926,21 +944,103 @@ var Engine = (function () {
     const lost = Math.min(dmg, t.hp);
     if (a.side < 2 && t.side < 2) state.score[a.side] += TYPES[t.type].cost * lost / maxHp(t);
     t.hp = Math.max(0, t.hp - dmg);
+    const killed = t.hp <= 0;
+    const ra = record(state, a), rt = record(state, t);
+    ra.name = a.name; rt.name = t.name;
+    ra.attacks++; ra.dealt += lost; rt.taken += lost;
+    if (killed) {
+      ra.kills++;
+      rt.fate = { turn: state.turn, by: a.name, how };
+      state.feats = state.feats || [];
+      state.feats.push({ turn: state.turn, side: a.side, text: a.name + " élimine " + t.name + (how === "melee" ? " au corps à corps" : "") + "." });
+    }
+    return { rolls, defRolls, need: p.need, defNeed: p.defNeed, crits, norm, saves, dmg, killed, notes: p.notes, dmgPerHit: p.dmg };
+  }
+
+  function outcome(r) {
+    return r.dmg ? r.dmg + " dégât" + (r.dmg > 1 ? "s" : "") : (r.crits + r.norm ? "tout est paré" : "manqué");
+  }
+
+  function removeDead(state, list) {
+    let any = false;
+    for (const u of list) {
+      if (u.hp > 0 || state.units.indexOf(u) < 0) continue;
+      state.units.splice(state.units.indexOf(u), 1);
+      any = true;
+    }
+    if (any) checkVictory(state);
+  }
+
+  function attack(state, a, t, opts) {
+    opts = opts || {};
+    const p = profile(state, a, t, opts);
+    const res = resolve(state, a, t, p, "tir");
+    res.attacker = a.uid; res.target = t.uid;
     if (TYPES[a.type].rotate) a.facing = facingTo(a, t);
     a.moved = true; a.acted = true; a.plan = null;
     const ab = TYPES[a.type].ability;
     if (opts.special && ab) a.uses[ab.id] = Math.max(0, (a.uses[ab.id] || 0) - 1);
-    const killed = t.hp <= 0;
-    const res = { attacker: a.uid, target: t.uid, rolls, defRolls, need: p.need, defNeed: p.defNeed, crits, norm, saves, dmg, killed, notes: p.notes, dmgPerHit: p.dmg };
-    let text = a.name + " tire sur " + t.name + " : ";
-    text += dmg ? dmg + " dégât" + (dmg > 1 ? "s" : "") : (crits + norm ? "tout est esquivé" : "manqué");
-    if (killed) text += ". " + t.name + " est détruit.";
-    log(state, { k: "attack", side: a.side, text, dice: { rolls, need: p.need, defRolls, defNeed: p.defNeed }, notes: p.notes });
-    if (killed) {
-      state.units.splice(state.units.indexOf(t), 1);
-      checkVictory(state);
-    }
+    let text = a.name + " tire sur " + t.name + " : " + outcome(res).replace("paré", "esquivé");
+    if (res.killed) text += ". " + t.name + " est détruit.";
+    log(state, { k: "attack", side: a.side, text, dice: { rolls: res.rolls, need: p.need, defRolls: res.defRolls, defNeed: p.defNeed }, notes: p.notes });
+    removeDead(state, [t]);
     return res;
+  }
+
+  // ------------------------------------------------------------ Corps à corps
+
+  // Au contact : l'attaquant frappe avec ses dés de corps à corps (+1 s'il
+  // charge, c'est-à-dire s'il a bougé ce tour), touche sur 4+. Si la cible
+  // survit et sait se battre, elle riposte aussitôt, touche sur 5+.
+  // Le couvert ne compte pas ; le blindage, si : seuls les sabres laser le tranchent.
+  function meleeProfile(state, a, t, opts) {
+    opts = opts || {};
+    const A = TYPES[a.type], T = TYPES[t.type];
+    let dice = stat(a, "cac");
+    const notes = [];
+    const charge = opts.charge != null ? opts.charge : a.moved;
+    if (opts.riposte) notes.push("Riposte : touche sur 5+");
+    else if (charge) { dice++; notes.push("Charge +1 dé"); }
+    let need = opts.riposte ? 5 : 4;
+    if (has(T, "armored") && !has(A, "deflect")) { need = 6; notes.push("Blindage : seuls les 6 touchent"); }
+    let defNeed = 5;
+    if (has(T, "beskar")) { defNeed = 4; notes.push("Beskar : pare sur 4+"); }
+    else if (has(T, "deflect")) { defNeed = 4; notes.push("Parade au sabre : pare sur 4+"); }
+    const p = { dice, need, defDice: stat(t, "def"), defNeed, dmg: 1, rng: 1, notes, melee: true };
+    p.expected = expected(p);
+    return p;
+  }
+
+  function canMelee(state, a, t, opts) {
+    opts = opts || {};
+    if (!isEnemy(a, t) || stat(a, "cac") <= 0) return false;
+    return dist(opts.from || a, t) === 1;
+  }
+
+  function meleeTargets(state, a) {
+    return state.units.filter(t => canMelee(state, a, t));
+  }
+
+  function melee(state, a, t) {
+    const p = meleeProfile(state, a, t);
+    const strike = resolve(state, a, t, p, "melee");
+    let riposte = null, rp = null;
+    if (!strike.killed && stat(t, "cac") > 0) {
+      rp = meleeProfile(state, t, a, { riposte: true });
+      riposte = resolve(state, t, a, rp, "melee");
+    }
+    if (TYPES[a.type].rotate) a.facing = facingTo(a, t);
+    a.moved = true; a.acted = true; a.plan = null;
+    let text = a.name + " attaque " + t.name + " au corps à corps : " + outcome(strike);
+    if (strike.killed) text += ". " + t.name + " est terrassé.";
+    log(state, { k: "attack", side: a.side, text, dice: { rolls: strike.rolls, need: p.need, defRolls: strike.defRolls, defNeed: p.defNeed }, notes: p.notes });
+    if (riposte) {
+      let rt = t.name + " riposte : " + outcome(riposte);
+      if (riposte.killed) rt += ". " + a.name + " est terrassé.";
+      log(state, { k: "attack", side: t.side, text: rt, dice: { rolls: riposte.rolls, need: rp.need, defRolls: riposte.defRolls, defNeed: rp.defNeed }, notes: rp.notes });
+    }
+    removeDead(state, [t, a]);
+    return { melee: true, attacker: a.uid, target: t.uid, strike, riposte, dmg: strike.dmg, killed: strike.killed, rolls: strike.rolls, crits: strike.crits, norm: strike.norm };
   }
 
   function spawnHexes(state, u) {
@@ -1007,6 +1107,15 @@ var Engine = (function () {
         if (special) v = v / 1.35 - (A.ability.uses > 1 ? 0 : 2);
         if (!best || v > best.value) best = { t, special, value: v };
       }
+      if (canMelee(state, u, t, { from: pos })) {
+        const charge = u.moved || pos.c !== u.c || pos.r !== u.r;
+        const p = meleeProfile(state, u, t, { charge });
+        const e = Math.min(p.expected, t.hp);
+        let v = e * value(t) + (p.expected >= t.hp ? TYPES[t.type].cost * 0.5 : 0);
+        // La riposte coûte : on la retranche si la cible a des chances de survivre.
+        if (stat(t, "cac") > 0 && p.expected < t.hp) v -= Math.min(meleeProfile(state, t, u, { riposte: true }).expected, u.hp) * value(u) * 0.8;
+        if (!best || v > best.value) best = { t, special: false, melee: true, value: v };
+      }
     }
     return best;
   }
@@ -1014,8 +1123,11 @@ var Engine = (function () {
   function threatAt(state, u, pos, foes) {
     let th = 0;
     for (const e of foes) {
-      if (dist(e, pos) > stat(e, "mv") + stat(e, "rng")) continue;
-      th += profile(state, e, u, { tpos: pos }).expected;
+      const d = dist(e, pos);
+      let worst = 0;
+      if (stat(e, "att") > 0 && d <= stat(e, "mv") + stat(e, "rng")) worst = profile(state, e, u, { tpos: pos }).expected;
+      if (stat(e, "cac") > 0 && d <= stat(e, "mv") + 1) worst = Math.max(worst, meleeProfile(state, e, u, { charge: true }).expected);
+      th += worst;
     }
     return Math.min(th, u.hp) * value(u);
   }
@@ -1051,7 +1163,7 @@ var Engine = (function () {
     const moved = mine.find(o => o.moved);
     if (moved) {
       const s = bestShot(state, moved, moved);
-      return s ? { type: "attack", uid: moved.uid, target: s.t.uid, special: s.special } : { type: "wait", uid: moved.uid };
+      return s ? { type: "attack", uid: moved.uid, target: s.t.uid, special: s.special, melee: !!s.melee } : { type: "wait", uid: moved.uid };
     }
 
     mine.sort((a, b) => (bestShot(state, b, b) ? 1 : 0) - (bestShot(state, a, a) ? 1 : 0) || stat(b, "mv") - stat(a, "mv"));
@@ -1079,13 +1191,13 @@ var Engine = (function () {
       const caution = state.turn <= 4 ? 1 : Math.max(0.25, 1 - (state.turn - 4) / 6);
       s -= threatAt(state, u, pos, foes) * 0.3 * caution;
       const far = field.has(key(pos.c, pos.r)) ? field.get(key(pos.c, pos.r)) : nearest(foes, pos);
-      const gap = Math.max(0, far - stat(u, "rng"));
+      const gap = Math.max(0, far - Math.max(stat(u, "rng"), stat(u, "cac") > 0 ? 1 : 0));
       s -= gap * (shot ? 0.1 : 0.6 * (1 + Math.max(0, state.turn - 4) * 0.25));
       s -= v.cost * 0.01; // à valeur égale, on bouge le moins possible
       if (!best || s > best.s) best = { s, pos };
     }
     if (best.pos.c === u.c && best.pos.r === u.r) {
-      return here ? { type: "attack", uid: u.uid, target: here.t.uid, special: here.special } : { type: "wait", uid: u.uid };
+      return here ? { type: "attack", uid: u.uid, target: here.t.uid, special: here.special, melee: !!here.melee } : { type: "wait", uid: u.uid };
     }
     return { type: "move", uid: u.uid, c: best.pos.c, r: best.pos.r };
   }
@@ -1095,9 +1207,83 @@ var Engine = (function () {
     const u = act.uid != null ? byUid(state, act.uid) : null;
     if (act.type === "end") return endTurn(state);
     if (act.type === "move") return moveUnit(state, u, act.c, act.r, pathTo(reachable(state, u), act.c, act.r));
-    if (act.type === "attack") return attack(state, u, byUid(state, act.target), { special: act.special });
+    if (act.type === "attack") return act.melee ? melee(state, u, byUid(state, act.target)) : attack(state, u, byUid(state, act.target), { special: act.special });
     if (act.type === "ability") return useAbility(state, u);
     if (act.type === "wait") return endActivation(state, u);
+  }
+
+  // Retrait d'un pion à la main (table du MJ) : il n'est pas compté comme perte.
+  function removeUnit(state, u) {
+    const i = state.units.indexOf(u);
+    if (i < 0) return;
+    state.units.splice(i, 1);
+    const r = record(state, u);
+    r.name = u.name;
+    r.fate = { removed: true, turn: state.turn };
+  }
+
+  // ------------------------------------------------------------ Rapport
+
+  // Compte rendu en texte brut, à coller dans les notes du MJ : issue, pertes,
+  // état des survivants (PV restants des personnages en tête), faits d'armes.
+  function report(state) {
+    const L = [], B = BIOMES[state.map.biome];
+    const n = (k, word) => k + " " + word + (k > 1 ? "s" : "");
+    const live = new Map(state.units.map(u => [u.uid, u]));
+    const rec = state.record || {};
+    for (const u of state.units) record(state, u).name = u.name;
+    L.push("RAPPORT DE BATAILLE — " + state.name);
+    L.push((B ? B.name : "") + " · " + (state.mode === "libre" ? "manche " : "tour ") + state.turn + (state.turnLimit ? "/" + state.turnLimit : ""));
+    if (state.over) {
+      const w = state.over.winner;
+      L.push("Issue : " + (w < 0 ? "match nul" : state.sides[w].name + " l'emporte") + (state.over.reason === "points" ? " aux points." : w < 0 ? "." : ", l'armée adverse est anéantie."));
+    } else {
+      L.push("Issue : bataille en cours.");
+    }
+    L.push("Score : " + state.sides[0].name + " " + Math.round(state.score[0]) + " pts · " + state.sides[1].name + " " + Math.round(state.score[1]) + " pts");
+
+    const all = Object.keys(rec).map(k => rec[k]).filter(r => !(r.fate && r.fate.removed));
+    const heroes = all.filter(r => TYPES[r.type] && has(TYPES[r.type], "hero"));
+    if (heroes.length) {
+      L.push("");
+      L.push("PERSONNAGES — à reporter sur les fiches");
+      for (const r of heroes) {
+        const u = live.get(r.uid);
+        L.push("  " + r.name + " (" + (r.side < 2 ? state.sides[r.side].name : "neutre") + ") : " +
+          (u ? u.hp + "/" + maxHp(u) + " PV" : "hors de combat au tour " + r.fate.turn + ", par " + r.fate.by) +
+          " · " + n(r.dealt, "dégât") + " infligé" + (r.dealt > 1 ? "s" : "") + ", " + n(r.kills, "élimination"));
+      }
+    }
+
+    for (const side of [0, 1, 2]) {
+      const mine = all.filter(r => r.side === side);
+      if (!mine.length) continue;
+      const alive = mine.filter(r => live.has(r.uid));
+      L.push("");
+      L.push((side < 2 ? state.sides[side].name : "Neutres").toUpperCase() + " — " + alive.length + " sur " + mine.length + " encore debout");
+      for (const r of mine) {
+        const u = live.get(r.uid), T = TYPES[r.type];
+        const what = T ? T.name : r.type;
+        const state_ = u ? "✓ " + u.hp + "/" + maxHp(u) + " PV" : "✗ détruit au tour " + r.fate.turn + " par " + r.fate.by + (r.fate.how === "melee" ? " (corps à corps)" : "");
+        const deeds = r.dealt || r.kills ? " · " + n(r.dealt, "dégât") + ", " + n(r.kills, "élimination") : "";
+        L.push("  " + r.name + ", " + what + " : " + state_ + deeds);
+      }
+    }
+
+    const feats = (state.feats || []).slice(-15);
+    if (feats.length) {
+      L.push("");
+      L.push("FAITS D'ARMES");
+      for (const f of feats) L.push("  Tour " + f.turn + " : " + f.text);
+    }
+    // Mention : les dégâts comptent, une élimination vaut deux points de plus.
+    const merit = (r) => r.dealt + 2 * r.kills;
+    const best = all.slice().sort((a, b) => merit(b) - merit(a))[0];
+    if (best && best.dealt) {
+      L.push("");
+      L.push("Mention : " + best.name + " (" + (best.side < 2 ? state.sides[best.side].name : "neutre") + "), " + n(best.dealt, "dégât") + " et " + n(best.kills, "élimination") + ".");
+    }
+    return L.join("\n");
   }
 
   // ------------------------------------------------------------ Dés libres
@@ -1119,6 +1305,7 @@ var Engine = (function () {
     stat, maxHp, unitAt, byUid, addUnit, deploy, rosters, randomArmy,
     blankState, createGame, createScenario, log, startTurn, endTurn, nextRound, checkVictory, alive,
     reachable, pathTo, moveUnit, endActivation, isEnemy, profile, expected, canShoot, targets, attack,
+    meleeProfile, canMelee, meleeTargets, melee, removeUnit, record, report,
     isAction, canUseAbility, useAbility, aiNext, apply, rollFormula, d, sideOf,
   };
 })();

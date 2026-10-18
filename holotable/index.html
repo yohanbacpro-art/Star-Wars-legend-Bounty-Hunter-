@@ -67,7 +67,7 @@ h1,h2,h3{font-family:var(--f-display);font-weight:600;letter-spacing:.02em;text-
 .field textarea{font-family:var(--f-data);font-size:.78rem;min-height:140px;resize:vertical}
 
 /* ---------- Écran d'accueil */
-#menu{min-height:100%;position:relative;padding-block:28px 48px;padding-left:var(--gutter-l);padding-right:var(--gutter-r);
+#menu,#builder{min-height:100%;position:relative;padding-block:28px 48px;padding-left:var(--gutter-l);padding-right:var(--gutter-r);
   background:linear-gradient(180deg,rgba(6,10,17,.35),var(--void) 420px),url("assets/carte-espace.jpg") center top/cover no-repeat,var(--void)}
 .menu-inner{max-width:1180px;margin:0 auto;display:grid;gap:36px}
 .masthead{display:grid;gap:10px;padding-top:24px}
@@ -84,8 +84,10 @@ h1,h2,h3{font-family:var(--f-display);font-weight:600;letter-spacing:.02em;text-
 .scen{display:grid;grid-template-rows:auto auto 1fr auto;gap:10px;padding:14px;background:rgba(12,19,32,.88);border:1px solid var(--seam);border-radius:10px;min-width:0}
 .scen .strip{display:flex;align-items:center;justify-content:space-between;gap:6px;height:64px;padding:6px 10px;border-radius:6px;
   background:repeating-linear-gradient(90deg,transparent 0 27px,rgba(127,217,255,.06) 27px 28px),var(--void)}
-.scen .strip .grp{display:flex;align-items:center;gap:2px;min-width:0}
-.scen .strip img{height:46px;width:auto;object-fit:contain}
+.scen .strip .grp{flex:1 1 0;display:flex;align-items:center;gap:2px;min-width:0;overflow:hidden}
+.scen .strip .grp:last-child{justify-content:flex-end}
+/* Les longs vaisseaux rétrécissent au lieu d'élargir la carte. */
+.scen .strip img{flex:0 1 auto;min-width:0;max-width:100%;height:46px;width:auto;object-fit:contain}
 .scen .strip .vs{font:700 .7rem/1 var(--f-display);letter-spacing:.2em;color:var(--muted)}
 .scen h3{font-size:1.08rem}
 .scen p{margin:0;color:var(--muted);font-size:.9rem}
@@ -95,6 +97,29 @@ h1,h2,h3{font-family:var(--f-display);font-weight:600;letter-spacing:.02em;text-
 .panel-card{padding:16px;background:rgba(12,19,32,.88);border:1px solid var(--seam);border-radius:10px;display:grid;gap:14px;align-content:start;min-width:0}
 .panel-card p{margin:0;color:var(--muted)}
 .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.bd-head{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding-top:12px}
+.bd-head h1{font-size:clamp(1.6rem,4vw,2.4rem);color:var(--holo)}
+.bd-side{border-top:3px solid var(--c)}
+.bd-side h2{display:flex;align-items:center;gap:8px;font-size:1.2rem;color:var(--c)}
+.check{display:flex;align-items:center;gap:8px;font-size:.9rem;color:var(--muted)}
+.bd-list{display:grid;gap:4px;max-height:460px;overflow:auto;padding-right:2px}
+.bd-group{font:600 .7rem/1 var(--f-display);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);padding:8px 0 2px}
+.bd-row{display:grid;grid-template-columns:40px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:4px 6px;border-radius:8px;border:1px solid transparent}
+.bd-row.on{border-color:var(--seam);background:var(--hull-2)}
+.bd-row img{width:40px;height:40px;object-fit:contain}
+.bd-row .tok{width:34px;height:34px;border-radius:50%;background:var(--side-n);color:var(--void);display:grid;place-items:center;font:700 .74rem/1 var(--f-display)}
+.bd-row b{display:block;font-weight:600;font-size:.92rem;line-height:1.2}
+.bd-row small{display:block;font:.72rem/1.3 var(--f-data);color:var(--muted)}
+.bd-row .cost{font:.78rem/1 var(--f-data);color:var(--muted)}
+.stepper{display:inline-grid;grid-template-columns:30px 30px 30px;align-items:center;border:1px solid var(--seam);border-radius:6px;overflow:hidden}
+.stepper button{border:0;background:var(--hull-2);height:30px;font:600 1rem/1 var(--f-display)}
+.stepper button:hover{background:var(--hull-3)}
+.stepper span{text-align:center;font:.9rem/1 var(--f-data)}
+.bd-total{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid var(--seam);padding-top:10px}
+.bd-total b{font:1rem/1 var(--f-data);color:var(--c)}
+.bd-foot{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.report{white-space:pre-wrap;font:.8rem/1.55 var(--f-data);background:var(--void);border:1px solid var(--seam);border-radius:8px;padding:12px;max-height:52vh;overflow:auto;margin:0;user-select:text}
+@media (max-width: 520px){ .bd-row{grid-template-columns:34px minmax(0,1fr) auto} .bd-row .cost{display:none} }
 
 /* ---------- Écran de bataille */
 #battle{height:100%;display:grid;grid-template-rows:auto 1fr;padding-block:10px;padding-left:var(--gutter-l);padding-right:var(--gutter-r);gap:10px}
@@ -134,10 +159,10 @@ h1,h2,h3{font-family:var(--f-display);font-weight:600;letter-spacing:.02em;text-
 .hpbar{height:8px;border-radius:4px;background:var(--void);overflow:hidden;border:1px solid var(--seam)}
 .hpbar > i{display:block;height:100%;background:var(--good);transition:width .3s}
 .hpline{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;font:.8rem/1 var(--f-data)}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
 .stats div{background:var(--void);border:1px solid var(--seam);border-radius:6px;padding:6px 4px;text-align:center}
 .stats b{display:block;font:1.15rem/1 var(--f-data)}
-.stats span{font:600 .62rem/1 var(--f-display);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.stats span{font:600 .6rem/1 var(--f-display);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .chips{display:flex;flex-wrap:wrap;gap:5px}
 .chip{font:600 .68rem/1 var(--f-display);letter-spacing:.08em;text-transform:uppercase;padding:.35em .55em;border-radius:4px;border:1px solid var(--seam);color:var(--muted);cursor:help}
 .ability{border:1px dashed var(--seam);border-radius:6px;padding:8px 10px;font-size:.86rem;display:grid;gap:2px}
@@ -148,6 +173,9 @@ h1,h2,h3{font-family:var(--f-display);font-weight:600;letter-spacing:.02em;text-
 .odds{display:grid;gap:6px;padding:10px;border-radius:8px;border:1px solid var(--side-b);background:rgba(255,93,79,.07)}
 .odds .big{font:600 1rem/1.25 var(--f-display)}
 .odds ul{margin:0;padding-left:1.1em;color:var(--muted);font-size:.84rem}
+.odds .opt{display:grid;gap:4px;justify-items:start;padding-top:8px;border-top:1px solid var(--seam)}
+.odds .opt-head{display:flex;justify-content:space-between;gap:8px;width:100%}
+.odds .opt-head .mono{color:var(--gold)}
 .hint{margin:0;color:var(--muted);font-size:.88rem}
 
 .log{display:grid;gap:6px;max-height:340px;overflow:auto;font-size:.84rem}
@@ -172,7 +200,7 @@ h1,h2,h3{font-family:var(--f-display);font-weight:600;letter-spacing:.02em;text-
 .terrains button{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--seam);border-radius:8px;background:var(--void);font-size:.82rem;text-align:left}
 .terrains button i{width:18px;height:18px;border-radius:3px;flex:none;background:var(--c)}
 .terrains button[aria-pressed="true"]{border-color:var(--holo);background:var(--holo-soft)}
-.edit-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.edit-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
 .edit-grid .field input{text-align:center;font-family:var(--f-data)}
 .hpedit{display:grid;grid-template-columns:auto 1fr auto;gap:6px;align-items:center}
 .diceout{display:grid;gap:6px;justify-items:start}
@@ -250,22 +278,17 @@ td.n{font-family:var(--f-data);text-align:right}
       <div class="scen-grid" id="scen-grid"></div>
     </section>
 
+    <section class="menu-section" aria-labelledby="h-mine" id="mine-section" hidden>
+      <header><h2 id="h-mine">Mes batailles</h2><p>Composées dans le bac à sable, gardées dans ce navigateur.</p></header>
+      <div class="scen-grid" id="mine-grid"></div>
+    </section>
+
     <div class="two-col">
       <section class="panel-card" aria-labelledby="h-custom">
         <div class="eyebrow">Stratégie</div>
-        <h2 id="h-custom">Bataille sur mesure</h2>
-        <p>Choisissez le théâtre, les deux factions et un budget en points : les armées sont tirées au hasard dans les effectifs de chaque camp.</p>
-        <div class="form-grid">
-          <div class="field"><label for="cu-biome">Théâtre</label><select id="cu-biome"></select></div>
-          <div class="field"><label for="cu-a">Camp bleu</label><select id="cu-a"></select></div>
-          <div class="field"><label for="cu-b">Camp rouge</label><select id="cu-b"></select></div>
-          <div class="field"><label for="cu-budget">Budget</label>
-            <select id="cu-budget"><option value="120">120 pts · rapide</option><option value="200" selected>200 pts · standard</option><option value="300">300 pts · grande bataille</option></select></div>
-          <div class="field"><label for="cu-ctrl">Adversaire</label>
-            <select id="cu-ctrl"><option value="ai">IA</option><option value="human">Deuxième joueur</option></select></div>
-        </div>
-        <div class="row"><button class="btn primary" id="btn-custom">Générer la bataille</button></div>
-        <p class="hint" id="cu-warn" hidden></p>
+        <h2 id="h-custom">Bac à sable</h2>
+        <p>Composez votre propre bataille : la carte, les deux camps unité par unité (toutes factions mélangées si vous le voulez), qui est aux commandes, et le déploiement automatique ou à la main. Enregistrez-la dans Mes batailles pour la rejouer.</p>
+        <div class="row"><button class="btn primary" id="btn-builder">Composer une bataille</button></div>
       </section>
 
       <section class="panel-card" aria-labelledby="h-gm">
@@ -281,6 +304,32 @@ td.n{font-family:var(--f-data);text-align:right}
   </div>
 </section>
 
+<section id="builder" aria-label="Bac à sable" hidden>
+  <div class="menu-inner">
+    <header class="bd-head">
+      <button class="btn sm ghost" id="bd-back">◂ Accueil</button>
+      <div><div class="eyebrow">Bac à sable</div><h1>Composer une bataille</h1></div>
+    </header>
+    <section class="panel-card" aria-label="Réglages de la bataille">
+      <div class="form-grid">
+        <div class="field"><label for="bd-name">Nom de la bataille</label><input id="bd-name" maxlength="48"></div>
+        <div class="field"><label for="bd-biome">Théâtre</label><select id="bd-biome"></select></div>
+        <div class="field"><label for="bd-limit">Limite de tours</label><select id="bd-limit"></select></div>
+        <div class="field"><label for="bd-deploy">Déploiement</label>
+          <select id="bd-deploy"><option value="auto">Automatique, la bataille démarre</option><option value="manual">À la main sur la table, puis Règles</option></select></div>
+        <div class="field"><label for="bd-budget">Budget du tirage au hasard</label>
+          <select id="bd-budget"><option value="120">120 pts</option><option value="200">200 pts</option><option value="300">300 pts</option><option value="450">450 pts</option></select></div>
+      </div>
+    </section>
+    <div class="two-col" id="bd-sides"></div>
+    <div class="bd-foot">
+      <button class="btn primary" id="bd-launch">Lancer la bataille</button>
+      <button class="btn" id="bd-save">Enregistrer dans Mes batailles</button>
+      <span class="hint" id="bd-msg" role="status"></span>
+    </div>
+  </div>
+</section>
+
 <section id="battle" aria-label="Bataille" hidden>
   <header class="cmdbar">
     <button class="btn sm ghost" id="b-menu" title="Retour à l'accueil">◂ Accueil</button>
@@ -291,6 +340,7 @@ td.n{font-family:var(--f-data);text-align:right}
       <button id="m-free" aria-pressed="false" title="Table libre du MJ : tout se déplace à la main">Libre</button>
     </div>
     <button class="btn sm" id="b-sides" title="Noms, factions et contrôle des camps">Camps</button>
+    <button class="btn sm" id="b-report" title="Compte rendu à copier pour le MJ">Rapport</button>
     <button class="btn sm" id="b-help" title="Règles du jeu">Règles</button>
     <div class="seg" role="group" aria-label="Zoom">
       <button id="z-out" title="Dézoomer">−</button><button id="z-in" title="Zoomer">+</button>
@@ -386,44 +436,220 @@ function renderMenu(){
       '<h3>' + esc(sc.name) + '</h3><p>' + esc(sc.blurb) + '</p>' +
       '<div class="meta">' + esc(E.BIOMES[sc.biome].name) + ' · ' + sc.turnLimit + ' tours · ' + pts[0] + ' contre ' + pts[1] + ' pts<br>' +
         esc(E.FACTIONS[sc.sides[0].faction].short) + ' contre ' + esc(E.FACTIONS[sc.sides[1].faction].short) + '</div>' +
-      '<div class="row"><button class="btn sm primary" data-scen="' + sc.id + '" data-ctrl="ai">Contre l\'IA</button><button class="btn sm" data-scen="' + sc.id + '" data-ctrl="human">À deux</button></div>' +
+      '<div class="row"><button class="btn sm primary" data-scen="' + sc.id + '" data-ctrl="ai">Contre l\'IA</button><button class="btn sm" data-scen="' + sc.id + '" data-ctrl="human">À deux</button><button class="btn sm ghost" data-edit-scen="' + sc.id + '" title="Ouvrir ce scénario dans le bac à sable">Modifier</button></div>' +
       '</article>';
   }).join("");
   renderMenuThumbs();
   const biomeOpts = Object.keys(E.BIOMES).map(b => '<option value="' + b + '">' + esc(E.BIOMES[b].name) + '</option>').join("");
-  $("#cu-biome").innerHTML = biomeOpts;
   $("#gm-biome").innerHTML = biomeOpts;
   $("#gm-biome").value = "foret";
-  fillFactionSelects();
+  $("#bd-biome").innerHTML = biomeOpts;
+  $("#bd-limit").innerHTML = [0, 6, 8, 10, 12, 15, 20].map(n => '<option value="' + n + '">' + (n ? n + " tours" : "Aucune") + '</option>').join("");
+  renderMine();
   $("#btn-resume").hidden = !store(() => localStorage.getItem(SAVE_KEY));
 }
 function renderMenuThumbs(){
-  document.querySelectorAll("#scen-grid img[data-spr]").forEach(img => {
+  document.querySelectorAll("#scen-grid img[data-spr], #mine-grid img[data-spr]").forEach(img => {
     const n = img.dataset.spr;
     if (spriteOk(n)) img.src = sprUrl(n);
     else if (SPR[n] && !SPR[n].pending) img.remove();
   });
 }
-function fillFactionSelects(){
-  const theater = E.BIOMES[$("#cu-biome").value].theater;
-  const opts = Object.keys(E.FACTIONS).filter(f => f !== "free").filter(f => E.rosters(f, theater).length)
-    .map(f => '<option value="' + f + '">' + esc(E.FACTIONS[f].name) + '</option>').join("");
-  const a = $("#cu-a").value, b = $("#cu-b").value;
-  $("#cu-a").innerHTML = opts; $("#cu-b").innerHTML = opts;
-  const avail = Array.from($("#cu-a").options).map(o => o.value);
-  $("#cu-a").value = avail.indexOf(a) >= 0 ? a : avail[0];
-  $("#cu-b").value = avail.indexOf(b) >= 0 ? b : (avail[1] || avail[0]);
+// ---------------------------------------------------------------- Bac à sable
+const MINE_KEY = "holotable.mine.v1", DRAFT_KEY = "holotable.draft.v1";
+let BD = null;
+
+function newDraft(){
+  return { id: null, name: "Ma bataille", biome: "desert", turnLimit: 12, deploy: "auto", budget: 200,
+    sides: [
+      { name: "", faction: "rebels", control: "human", all: false, units: {} },
+      { name: "", faction: "empire", control: "ai", all: false, units: {} },
+    ] };
+}
+function loadMine(){ return store(() => JSON.parse(localStorage.getItem(MINE_KEY))) || []; }
+function saveMine(list){ store(() => localStorage.setItem(MINE_KEY, JSON.stringify(list))); }
+function saveDraft(){ if (BD) store(() => localStorage.setItem(DRAFT_KEY, JSON.stringify(BD))); }
+
+function draftFromScenario(sc){
+  const d = newDraft();
+  d.name = sc.name; d.biome = sc.biome; d.turnLimit = sc.turnLimit;
+  sc.sides.forEach((s, i) => {
+    d.sides[i].faction = s.faction;
+    s.units.forEach(t => { d.sides[i].units[t] = (d.sides[i].units[t] || 0) + 1; });
+  });
+  return d;
+}
+function draftUnits(sd){
+  const out = [];
+  for (const t in sd.units) if (T[t]) for (let i = 0; i < sd.units[t]; i++) out.push(t);
+  return out;
+}
+function draftPoints(sd){ return draftUnits(sd).reduce((a, t) => a + T[t].cost, 0); }
+
+// Types proposés à un camp : ceux du théâtre, de sa faction (ou de toutes),
+// plus le pion Personnage, toujours disponible.
+function draftTypes(sd){
+  const theater = E.BIOMES[BD.biome].theater;
+  return Object.keys(T).filter(id => {
+    const Ty = T[id];
+    if (Ty.theater !== theater && Ty.theater !== "any") return false;
+    return sd.all || Ty.faction === sd.faction || id === "hero";
+  });
+}
+function pruneDraft(){
+  for (const sd of BD.sides) {
+    const ok = draftTypes(sd);
+    for (const t in sd.units) if (ok.indexOf(t) < 0 || !sd.units[t]) delete sd.units[t];
+  }
 }
 
-function startCustom(){
-  const biome = $("#cu-biome").value, theater = E.BIOMES[biome].theater, budget = +$("#cu-budget").value;
-  const fa = $("#cu-a").value, fb = $("#cu-b").value, seed = Math.floor(Math.random() * 1e9);
-  const ua = E.randomArmy(fa, theater, budget, seed), ub = E.randomArmy(fb, theater, budget, seed + 1);
-  const warn = $("#cu-warn");
-  if (!ua.length || !ub.length) { warn.hidden = false; warn.textContent = "Une des factions n'a pas d'unités pour ce théâtre. Changez de faction ou de théâtre."; return; }
-  warn.hidden = true;
-  launch(E.createGame({ name: E.FACTIONS[fa].short + " contre " + E.FACTIONS[fb].short, biome, turnLimit: 12, seed,
-    sides: [{ faction: fa, units: ua, control: "human" }, { faction: fb, units: ub, control: $("#cu-ctrl").value }] }));
+function openBuilder(draft){
+  BD = draft || store(() => JSON.parse(localStorage.getItem(DRAFT_KEY))) || newDraft();
+  $("#menu").hidden = true; $("#battle").hidden = true; $("#builder").hidden = false;
+  $("#bd-msg").textContent = "";
+  renderBuilder();
+  window.scrollTo(0, 0);
+}
+function closeBuilder(){
+  saveDraft();
+  $("#builder").hidden = true; $("#menu").hidden = false;
+  renderMine();
+  window.scrollTo(0, 0);
+}
+
+function renderBuilder(){
+  pruneDraft();
+  $("#bd-name").value = BD.name;
+  $("#bd-biome").value = BD.biome;
+  $("#bd-limit").value = String(BD.turnLimit);
+  $("#bd-deploy").value = BD.deploy;
+  $("#bd-budget").value = String(BD.budget);
+  const fopts = (sel) => Object.keys(E.FACTIONS).map(f => '<option value="' + f + '"' + (f === sel ? " selected" : "") + '>' + esc(E.FACTIONS[f].name) + '</option>').join("");
+  const scroll = Array.from(document.querySelectorAll(".bd-list")).map(el => el.scrollTop);
+  $("#bd-sides").innerHTML = BD.sides.map((sd, i) => {
+    const groups = {};
+    draftTypes(sd).forEach(t => (groups[T[t].faction] = groups[T[t].faction] || []).push(t));
+    let list = "";
+    for (const f of Object.keys(E.FACTIONS)) {
+      if (!groups[f]) continue;
+      if (sd.all) list += '<div class="bd-group">' + esc(E.FACTIONS[f].name) + '</div>';
+      list += groups[f].sort((a, b) => T[a].cost - T[b].cost).map(t => {
+        const Ty = T[t], n = sd.units[t] || 0, s0 = Ty.sprites[0];
+        const pic = spriteOk(s0) ? '<img src="' + sprUrl(s0) + '" alt="">' : '<span class="tok">' + esc(initials(Ty.name)) + '</span>';
+        return '<div class="bd-row' + (n ? ' on' : '') + '">' + pic +
+          '<div><b>' + esc(Ty.name) + '</b><small title="Points de vie · Mouvement · Tir (dés / portée) · Mêlée · Défense">PV ' + Ty.hp + ' · Mv ' + Ty.mv + ' · Tir ' + (Ty.att ? Ty.att + '/' + Ty.rng : '—') + ' · Mêl ' + (Ty.cac || '—') + ' · Déf ' + Ty.def + '</small></div>' +
+          '<span class="cost">' + Ty.cost + ' pts</span>' +
+          '<span class="stepper"><button data-side="' + i + '" data-type="' + t + '" data-d="-1" aria-label="Retirer : ' + esc(Ty.name) + '">−</button><span>' + n + '</span><button data-side="' + i + '" data-type="' + t + '" data-d="1" aria-label="Ajouter : ' + esc(Ty.name) + '">+</button></span></div>';
+      }).join("");
+    }
+    if (!list) list = '<p class="hint">Cette faction n\'a pas d\'unités pour ce théâtre. Cochez « Toutes les factions » ou changez de faction.</p>';
+    const units = draftUnits(sd);
+    return '<section class="panel-card bd-side" style="--c:' + SIDE_COLORS[i] + '">' +
+      '<h2>' + SIDE_LABEL[i] + '</h2>' +
+      '<div class="form-grid">' +
+        '<div class="field"><label for="bd-sname-' + i + '">Nom du camp</label><input id="bd-sname-' + i + '" data-side="' + i + '" data-f="name" maxlength="32" placeholder="' + esc(E.FACTIONS[sd.faction].name) + '" value="' + esc(sd.name) + '"></div>' +
+        '<div class="field"><label for="bd-fac-' + i + '">Faction</label><select id="bd-fac-' + i + '" data-side="' + i + '" data-f="faction">' + fopts(sd.faction) + '</select></div>' +
+        '<div class="field"><label for="bd-ctl-' + i + '">Aux commandes</label><select id="bd-ctl-' + i + '" data-side="' + i + '" data-f="control"><option value="human"' + (sd.control === "human" ? " selected" : "") + '>Joueur</option><option value="ai"' + (sd.control === "ai" ? " selected" : "") + '>IA</option></select></div>' +
+      '</div>' +
+      '<label class="check"><input type="checkbox" id="bd-all-' + i + '" data-side="' + i + '" data-f="all"' + (sd.all ? " checked" : "") + '> Toutes les factions (armée mixte, mercenaires…)</label>' +
+      '<div class="bd-list">' + list + '</div>' +
+      '<div class="bd-total"><b>' + units.length + ' unité' + (units.length > 1 ? "s" : "") + ' · ' + draftPoints(sd) + ' pts</b>' +
+        '<span class="actions"><button class="btn sm" data-random="' + i + '">Au hasard</button><button class="btn sm ghost" data-clear="' + i + '">Vider</button></span></div>' +
+      '</section>';
+  }).join("");
+  document.querySelectorAll(".bd-list").forEach((el, i) => { el.scrollTop = scroll[i] || 0; });
+  saveDraft();
+}
+
+function onBuilderClick(ev){
+  const b = ev.target.closest("button"); if (!b) return;
+  if (b.dataset.d) {
+    const sd = BD.sides[+b.dataset.side], t = b.dataset.type;
+    sd.units[t] = Math.max(0, Math.min(40, (sd.units[t] || 0) + +b.dataset.d));
+    renderBuilder(); return;
+  }
+  if (b.dataset.random != null) {
+    const sd = BD.sides[+b.dataset.random], theater = E.BIOMES[BD.biome].theater;
+    const army = E.randomArmy(sd.faction, theater, BD.budget, Math.floor(Math.random() * 1e9));
+    if (!army.length) { $("#bd-msg").textContent = E.FACTIONS[sd.faction].name + " n'a pas d'unités pour ce théâtre : composez l'armée à la main."; return; }
+    sd.units = {};
+    army.forEach(t => { sd.units[t] = (sd.units[t] || 0) + 1; });
+    $("#bd-msg").textContent = "";
+    renderBuilder(); return;
+  }
+  if (b.dataset.clear != null) { BD.sides[+b.dataset.clear].units = {}; renderBuilder(); }
+}
+function onBuilderChange(ev){
+  const el = ev.target;
+  if (el.id === "bd-name") { BD.name = el.value.trim() || "Ma bataille"; saveDraft(); return; }
+  if (el.id === "bd-biome") BD.biome = el.value;
+  else if (el.id === "bd-limit") BD.turnLimit = +el.value;
+  else if (el.id === "bd-deploy") BD.deploy = el.value;
+  else if (el.id === "bd-budget") BD.budget = +el.value;
+  else if (el.dataset.f) {
+    const sd = BD.sides[+el.dataset.side];
+    sd[el.dataset.f] = el.type === "checkbox" ? el.checked : el.value;
+    if (el.dataset.f === "name") { saveDraft(); return; }
+  } else return;
+  renderBuilder();
+}
+
+function draftProblem(d){
+  const empty = d.sides.map((sd, i) => draftUnits(sd).length ? null : SIDE_LABEL[i].toLowerCase()).filter(Boolean);
+  return empty.length ? "Ajoutez au moins une unité au " + empty.join(" et au ") + "." : null;
+}
+
+function launchDraft(d){
+  const manual = d.deploy === "manual";
+  const s = E.createGame({
+    name: d.name, biome: d.biome, turnLimit: d.turnLimit, mode: manual ? "libre" : "regles",
+    sides: d.sides.map(sd => ({ name: sd.name || E.FACTIONS[sd.faction].name, faction: sd.faction, control: sd.control, units: draftUnits(sd) })),
+  });
+  s.replay = JSON.parse(JSON.stringify(d));
+  if (manual) {
+    E.log(s, { k: "info", text: "Déploiement à la main : glissez vos unités où vous voulez, peignez le terrain si besoin, puis passez en mode Règles pour lancer la bataille." });
+    ui.tab = "select";
+  }
+  $("#builder").hidden = true;
+  launch(s);
+}
+
+function onLaunchDraft(){
+  const pb = draftProblem(BD);
+  if (pb) { $("#bd-msg").textContent = pb; return; }
+  saveDraft();
+  launchDraft(BD);
+}
+function onSaveDraft(){
+  const pb = draftProblem(BD);
+  if (pb) { $("#bd-msg").textContent = pb; return; }
+  const list = loadMine();
+  if (!BD.id) BD.id = "b" + Date.now().toString(36);
+  const copy = JSON.parse(JSON.stringify(BD));
+  const i = list.findIndex(x => x.id === BD.id);
+  if (i >= 0) list[i] = copy; else list.unshift(copy);
+  saveMine(list);
+  saveDraft();
+  $("#bd-msg").textContent = "« " + BD.name + " » est enregistrée dans Mes batailles.";
+}
+
+function renderMine(){
+  const list = loadMine();
+  $("#mine-section").hidden = !list.length;
+  $("#mine-grid").innerHTML = list.map(d => {
+    const strip = (sd) => Object.keys(sd.units).filter(t => T[t] && sd.units[t] && T[t].sprites[0]).sort((a, b) => T[b].cost - T[a].cost)
+      .slice(0, 3).map(t => '<img data-spr="' + T[t].sprites[0] + '" alt="' + esc(T[t].name) + '">').join("");
+    const n = d.sides.map(sd => draftUnits(sd).length), pts = d.sides.map(draftPoints);
+    const who = d.sides.map(sd => sd.name || E.FACTIONS[sd.faction].short);
+    return '<article class="scen">' +
+      '<div class="strip"><div class="grp">' + strip(d.sides[0]) + '</div><span class="vs">VS</span><div class="grp">' + strip(d.sides[1]) + '</div></div>' +
+      '<h3>' + esc(d.name) + '</h3><p>' + esc(who[0]) + ' contre ' + esc(who[1]) + '.</p>' +
+      '<div class="meta">' + esc(E.BIOMES[d.biome] ? E.BIOMES[d.biome].name : "") + ' · ' + (d.turnLimit ? d.turnLimit + ' tours' : 'sans limite') + ' · ' + n[0] + ' contre ' + n[1] + ' unités<br>' +
+        pts[0] + ' contre ' + pts[1] + ' pts · déploiement ' + (d.deploy === "manual" ? "à la main" : "automatique") + '</div>' +
+      '<div class="row"><button class="btn sm primary" data-mine-play="' + d.id + '">Jouer</button><button class="btn sm" data-mine-edit="' + d.id + '">Modifier</button><button class="btn sm ghost danger" data-mine-del="' + d.id + '">Supprimer</button></div>' +
+      '</article>';
+  }).join("");
+  renderMenuThumbs();
 }
 
 function startGM(){
@@ -443,7 +669,7 @@ function launch(state){
   ui.sel = null; ui.pending = null; ui.overShown = !!G.over; ui.targeting = false; ui.aiToken++;
   ui.aiRunning = false; ui.busy = false;
   if (G.mode === "libre" && ui.tab === "select" && !G.units.length) ui.tab = "units";
-  $("#menu").hidden = true; $("#battle").hidden = false;
+  $("#menu").hidden = true; $("#builder").hidden = true; $("#battle").hidden = false;
   ui.zoom = window.innerWidth < 700 ? 2.1 : 1;
   applyZoom();
   buildBoard();
@@ -475,7 +701,13 @@ function refreshSelection(){
   if (!u) { ui.sel = null; ui.reach = null; ui.targets = []; ui.pending = null; ui.special = false; return; }
   const own = isMyTurnUnit(u);
   ui.reach = G.mode === "regles" && own && !u.moved ? E.reachable(G, u) : null;
-  if (G.mode === "regles") ui.targets = own && !u.acted ? E.targets(G, u, { special: ui.special }) : [];
+  if (G.mode === "regles") {
+    if (own && !u.acted) {
+      const ranged = E.targets(G, u, { special: ui.special });
+      const close = ui.special ? [] : E.meleeTargets(G, u);
+      ui.targets = ranged.concat(close.filter(t => ranged.indexOf(t) < 0));
+    } else ui.targets = [];
+  }
   else ui.targets = ui.targeting ? G.units.filter(t => t !== u && t.side !== u.side) : [];
   if (ui.pending != null && !ui.targets.some(t => t.uid === ui.pending)) ui.pending = null;
   if (ui.special && !(T[u.type].ability && (u.uses[T[u.type].ability.id] || 0) > 0)) ui.special = false;
@@ -743,7 +975,7 @@ function unitCard(u){
   const look = lookLabel(u), variant = look ? look + " · " : "";
   let html = '<div class="ucard">' + thumbHtml(u) + '<div><h2>' + esc(u.name) + '</h2><div class="sub">' + esc(variant + Ty.name) + ' · <span style="color:' + SIDE_COLORS[u.side] + '">' + esc(u.side < 2 ? G.sides[u.side].name : "Neutre") + '</span></div></div></div>';
   html += '<div class="hpline"><div class="hpbar"><i style="width:' + (frac * 100).toFixed(0) + '%;background:' + color + '"></i></div><span>' + u.hp + ' / ' + max + ' PV</span></div>';
-  html += '<div class="stats">' + [["mv", "Mouv."], ["rng", "Portée"], ["att", "Att."], ["def", "Déf."]].map(([k, l]) =>
+  html += '<div class="stats">' + [["mv", "Mouv."], ["rng", "Portée"], ["att", "Tir"], ["cac", "Mêlée"], ["def", "Déf."]].map(([k, l]) =>
     '<div><b>' + E.stat(u, k) + '</b><span>' + l + '</span></div>').join("") + '</div>';
   const tags = Ty.tags.filter(t => E.TAGS[t] && E.TAGS[t].desc);
   if (tags.length) html += '<div class="chips">' + tags.map(t => '<span class="chip" title="' + esc(E.TAGS[t].desc) + '">' + esc(E.TAGS[t].name) + '</span>').join("") + '</div>';
@@ -752,13 +984,37 @@ function unitCard(u){
   return html;
 }
 
-function oddsHtml(a, t, special){
-  const p = E.profile(G, a, t, { special });
-  return '<div class="odds"><div class="big">' + esc(a.name) + ' → ' + esc(t.name) + '</div>' +
-    '<div class="mono">' + p.dice + ' dés · touche sur ' + p.need + '+ · ' + p.defDice + ' dés de défense sur ' + p.defNeed + '+' + (p.dmg > 1 ? ' · ' + p.dmg + ' dégâts par touche' : '') + '</div>' +
-    '<div class="mono">Dégâts attendus ≈ ' + p.expected.toFixed(1) + ' (cible : ' + t.hp + ' PV)</div>' +
+// Ce que l'unité a peut faire contre t. En mode libre, le MJ arbitre la
+// portée : seule compte la présence d'une arme de tir ou de corps à corps.
+function attackOptions(a, t){
+  const libre = G.mode === "libre";
+  const shoot = libre ? E.stat(a, "att") > 0 || ui.special : E.canShoot(G, a, t, { special: ui.special });
+  const close = !ui.special && (libre ? E.stat(a, "cac") > 0 : E.canMelee(G, a, t));
+  return { shoot, close };
+}
+function bestKind(a, t){
+  const o = attackOptions(a, t);
+  if (o.shoot && o.close) return E.meleeProfile(G, a, t).expected > E.profile(G, a, t, { special: ui.special }).expected ? "melee" : "shot";
+  return o.close ? "melee" : "shot";
+}
+function oddsBlock(title, p, extra, act, label, primary){
+  return '<div class="opt"><div class="opt-head"><b>' + title + '</b><span class="mono">≈ ' + p.expected.toFixed(1) + ' dégâts</span></div>' +
+    '<div class="mono">' + p.dice + ' dés · touche sur ' + p.need + '+ · défense ' + p.defDice + ' dés sur ' + p.defNeed + '+' + (p.dmg > 1 ? ' · ' + p.dmg + ' dégâts par touche' : '') + '</div>' +
+    (extra || '') +
     (p.notes.length ? '<ul>' + p.notes.map(n => '<li>' + esc(n) + '</li>').join("") + '</ul>' : '') +
-    '<div class="actions"><button class="btn primary sm" data-act="fire">Tirer</button><button class="btn sm ghost" data-act="cancel-target">Annuler</button></div></div>';
+    '<button class="btn sm' + (primary ? ' primary' : '') + '" data-act="' + act + '">' + label + '</button></div>';
+}
+function oddsHtml(a, t){
+  const o = attackOptions(a, t), best = bestKind(a, t);
+  let html = '<div class="odds"><div class="big">' + esc(a.name) + ' → ' + esc(t.name) + ' <span class="mono">(' + t.hp + ' PV)</span></div>';
+  if (o.shoot) html += oddsBlock(ui.special ? T[a.type].ability.name : "Tir", E.profile(G, a, t, { special: ui.special }), "", "fire", "Tirer", best === "shot");
+  if (o.close) {
+    const rp = E.stat(t, "cac") > 0 ? E.meleeProfile(G, t, a, { riposte: true }) : null;
+    const extra = rp ? '<div class="mono">Si elle tient, la cible riposte : ' + rp.dice + ' dés sur ' + rp.need + '+ (≈ ' + rp.expected.toFixed(1) + ')</div>' : '<div class="mono">La cible ne peut pas riposter.</div>';
+    html += oddsBlock("Corps à corps", E.meleeProfile(G, a, t), extra, "melee", "Attaquer au corps à corps", best === "melee");
+  }
+  if (!o.shoot && !o.close) html += '<p class="hint">Cette unité n\'a aucun moyen d\'atteindre la cible.</p>';
+  return html + '<div class="actions"><button class="btn sm ghost" data-act="cancel-target">Annuler</button></div></div>';
 }
 
 function renderConsole(){
@@ -777,7 +1033,7 @@ function rulesPanel(u){
   let html = '<div class="box">';
   if (!u) {
     if (G.over) html += '<p class="hint">La bataille est terminée. Passez en mode Libre pour continuer à jouer la scène, ou revenez à l\'accueil.</p>';
-    else if (isHumanTurn()) html += '<h3>À vous de jouer</h3><p class="hint">Sélectionnez une unité de votre camp (anneau ' + (G.active === 0 ? "bleu" : "rouge") + '). Les cases bleues montrent où elle peut aller, les cibles en pointillés rouges celles qu\'elle peut toucher. Chaque unité se déplace puis tire, une fois par tour.</p>';
+    else if (isHumanTurn()) html += '<h3>À vous de jouer</h3><p class="hint">Sélectionnez une unité de votre camp (anneau ' + (G.active === 0 ? "bleu" : "rouge") + '). Les cases bleues montrent où elle peut aller, les cibles en pointillés rouges celles qu\'elle peut toucher. Chaque unité se déplace puis attaque (tir, ou corps à corps au contact), une fois par tour.</p>';
     else html += '<h3>L\'IA réfléchit</h3><p class="hint">' + esc(G.sides[G.active].name) + ' joue son tour.</p>';
     return html + '</div>';
   }
@@ -785,7 +1041,7 @@ function rulesPanel(u){
   const own = isMyTurnUnit(u);
   if (own) {
     const Ty = T[u.type];
-    html += '<div class="status">' + (u.acted ? "Activation terminée." : u.moved ? "A bougé, peut encore tirer." : "Peut se déplacer puis tirer.") + '</div>';
+    html += '<div class="status">' + (u.acted ? "Activation terminée." : u.moved ? "A bougé, peut encore attaquer." : "Peut se déplacer puis attaquer.") + '</div>';
     html += '<div class="actions">';
     if (!u.acted && Ty.ability && Ty.ability.type === "shot" && (u.uses[Ty.ability.id] || 0) > 0)
       html += '<button class="btn sm' + (ui.special ? ' primary' : '') + '" data-act="special" aria-pressed="' + ui.special + '">' + esc(Ty.ability.name) + '</button>';
@@ -795,8 +1051,8 @@ function rulesPanel(u){
     html += '</div>';
     if (!u.acted && !ui.targets.length) html += '<p class="hint">Aucune cible à portée' + (u.moved ? "." : " : déplacez-vous d'abord.") + '</p>';
     const t = ui.pending != null ? E.byUid(G, ui.pending) : null;
-    if (t) html += oddsHtml(u, t, ui.special);
-    else if (ui.targets.length) html += '<p class="hint">Cliquez une cible pour voir les chances, puis tirez.</p>';
+    if (t) html += oddsHtml(u, t);
+    else if (ui.targets.length) html += '<p class="hint">Cliquez une cible pour voir les chances (tir ou corps à corps), puis cliquez-la une seconde fois ou choisissez l\'attaque.</p>';
   }
   return html + '</div>';
 }
@@ -823,16 +1079,16 @@ function selectTab(u){
   if (Ty.anySprite) html += '<div class="field"><label for="ed-spr">Apparence</label><select id="ed-spr"><option value="">Jeton à initiales</option>' + LOOKS.map(l => '<option value="' + l.sprite + '"' + (u.sprite === l.sprite ? " selected" : "") + '>' + esc(l.label) + '</option>').join("") + '</select></div>';
   else if (Ty.sprites.length > 1) html += '<div class="field"><label for="ed-spr">Apparence</label><select id="ed-spr">' + Ty.sprites.map((s, i) => '<option value="' + s + '"' + (u.sprite === s ? " selected" : "") + '>' + esc(Ty.variants ? Ty.variants[i] : "Modèle " + (i + 1)) + '</option>').join("") + '</select></div>';
   html += '</div>';
-  html += '<div class="edit-grid">' + [["hp", "PV max"], ["mv", "Mouv."], ["rng", "Portée"], ["att", "Att."], ["def", "Déf."]].map(([k, l]) =>
+  html += '<div class="edit-grid">' + [["hp", "PV max"], ["mv", "Mouv."], ["rng", "Portée"], ["att", "Tir"], ["cac", "Mêlée"], ["def", "Déf."]].map(([k, l]) =>
     '<div class="field"><label for="ov-' + k + '">' + l + '</label><input id="ov-' + k + '" data-ov="' + k + '" type="number" min="0" max="99" value="' + E.stat(u, k) + '"></div>').join("") + '</div>';
   html += '<div class="actions">' +
-    '<button class="btn sm' + (ui.targeting ? ' primary' : '') + '" data-act="target">' + (ui.targeting ? "Choisissez la cible…" : "Faire tirer") + '</button>' +
+    '<button class="btn sm' + (ui.targeting ? ' primary' : '') + '" data-act="target">' + (ui.targeting ? "Choisissez la cible…" : "Attaquer") + '</button>' +
     (E.isAction(Ty.ability) ? '<button class="btn sm" data-act="spawn"' + ((u.uses[Ty.ability.id] || 0) > 0 ? '' : ' disabled') + '>' + esc(Ty.ability.name) + '</button>' : '') +
     '<button class="btn sm" data-act="dup">Dupliquer</button>' +
     '<button class="btn sm danger" data-act="del">Retirer</button></div>';
   if (ui.targeting) {
     const t = ui.pending != null ? E.byUid(G, ui.pending) : null;
-    if (t) html += oddsHtml(u, t, false);
+    if (t) html += oddsHtml(u, t);
     else html += '<p class="hint">Cliquez le pion visé. En mode libre, la portée n\'est pas imposée : à vous d\'arbitrer.</p>';
   }
   return html;
@@ -956,6 +1212,50 @@ async function animateAttack(a, t, res, from, to){
   if (res.killed && gt) { gt.remove(); unitEls.delete(t.uid); }
 }
 
+// Corps à corps : les deux pions se jettent l'un vers l'autre, gerbe
+// d'étincelles au point d'impact, puis la riposte s'il y en a une.
+async function animateMelee(a, t, res, from, to){
+  const fx = $("#L-fx"), ga = unitEls.get(a.uid), gt = unitEls.get(t.uid);
+  const p = E.center(from.c, from.r, R), q = E.center(to.c, to.r, R);
+  const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2;
+  const lunge = (g, base, toward, k) => { if (g) { g._anim = true; g.setAttribute("transform", "translate(" + (base.x + (toward.x - base.x) * k).toFixed(1) + "," + (base.y + (toward.y - base.y) * k).toFixed(1) + ")"); } };
+  const sparks = (color) => {
+    const g = svgEl("g", {});
+    for (let i = 0; i < 9; i++) {
+      const ang = Math.random() * Math.PI * 2, len = 6 + Math.random() * 12;
+      g.appendChild(svgEl("line", { x1: mx, y1: my, x2: mx + Math.cos(ang) * len, y2: my + Math.sin(ang) * len, stroke: color, "stroke-width": 2, "stroke-linecap": "round" }));
+    }
+    fx.appendChild(g);
+    return g;
+  };
+  const pop = (pt, r) => {
+    const txt = svgEl("text", { class: "pop", x: pt.x, y: pt.y - 10, fill: r.dmg ? "#ffcf5a" : "#bfe9ff" });
+    txt.textContent = r.dmg ? "−" + r.dmg : (r.crits + r.norm ? "Paré" : "Raté");
+    fx.appendChild(txt);
+    return txt;
+  };
+  await tween(140, k => lunge(ga, p, q, k * 0.35));
+  const s1 = sparks("#ffe08a"), t1 = pop(q, res.strike);
+  await tween(160, k => lunge(ga, p, q, 0.35 * (1 - k)));
+  if (res.riposte) {
+    await wait(120);
+    await tween(140, k => lunge(gt, q, p, k * 0.35));
+    const s2 = sparks("#ff9d7a"), t2 = pop(p, res.riposte);
+    await tween(160, k => lunge(gt, q, p, 0.35 * (1 - k)));
+    await wait(350);
+    s2.remove(); t2.remove();
+  } else await wait(350);
+  s1.remove(); t1.remove();
+  if (ga) ga._anim = false;
+  if (gt) gt._anim = false;
+  for (const [u, g] of [[t, gt], [a, ga]]) {
+    if (!g || E.byUid(G, u.uid)) continue;
+    g._dying = true;
+    await tween(400, k => g.setAttribute("opacity", (1 - k).toFixed(2)));
+    g.remove(); unitEls.delete(u.uid);
+  }
+}
+
 function banner(){
   if (G.mode !== "regles" || G.over) return;
   const wrap = $(".board-wrap");
@@ -978,13 +1278,14 @@ async function doMove(u, c, r){
   commit();
   // Après un déplacement, on propose directement la cible la plus proche.
 }
-async function doAttack(a, t, special){
+async function doAttack(a, t, kind){
   const from = { c: a.c, r: a.r }, to = { c: t.c, r: t.r };
   ui.busy = true; ui.pending = null; ui.targets = []; ui.reach = null; renderOverlay();
-  const res = E.attack(G, a, t, { special });
+  const res = kind === "melee" ? E.melee(G, a, t) : E.attack(G, a, t, { special: ui.special });
   ui.special = false; ui.targeting = false;
   render();
-  await animateAttack(a, t, res, from, to);
+  if (res.melee) await animateMelee(a, t, res, from, to);
+  else await animateAttack(a, t, res, from, to);
   ui.busy = false;
   if (G.mode === "regles" && a.acted && ui.sel === a.uid) ui.sel = null;
   commit();
@@ -1042,10 +1343,11 @@ async function runAI(){
       ui.pending = t.uid; ui.targets = [t]; renderOverlay();
       await wait(200);
       const from = { c: u.c, r: u.r }, to = { c: t.c, r: t.r };
-      const res = E.attack(G, u, t, { special: act.special });
+      const res = act.melee ? E.melee(G, u, t) : E.attack(G, u, t, { special: act.special });
       ui.targets = []; ui.pending = null;
       render();
-      await animateAttack(u, t, res, from, to);
+      if (res.melee) await animateMelee(u, t, res, from, to);
+      else await animateAttack(u, t, res, from, to);
     } else if (act.type === "ability") {
       E.useAbility(G, u);
       await wait(300);
@@ -1139,7 +1441,7 @@ function clickHex(h){
     if (G.over) { ui.sel = u ? u.uid : null; commit(false); return; }
     if (sel && isMyTurnUnit(sel)) {
       if (u && ui.targets.some(t => t.uid === u.uid)) {
-        if (ui.pending === u.uid) { doAttack(sel, u, ui.special); return; }
+        if (ui.pending === u.uid) { doAttack(sel, u, bestKind(sel, u)); return; }
         ui.pending = u.uid; render(); return;
       }
       if (!u && ui.reach && ui.reach.dest.has(E.key(h.c, h.r))) { doMove(sel, h.c, h.r); return; }
@@ -1160,7 +1462,7 @@ function clickHex(h){
   }
   if (ui.targeting && sel) {
     if (u && u !== sel && u.side !== sel.side) {
-      if (ui.pending === u.uid) { doAttack(sel, u, false); return; }
+      if (ui.pending === u.uid) { doAttack(sel, u, bestKind(sel, u)); return; }
       ui.pending = u.uid; render(); return;
     }
     ui.targeting = false; ui.pending = null;
@@ -1180,7 +1482,7 @@ function onConsoleClick(ev){
   if (b.dataset.place) { const same = ui.tool === "place" && ui.place === b.dataset.place; ui.tool = same ? "select" : "place"; ui.place = b.dataset.place; ui.sel = null; render(); return; }
   if (b.dataset.paint) { const same = ui.tool === "paint" && ui.paint === b.dataset.paint; ui.tool = same ? "select" : "paint"; ui.paint = b.dataset.paint; render(); return; }
   if (b.dataset.roll) { rollFormula(b.dataset.roll); return; }
-  if (act === "fire" && u && ui.pending != null) { const t = E.byUid(G, ui.pending); if (t) doAttack(u, t, ui.special); return; }
+  if ((act === "fire" || act === "melee") && u && ui.pending != null) { const t = E.byUid(G, ui.pending); if (t) doAttack(u, t, act === "fire" ? "shot" : "melee"); return; }
   if (act === "cancel-target") { ui.pending = null; ui.targeting = false; render(); return; }
   if (act === "special" && u) { ui.special = !ui.special; ui.pending = null; refreshSelection(); render(); return; }
   if (act === "spawn" && u) { doSpawn(u); return; }
@@ -1193,7 +1495,7 @@ function onConsoleClick(ev){
     if (spot) { const n = E.addUnit(G, u.type, u.side, spot.c, spot.r, { sprite: u.sprite }); n.ov = u.ov ? Object.assign({}, u.ov) : null; n.hp = u.hp; n.facing = u.facing; ui.sel = n.uid; }
     commit(); return;
   }
-  if (act === "del" && u) { G.units.splice(G.units.indexOf(u), 1); ui.sel = null; commit(); return; }
+  if (act === "del" && u) { E.removeUnit(G, u); ui.sel = null; commit(); return; }
   if (act === "regen") { askConfirm("Générer une nouvelle carte ?", "Le terrain actuel sera remplacé. Les pions restent en place.", "Générer", () => { const m = E.generateMap(G.map.biome, Math.floor(Math.random() * 1e9)); G.map = m; buildBoard(); commit(); }); return; }
   if (act === "clear-map") { askConfirm("Effacer le terrain ?", "Toutes les cases redeviennent dégagées. Les pions restent en place.", "Effacer", () => { G.map.hexes.fill(G.map.theater === "space" ? "vide" : "plaine"); buildBoard(); commit(); }); return; }
   if (act === "export") { showExport(); return; }
@@ -1257,16 +1559,17 @@ function showRules(){
   const rows = Object.keys(T).map(id => {
     const Ty = T[id];
     return '<tr><td>' + esc(Ty.name) + '</td><td>' + esc(E.FACTIONS[Ty.faction].short) + '</td><td>' + (Ty.theater === "space" ? "Espace" : Ty.theater === "ground" ? "Sol" : "Tous") + '</td>' +
-      ['hp', 'mv', 'rng', 'att', 'def', 'cost'].map(k => '<td class="n">' + Ty[k] + '</td>').join("") +
+      ['hp', 'mv', 'rng', 'att', 'cac', 'def', 'cost'].map(k => '<td class="n">' + Ty[k] + '</td>').join("") +
       '<td>' + esc(Ty.tags.filter(t => E.TAGS[t] && E.TAGS[t].desc).map(t => E.TAGS[t].name).concat(Ty.ability ? [Ty.ability.name] : []).join(", ")) + '</td></tr>';
   }).join("");
   const ter = Object.keys(E.TERRAIN).map(id => '<li><b>' + esc(E.TERRAIN[id].name) + '</b> (' + (E.TERRAIN[id].theater === "space" ? "espace" : "sol") + ') : ' + esc(terrainRulesRaw(id)) + '</li>').join("");
   openModal('<header><h2>Règles de l\'Holotable</h2><button class="btn sm ghost" data-m="close">Fermer</button></header><div class="rules">' +
-    '<section><h3>Le tour</h3><p>Les camps jouent chacun leur tour. Pendant votre tour, chaque unité peut <b>se déplacer puis tirer</b>, une fois. Tirer termine l\'activation : on ne bouge plus après. Une bataille se gagne en détruisant toute l\'armée adverse, ou aux points à la fin du dernier tour : chaque PV retiré rapporte une part du coût de l\'unité touchée, une unité détruite rapporte tout son coût.</p></section>' +
+    '<section><h3>Le tour</h3><p>Les camps jouent chacun leur tour. Pendant votre tour, chaque unité peut <b>se déplacer puis attaquer</b> (tir ou corps à corps), une fois. Attaquer termine l\'activation : on ne bouge plus après. Une bataille se gagne en détruisant toute l\'armée adverse, ou aux points à la fin du dernier tour : chaque PV retiré rapporte une part du coût de l\'unité touchée, une unité détruite rapporte tout son coût.</p></section>' +
     '<section><h3>Déplacement</h3><p>Une unité dépense sa valeur de Mouvement case par case. Le terrain peut coûter plus cher ou être interdit. On traverse ses alliés, jamais l\'ennemi, et on ne s\'arrête pas sur une case occupée.</p></section>' +
-    '<section><h3>Tir</h3><ul><li>La cible doit être à portée et en ligne de vue (les rochers et nébuleuses coupent la vue).</li><li>Lancez autant de d6 que l\'Attaque. Chaque dé égal ou supérieur au seuil touche. Seuil de base : <b>4+</b>, +1 si la cible est à couvert, +1 si une arme lourde vise une cible agile.</li><li>Les <b>6 sont critiques</b> : ils touchent toujours et ne s\'esquivent pas.</li><li>Contre une cible <b>blindée</b>, seuls les 6 touchent, sauf avec une arme perforante.</li><li>La cible lance ses dés de Défense : chaque 5+ annule une touche normale.</li><li>Chaque touche restante retire 1 PV (2 pour certaines armes spéciales).</li></ul></section>' +
+    '<section><h3>Tir</h3><ul><li>La cible doit être à portée et en ligne de vue (les rochers et nébuleuses coupent la vue).</li><li>Lancez autant de d6 que la valeur de Tir. Chaque dé égal ou supérieur au seuil touche. Seuil de base : <b>4+</b>, +1 si la cible est à couvert, +1 si une arme lourde vise une cible agile.</li><li>Les <b>6 sont critiques</b> : ils touchent toujours et ne s\'esquivent pas.</li><li>Contre une cible <b>blindée</b>, seuls les 6 touchent, sauf avec une arme perforante.</li><li>La cible lance ses dés de Défense : chaque 5+ annule une touche normale (4+ pour un sabre laser, un bouclier de droïdeka ou une armure en beskar).</li><li>Chaque touche restante retire 1 PV (2 pour certaines armes spéciales).</li></ul></section>' +
+    '<section><h3>Corps à corps</h3><ul><li>Une unité au contact d\'un ennemi (case voisine) peut l\'attaquer au corps à corps au lieu de tirer, avec ses dés de <b>Mêlée</b>. Une unité à 0 en Mêlée n\'en est pas capable.</li><li>Touche sur <b>4+</b>, <b>+1 dé de charge</b> si l\'unité a bougé ce tour. Le couvert ne protège pas au contact.</li><li>Le blindage tient : seuls les 6 touchent un véhicule blindé, sauf au <b>sabre laser</b>, qui le tranche.</li><li>Défense comme au tir (5+), mais un Jedi ou un Sith <b>pare sur 4+</b>, comme un Mandalorien en beskar. Le bouclier d\'un droïdeka ne sert à rien au contact.</li><li>Si la cible survit et sait se battre, elle <b>riposte</b> aussitôt avec ses propres dés de Mêlée, sur 5+.</li><li>Jedi, Sith et gardes gamorréens n\'ont pas d\'arme à distance : ils doivent aller au contact. Les Jedi et les Sith frappent malgré tout de loin, deux fois par bataille, par la Force.</li></ul></section>' +
     '<section><h3>Terrain</h3><ul>' + ter + '</ul></section>' +
-    '<section><h3>Unités</h3><div class="tbl-wrap"><table><thead><tr><th>Unité</th><th>Faction</th><th>Théâtre</th><th>PV</th><th>Mv</th><th>Port.</th><th>Att</th><th>Déf</th><th>Pts</th><th>Particularités</th></tr></thead><tbody>' + rows + '</tbody></table></div></section>' +
+    '<section><h3>Unités</h3><div class="tbl-wrap"><table><thead><tr><th>Unité</th><th>Faction</th><th>Théâtre</th><th>PV</th><th>Mv</th><th>Port.</th><th>Tir</th><th>Mêlée</th><th>Déf</th><th>Pts</th><th>Particularités</th></tr></thead><tbody>' + rows + '</tbody></table></div></section>' +
     '<section><h3>À la table de jeu de rôle</h3><ul><li>Ouvrez une <b>Table du MJ</b> et posez les pions au fil de la scène. Le pion <b>Personnage</b> représente un PJ ou un PNJ : renommez-le et réglez ses caractéristiques.</li><li>En mode <b>Libre</b>, tout se déplace à la main, les PV s\'ajustent avec + et −, et « Faire tirer » résout un tir avec les règles ci-dessus sans imposer la portée.</li><li>Passez en mode <b>Règles</b> quand la bataille doit se jouer d\'elle-même, avec l\'IA aux commandes d\'un camp si vous le voulez (bouton Camps).</li><li>L\'onglet <b>Dés</b> lance des réserves de d6 ou n\'importe quelle formule (d20, 3d6+2…) pour votre propre système.</li></ul></section>' +
     '</div>');
 }
@@ -1325,6 +1628,14 @@ function importText(txt){
   }
 }
 
+function showReport(){
+  if (!G) return;
+  openModal('<header><h2>Rapport de bataille</h2><button class="btn sm ghost" data-m="close">Fermer</button></header>' +
+    '<p class="hint">À coller dans vos notes de MJ : issue, PV restants des personnages, pertes de chaque camp et faits d\'armes. Il se consulte aussi en cours de bataille.</p>' +
+    '<pre class="report" id="rp-text">' + esc(E.report(G)) + '</pre>' +
+    '<div class="actions"><button class="btn primary" data-m="copy-report">Copier le rapport</button></div><p class="hint" id="rp-msg" role="status"></p>');
+}
+
 function showVictory(){
   if (!G || !G.over) return;
   const w = G.over.winner;
@@ -1333,7 +1644,7 @@ function showVictory(){
   openModal('<div class="victory" style="--c:' + (w < 0 ? "var(--holo)" : SIDE_COLORS[w]) + ';display:grid;gap:14px">' +
     '<div class="eyebrow">Tour ' + G.turn + '</div><h2>' + title + '</h2><p class="hint">' + esc(who) + '</p>' +
     '<div class="mono">' + esc(G.sides[0].name) + ' ' + Math.round(G.score[0]) + ' pts · ' + esc(G.sides[1].name) + ' ' + Math.round(G.score[1]) + ' pts</div>' +
-    '<div class="actions" style="justify-content:center">' + (G.scenario ? '<button class="btn primary" data-m="replay">Rejouer</button>' : '') +
+    '<div class="actions" style="justify-content:center">' + (G.scenario || G.replay ? '<button class="btn primary" data-m="replay">Rejouer</button>' : '') + '<button class="btn" data-m="report">Rapport de bataille</button>' +
     '<button class="btn" data-m="free">Continuer en mode libre</button><button class="btn ghost" data-m="menu">Accueil</button></div></div>');
 }
 
@@ -1351,7 +1662,14 @@ function onModalClick(ev){
     catch (e) { ta.select(); }
   }
   else if (m === "import") importText($("#ex-text").value);
-  else if (m === "replay") { const sc = G.scenario, ctl = G.sides.map(s => s.control); closeModal(); launch(E.createScenario(sc, ctl)); }
+  else if (m === "replay") { closeModal(); if (G.replay) launchDraft(G.replay); else launch(E.createScenario(G.scenario, G.sides.map(s => s.control))); }
+  else if (m === "report") showReport();
+  else if (m === "copy-report") {
+    const pre = $("#rp-text"), msg = $("#rp-msg");
+    const fallback = () => { const r = document.createRange(); r.selectNodeContents(pre); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); msg.textContent = "Copie refusée par le navigateur : le texte est sélectionné, copiez-le à la main."; };
+    try { navigator.clipboard.writeText(pre.textContent).then(() => { msg.textContent = "Rapport copié."; }, fallback); }
+    catch (e) { fallback(); }
+  }
   else if (m === "free") { closeModal(); setMode("libre"); }
   else if (m === "menu") { closeModal(); toMenu(); }
 }
@@ -1383,14 +1701,30 @@ function bind(){
   document.addEventListener("click", ev => {
     const b = ev.target.closest("[data-scen]");
     if (b) launch(E.createScenario(b.dataset.scen, ["human", b.dataset.ctrl]));
+    const es = ev.target.closest("[data-edit-scen]");
+    if (es) openBuilder(draftFromScenario(E.SCENARIOS.find(x => x.id === es.dataset.editScen)));
+    const mp = ev.target.closest("[data-mine-play]");
+    if (mp) { const d = loadMine().find(x => x.id === mp.dataset.minePlay); if (d) launchDraft(d); }
+    const me = ev.target.closest("[data-mine-edit]");
+    if (me) { const d = loadMine().find(x => x.id === me.dataset.mineEdit); if (d) openBuilder(JSON.parse(JSON.stringify(d))); }
+    const md = ev.target.closest("[data-mine-del]");
+    if (md) {
+      const d = loadMine().find(x => x.id === md.dataset.mineDel);
+      if (d) askConfirm("Supprimer « " + d.name + " » ?", "La bataille disparaît de Mes batailles. Une partie en cours n'est pas touchée.", "Supprimer", () => { saveMine(loadMine().filter(x => x.id !== d.id)); renderMine(); });
+    }
   });
-  $("#btn-custom").addEventListener("click", startCustom);
+  $("#btn-builder").addEventListener("click", () => openBuilder());
+  $("#bd-back").addEventListener("click", closeBuilder);
+  $("#bd-launch").addEventListener("click", onLaunchDraft);
+  $("#bd-save").addEventListener("click", onSaveDraft);
+  $("#builder").addEventListener("click", onBuilderClick);
+  $("#builder").addEventListener("change", onBuilderChange);
   $("#btn-gm").addEventListener("click", startGM);
   $("#btn-rules").addEventListener("click", showRules);
   $("#btn-resume").addEventListener("click", () => { const s = store(() => JSON.parse(localStorage.getItem(SAVE_KEY))); if (s && s.map) launch(s); });
-  $("#cu-biome").addEventListener("change", fillFactionSelects);
   $("#b-menu").addEventListener("click", toMenu);
   $("#b-help").addEventListener("click", showRules);
+  $("#b-report").addEventListener("click", showReport);
   $("#b-sides").addEventListener("click", showSides);
   $("#b-end").addEventListener("click", endTurn);
   $("#m-rules").addEventListener("click", () => setMode("regles"));

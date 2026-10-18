@@ -7,7 +7,13 @@ Un jeu de bataille tactique sur plateau hexagonal, dans l'univers Star Wars, qui
   où l'on pose n'importe quel pion (y compris des personnages), où l'on peint le
   terrain, déplace tout à la main, suit les PV et lance les dés ;
 - **jouer un jeu de stratégie à part entière** : escarmouches en tour par tour,
-  contre l'IA ou à deux, sur des scénarios prêts à jouer ou des batailles générées.
+  contre l'IA ou à deux, sur des scénarios prêts à jouer ou composées dans le
+  *bac à sable* (armées unité par unité, factions mélangées, déploiement
+  automatique ou à la main), enregistrées dans *Mes batailles*.
+
+Un **rapport de bataille** en texte brut, à copier dans les notes du MJ, résume
+l'issue, les PV restants des personnages, les pertes de chaque camp et les faits
+d'armes (bouton *Rapport*, ou à la fin de la bataille).
 
 ## Lancer le jeu
 
@@ -33,19 +39,26 @@ Aucune dépendance, aucun build pour jouer en local.
 | Pègre et chasseurs de primes | Croiseur hutt, croiseur pirate, canonnière | Chasseurs de primes, Trandoshans, gardes gamorréens |
 | Indépendants | Yacht royal | Personnage : pion libre qui peut prendre l'apparence de n'importe quelle figurine |
 
-Onze escarmouches prêtes à jouer, et des batailles sur mesure entre n'importe quelles
-factions. Théâtres : espace profond (astéroïdes, nébuleuses), désert, lune forestière,
+Onze escarmouches prêtes à jouer, et autant de batailles que vous voulez dans le bac
+à sable. Théâtres : espace profond (astéroïdes, nébuleuses), désert, lune forestière,
 monde glacé.
 
 ## Règles en bref
 
-- Chaque camp joue son tour ; chaque unité **se déplace puis tire**, une fois.
+- Chaque camp joue son tour ; chaque unité **se déplace puis attaque** (tir ou corps
+  à corps), une fois.
 - Tir : autant de d6 que l'Attaque, touche sur **4+** (+1 si la cible est à couvert,
   +1 si une arme lourde vise une cible agile). Les **6 sont critiques** : impossibles
   à esquiver. Une cible **blindée** n'est touchée que sur 6, sauf arme perforante.
 - Défense : la cible lance ses dés de Défense, chaque 5+ annule une touche normale.
-- Les Jedi et les Sith frappent au contact et renvoient les tirs (esquive sur 4+),
-  les droïdekas ont un bouclier, les Mandaloriens volent au réacteur dorsal.
+- Corps à corps, contre une case voisine : autant de d6 que la valeur de Mêlée,
+  +1 dé de charge si l'unité a bougé, touche sur 4+. Pas de couvert au contact ; le
+  blindage tient, sauf face à un sabre laser. Si la cible survit, elle **riposte**
+  aussitôt avec ses propres dés de Mêlée, sur 5+.
+- Les Jedi et les Sith n'ont pas de blaster : ils se battent au sabre (6 et 7 dés),
+  parent et renvoient les tirs sur 4+, et frappent de loin par la Force deux fois par
+  bataille. Les Mandaloriens esquivent et parent sur 4+ grâce au beskar, et volent au
+  réacteur dorsal ; les droïdekas ont un bouclier contre les tirs.
 - Victoire par anéantissement, ou aux points à la fin du dernier tour : chaque PV
   retiré rapporte une part du coût de l'unité touchée.
 
