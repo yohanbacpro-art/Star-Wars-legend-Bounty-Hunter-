@@ -65,9 +65,20 @@ Aucune dépendance, aucun build pour jouer en local.
 | Pègre et chasseurs de primes | Croiseur hutt, croiseur pirate, canonnière | Chasseurs de primes, Trandoshans, gardes gamorréens |
 | Indépendants | Yacht royal | Personnage : pion libre qui peut prendre l'apparence de n'importe quelle figurine |
 
-Onze escarmouches prêtes à jouer, et autant de batailles que vous voulez dans le bac
-à sable. Théâtres : espace profond (astéroïdes, nébuleuses), désert, lune forestière,
-monde glacé.
+Quatorze escarmouches prêtes à jouer, et autant de batailles que vous voulez dans le
+bac à sable. Théâtres : espace profond (astéroïdes, nébuleuses), désert, lune
+forestière, monde glacé, et trois lieux bâtis dont le plan est construit, pas tiré au
+hasard :
+
+| Carte | Plan |
+|---|---|
+| Ville | Pâtés de maisons sur une trame de rues, une place avec fontaine, étals et caisses contre les façades, épaves de speeders |
+| Cantina | Alcôves cloisonnées en haut et en bas, comptoir circulaire au centre, piliers, tables dispersées |
+| Coursive de vaisseau | Cloisons partout sauf le couloir principal, deux coursives transversales et des cabines ; hangars aux deux bouts |
+
+Les règles de terrain ne changent pas : murs et bâtiments bloquent comme des rochers,
+tables, caisses et étals couvrent comme la végétation, comptoir et consoles comme des
+ruines.
 
 ## Règles en bref
 

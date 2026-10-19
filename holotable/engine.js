@@ -399,6 +399,15 @@ var Engine = (function () {
     neige: { name: "Monde glacé", theater: "ground",
       blobs: [["roche", 4, 5], ["foret", 3, 4], ["ruines", 3, 4], ["eau", 1, 4]],
       labels: { plaine: "Neige", foret: "Pins gelés", roche: "Glacier", ruines: "Tranchées", eau: "Lac gelé" } },
+    // Lieux bâtis : un plan construit plutôt que des taches de terrain.
+    // Mêmes règles de terrain, autres noms : les murs bloquent comme des
+    // rochers, le mobilier couvre comme la végétation.
+    ville: { name: "Ville", theater: "ground", gen: "city",
+      labels: { plaine: "Rue", foret: "Étals et caisses", roche: "Bâtiments", ruines: "Épaves de speeders", eau: "Fontaine" } },
+    cantina: { name: "Cantina", theater: "ground", gen: "cantina",
+      labels: { plaine: "Salle", foret: "Tables", roche: "Murs et piliers", ruines: "Comptoir", eau: "Fosse" } },
+    coursive: { name: "Coursive de vaisseau", theater: "ground", gen: "ship",
+      labels: { plaine: "Pont", foret: "Caisses de fret", roche: "Cloisons", ruines: "Consoles", eau: "Puits technique" } },
   };
 
   const SCENARIOS = [
@@ -457,6 +466,30 @@ var Engine = (function () {
       sides: [
         { faction: "republic", units: ["atap", "atrt", "clone", "clone", "clone", "clone", "clone", "clone"] },
         { faction: "separatists", units: ["droideka", "droideka", "droideka", "droideka", "droideka", "b2", "b2", "b2", "b2", "b2", "b2", "b1", "b1", "b1", "b1", "b1", "b1"] },
+      ],
+    },
+    {
+      id: "rues", name: "Fusillade dans les rues", biome: "ville", turnLimit: 12,
+      blurb: "Une patrouille impériale et son marcheur traquent une cellule rebelle entre les façades d'une ville d'avant-poste. Chaque coin de rue est une embuscade.",
+      sides: [
+        { faction: "rebels", units: ["rebel", "rebel", "rebel", "rebel", "rebel", "rebel", "rebel", "rebel", "rebel", "rebel"] },
+        { faction: "empire", units: ["atst", "storm", "storm", "storm", "storm", "storm", "storm"] },
+      ],
+    },
+    {
+      id: "cantina", name: "Bagarre à la cantina", biome: "cantina", turnLimit: 10,
+      blurb: "Un contrat tourne mal au comptoir. Un chasseur de primes et ses gros bras contre une escouade impériale venue arrêter tout le monde, entre les tables renversées.",
+      sides: [
+        { faction: "underworld", units: ["chasseur", "trando", "trando", "gamorreen", "gamorreen", "gamorreen"] },
+        { faction: "empire", units: ["sith", "storm", "storm", "storm", "storm", "storm", "storm", "storm", "storm"] },
+      ],
+    },
+    {
+      id: "abordage", name: "Abordage", biome: "coursive", turnLimit: 12,
+      blurb: "Les Mandaloriens arrimés au flanc d'un croiseur de la République prennent les coursives d'assaut. Un Jedi et ses clones tiennent les cloisons.",
+      sides: [
+        { faction: "republic", units: ["jedi", "clone", "clone", "clone", "clone", "clone", "clone"] },
+        { faction: "mandalorians", units: ["mando", "mando", "commando", "commando", "commando"] },
       ],
     },
     {
@@ -578,13 +611,99 @@ var Engine = (function () {
 
   // ------------------------------------------------------------ Carte
 
+  // ------------------------------------------------------------ Plans bâtis
+
+  function setHex(map, c, r, ter) { if (inBounds(map, c, r)) map.hexes[r * map.cols + c] = ter; }
+  function getHex(map, c, r) { return inBounds(map, c, r) ? map.hexes[r * map.cols + c] : null; }
+
+  // Pose n éléments de mobilier sur des cases libres choisies par ok(c, r).
+  function scatter(map, R, ter, n, ok) {
+    for (let tries = 0; n > 0 && tries < 400; tries++) {
+      const c = 2 + Math.floor(R() * (map.cols - 4)), r = Math.floor(R() * map.rows);
+      if (getHex(map, c, r) !== "plaine" || !ok(c, r)) continue;
+      setHex(map, c, r, ter);
+      n--;
+    }
+  }
+
+  const PLANS = {
+    // Ville : des pâtés de maisons sur une trame de rues, une place avec sa
+    // fontaine, des étals contre les façades et quelques épaves de speeders.
+    city(map, R) {
+      const { cols, rows } = map;
+      let plaza = null;
+      for (let bx = 3; bx < cols - 3; bx += 3 + Math.floor(R() * 2)) {
+        for (let by = R() < 0.5 ? 0 : 1; by < rows; by += 4 + Math.floor(R() * 2)) {
+          if (!plaza && R() < 0.18) { plaza = { c: bx + 1, r: by + 1 }; continue; }
+          const w = 2 + Math.floor(R() * 2), h = 2 + Math.floor(R() * 2);
+          for (let c = bx; c < Math.min(bx + w, cols - 2); c++) for (let r = by; r < Math.min(by + h, rows); r++) setHex(map, c, r, "roche");
+        }
+      }
+      if (plaza) setHex(map, plaza.c, plaza.r, "eau");
+      const nextToWall = (c, r) => neighbors(map, c, r).some(h => getHex(map, h.c, h.r) === "roche");
+      scatter(map, R, "foret", 12, nextToWall);
+      scatter(map, R, "ruines", 4, (c, r) => !nextToWall(c, r));
+    },
+
+    // Cantina : alcôves cloisonnées en haut et en bas, comptoir circulaire au
+    // centre, piliers, tables dispersées. Portes sur les côtés.
+    cantina(map, R) {
+      const { cols, rows } = map;
+      const mid = { c: Math.floor(cols / 2), r: Math.floor(rows / 2) };
+      for (const r of [2, rows - 3]) for (let c = 3; c < cols - 3; c++) if ((c - 3) % 4 !== 2) setHex(map, c, r, "roche");
+      for (const r of [0, 1, rows - 2, rows - 1]) for (let c = 3; c < cols - 3; c++) {
+        if ((c - 3) % 4 === 0) setHex(map, c, r, "roche");                     // cloisons des alcôves
+        else if ((c - 3) % 4 === 2 && (r === 0 || r === rows - 1)) setHex(map, c, r, "foret"); // banquettes
+      }
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+        const dd = dist({ c, r }, mid);
+        if (dd === 2 && c !== mid.c - 2 && c !== mid.c + 2) setHex(map, c, r, "ruines"); // comptoir, ouvert à gauche et à droite
+        if (dd === 0) setHex(map, c, r, "roche");                                         // étagères à bouteilles
+      }
+      for (const [dc, dr] of [[-5, -2], [5, -2], [-5, 2], [5, 2]]) setHex(map, mid.c + dc, mid.r + dr, "roche");
+      scatter(map, R, "foret", 11, (c, r) => r > 2 && r < rows - 3 && dist({ c, r }, mid) > 3 && c > 2 && c < cols - 3);
+    },
+
+    // Coursive : tout est cloison, sauf un couloir principal sur toute la
+    // longueur, deux coursives transversales et des cabines reliées par des
+    // portes. Les deux extrémités dégagées font office de hangars.
+    ship(map, R) {
+      const { cols, rows } = map;
+      map.hexes.fill("roche");
+      const carve = (c, r) => setHex(map, c, r, "plaine");
+      const mid = Math.floor(rows / 2);
+      for (let c = 0; c < cols; c++) for (let r = mid - 1; r <= mid + 1; r++) carve(c, r);
+      for (const x of [6 + Math.floor(R() * 2), 13 + Math.floor(R() * 2)]) for (let r = 0; r < rows; r++) carve(x, r);
+      for (let x = 2; x < cols - 3; x += 5) {
+        for (const top of [true, false]) {
+          const w = 3, h = 3, r0 = top ? 1 : rows - 4;
+          for (let c = x; c < x + w; c++) for (let r = r0; r < r0 + h; r++) carve(c, r);
+          const door = x + 1;
+          if (top) for (let r = r0 + h; r < mid - 1; r++) carve(door, r);
+          else for (let r = mid + 2; r < r0; r++) carve(door, r);
+          let crates = 1 + Math.floor(R() * 2);
+          for (let tries = 0; crates > 0 && tries < 20; tries++) {
+            const c = x + Math.floor(R() * w), r = r0 + Math.floor(R() * h);
+            if (c === door || getHex(map, c, r) !== "plaine") continue;
+            setHex(map, c, r, "foret"); crates--;
+          }
+          if (R() < 0.35) setHex(map, x + (R() < 0.5 ? 0 : w - 1), top ? r0 : r0 + h - 1, "eau");
+        }
+      }
+      // Consoles le long des parois du couloir principal.
+      scatter(map, R, "ruines", 5, (c, r) => Math.abs(r - mid) <= 1 && c > 2 && c < cols - 3 &&
+        (getHex(map, c, r - 1) === "roche" || getHex(map, c, r + 1) === "roche"));
+    },
+  };
+
   function generateMap(biomeId, seed, opts) {
     const biome = BIOMES[biomeId] || BIOMES.desert;
     const R = hash(seed);
     const cols = (opts && opts.cols) || COLS, rows = (opts && opts.rows) || ROWS;
     const base = biome.theater === "space" ? "vide" : "plaine";
     const map = { cols, rows, biome: biomeId, theater: biome.theater, seed, hexes: new Array(cols * rows).fill(base) };
-    const blobs = (opts && opts.blobs) || biome.blobs;
+    if (biome.gen) PLANS[biome.gen](map, R);
+    const blobs = (opts && opts.blobs) || biome.blobs || [];
     for (const [ter, count, size] of blobs) {
       for (let i = 0; i < count; i++) {
         let c = 3 + Math.floor(R() * (cols - 6)), r = Math.floor(R() * rows);
@@ -1367,6 +1486,9 @@ var Engine = (function () {
 
   function guessBiome(text) {
     const t = plain(text);
+    if (/cantina|taverne|bar |saloon|auberge|tripot/.test(t + " ")) return "cantina";
+    if (/coursive|couloir|a bord|abordage|soute|hangar|station spatiale|passerelle|interieur du vaisseau/.test(t)) return "coursive";
+    if (/\bville\b|\bcite\b|rues?\b|spatioport|quartier|marche|mos eisley|mos espa|coruscant|bas-fonds|ruelle/.test(t)) return "ville";
     if (/espace|spatial|orbite|flotte|hyperespace|ceinture|asteroide|nebuleuse/.test(t)) return "espace";
     if (/neige|glace|glaciaire|hoth|gele|toundra/.test(t)) return "neige";
     if (/foret|endor|jungle|kashyyyk|yavin|marais|dagobah|lune forestiere/.test(t)) return "foret";

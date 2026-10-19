@@ -417,7 +417,81 @@ const LOOK = {
   desert: { plaine:"#c7a46b", foret:"#9a9550", roche:"#8a6646", ruines:"#a48c6c", eau:"#3f8797", tree:"#6f6d34", treeHi:"#b0ad5c", rock:"#6e4d33", rockHi:"#b48a60", wall:"#5e4a35", base:"#b9955c", pines:false },
   foret:  { plaine:"#5c7c44", foret:"#2f4c27", roche:"#666a5f", ruines:"#6f6851", eau:"#2f6482", tree:"#20391c", treeHi:"#55833c", rock:"#565b53", rockHi:"#949a8d", wall:"#3f3a2c", base:"#4b6a38", pines:false },
   neige:  { plaine:"#dbe5ee", foret:"#a9bcc8", roche:"#8794a0", ruines:"#b4bcc4", eau:"#86b6d4", tree:"#34524f", treeHi:"#6d918c", rock:"#6f7c88", rockHi:"#d2dde7", wall:"#5d6973", base:"#cfdbe5", pines:true },
+  // Lieux bâtis : `built` choisit les dessins de drawBuilt.
+  ville:    { built:"city",    plaine:"#8a847a", foret:"#7d6545", roche:"#4e4a45", ruines:"#5a6470", eau:"#4f8fa3", base:"#7f796f", mottle:.16 },
+  cantina:  { built:"cantina", plaine:"#5e4633", foret:"#7a5634", roche:"#2e2520", ruines:"#7b5a33", eau:"#16120f", base:"#55402f", mottle:.12 },
+  coursive: { built:"ship",    plaine:"#6d757e", foret:"#6b6a50", roche:"#262b31", ruines:"#2d3d4a", eau:"#14181c", base:"#5f666e", mottle:.1 },
 };
+
+// Décor des lieux bâtis : sols, murs et mobilier dessinés case par case.
+// Les murs débordent légèrement de leur case pour former des blocs continus.
+function drawBuilt(out, over, id, p, rnd, L){
+  const poly = (rad, fill, extra) => '<polygon points="' + hexPoints(p.x, p.y, rad) + '" fill="' + fill + '"' + (extra || "") + '/>';
+  const f = (n) => n.toFixed(1);
+  const jitter = 1 + (rnd() - 0.5) * 0.1;
+  const style = L.built;
+  if (id === "roche") {
+    if (style === "city") {
+      out.push(poly(R + 0.8, L.roche), poly(R * 0.74, "#5f5a54"));
+      if (rnd() < 0.6) out.push('<rect x="' + f(p.x - 6 + rnd() * 4) + '" y="' + f(p.y - 6 + rnd() * 4) + '" width="9" height="7" fill="#38342f" stroke="#6d675f" stroke-width=".6"/>');
+      if (rnd() < 0.4) out.push('<circle cx="' + f(p.x + 6) + '" cy="' + f(p.y + 5) + '" r="4" fill="#6c665e" stroke="#3a3631" stroke-width=".8"/>');
+    } else if (style === "cantina") {
+      out.push(poly(R + 0.8, L.roche), poly(R * 0.8, "#3b2f27"));
+      for (let i = 0; i < 4; i++) out.push('<circle cx="' + f(p.x + (rnd() - .5) * R) + '" cy="' + f(p.y + (rnd() - .5) * R) + '" r="' + f(1 + rnd() * 1.5) + '" fill="#2a211b"/>');
+    } else {
+      out.push(poly(R + 0.8, L.roche), poly(R * 0.78, "#323840"));
+      for (let i = 0; i < 6; i++) { const a = Math.PI / 3 * i - Math.PI / 6; out.push('<circle cx="' + f(p.x + Math.cos(a) * R * 0.62) + '" cy="' + f(p.y + Math.sin(a) * R * 0.62) + '" r="1.3" fill="#56606b"/>'); }
+    }
+    return;
+  }
+  // Sol de la case, sous le mobilier.
+  out.push(poly(R + 0.6, L.plaine, ' style="filter:brightness(' + jitter.toFixed(3) + ')"'));
+  if (style === "city") {
+    out.push('<path d="M' + f(p.x - R * .8) + ' ' + f(p.y - 4) + 'h' + f(R * 1.6) + 'M' + f(p.x - R * .8) + ' ' + f(p.y + 8) + 'h' + f(R * 1.6) + 'M' + f(p.x - 3) + ' ' + f(p.y - R * .8) + 'v' + f(R * .8 - 4) + 'M' + f(p.x + 7) + ' ' + f(p.y - 4) + 'v12" stroke="rgba(0,0,0,.14)" stroke-width=".8" fill="none"/>');
+  } else if (style === "cantina") {
+    for (const dy of [-10, -3, 4, 11]) out.push('<line x1="' + f(p.x - R * .85) + '" y1="' + f(p.y + dy) + '" x2="' + f(p.x + R * .85) + '" y2="' + f(p.y + dy) + '" stroke="rgba(0,0,0,.2)" stroke-width=".8"/>');
+  } else {
+    out.push('<rect x="' + f(p.x - 12) + '" y="' + f(p.y - 12) + '" width="24" height="24" fill="none" stroke="rgba(0,0,0,.28)" stroke-width=".9"/>');
+    for (const [dx, dy] of [[-9, -9], [9, -9], [-9, 9], [9, 9]]) out.push('<circle cx="' + f(p.x + dx) + '" cy="' + f(p.y + dy) + '" r=".9" fill="rgba(255,255,255,.25)"/>');
+  }
+  if (id === "foret") {
+    if (style === "city") {
+      for (let i = 0; i < 2; i++) {
+        const x = p.x + (rnd() - .5) * R * .7, y = p.y + (rnd() - .5) * R * .6, sz = 9 + rnd() * 5, rot = (rnd() - .5) * 30;
+        over.push('<g transform="translate(' + f(x) + ',' + f(y) + ') rotate(' + f(rot) + ')"><rect x="' + f(-sz / 2) + '" y="' + f(-sz / 2) + '" width="' + f(sz) + '" height="' + f(sz) + '" fill="' + L.foret + '" stroke="#3f3121" stroke-width="1"/><path d="M' + f(-sz / 2) + ' ' + f(-sz / 2) + 'L' + f(sz / 2) + ' ' + f(sz / 2) + 'M' + f(sz / 2) + ' ' + f(-sz / 2) + 'L' + f(-sz / 2) + ' ' + f(sz / 2) + '" stroke="#3f3121" stroke-width=".8"/></g>');
+      }
+    } else if (style === "cantina") {
+      over.push('<circle cx="' + f(p.x) + '" cy="' + f(p.y + 2) + '" r="' + f(R * .4) + '" fill="rgba(0,0,0,.3)"/>');
+      over.push('<circle cx="' + f(p.x) + '" cy="' + f(p.y) + '" r="' + f(R * .4) + '" fill="' + L.foret + '" stroke="#3f2c1b" stroke-width="1.2"/>');
+      for (let i = 0; i < 3; i++) { const a = rnd() * Math.PI * 2; over.push('<circle cx="' + f(p.x + Math.cos(a) * R * .62) + '" cy="' + f(p.y + Math.sin(a) * R * .62) + '" r="3" fill="#2f241c" stroke="#5a4330" stroke-width=".6"/>'); }
+      if (rnd() < .6) over.push('<circle cx="' + f(p.x + 3) + '" cy="' + f(p.y - 2) + '" r="1.6" fill="#7fd6c8" opacity=".8"/>');
+    } else {
+      over.push('<rect x="' + f(p.x - 13) + '" y="' + f(p.y - 8) + '" width="26" height="16" rx="1.5" fill="' + L.foret + '" stroke="#3e3d2e" stroke-width="1"/>');
+      over.push('<path d="M' + f(p.x - 13) + ' ' + f(p.y + 4) + 'h26" stroke="#c9a227" stroke-width="2" stroke-dasharray="4 3"/>');
+    }
+  } else if (id === "ruines") {
+    if (style === "city") {
+      over.push('<polygon points="' + blob(p.x, p.y, R * .5, rnd, 7) + '" fill="' + L.ruines + '" stroke="#2f353c" stroke-width="1"/>');
+      over.push('<circle cx="' + f(p.x + 3) + '" cy="' + f(p.y - 2) + '" r="5" fill="rgba(0,0,0,.35)"/>');
+    } else if (style === "cantina") {
+      out.push(poly(R + 0.6, L.ruines), poly(R * .62, "#94703f"));
+      const bottles = ["#7fd6c8", "#e8b04a", "#c45b4a", "#9fd36a"];
+      for (let i = 0; i < 4; i++) over.push('<circle cx="' + f(p.x + (rnd() - .5) * R * .9) + '" cy="' + f(p.y + (rnd() - .5) * R * .8) + '" r="1.7" fill="' + bottles[i] + '"/>');
+    } else {
+      over.push('<rect x="' + f(p.x - 11) + '" y="' + f(p.y - 9) + '" width="22" height="18" rx="2" fill="' + L.ruines + '" stroke="#16212a" stroke-width="1"/>');
+      over.push('<rect x="' + f(p.x - 8) + '" y="' + f(p.y - 6) + '" width="16" height="7" fill="#57c4e5" opacity=".7"/>');
+      over.push('<circle cx="' + f(p.x + 6) + '" cy="' + f(p.y + 5) + '" r="1.6" fill="#ff5d4f"/>');
+    }
+  } else if (id === "eau") {
+    if (style === "city") {
+      over.push('<circle cx="' + f(p.x) + '" cy="' + f(p.y) + '" r="' + f(R * .62) + '" fill="#8a8478" stroke="#5d5850" stroke-width="1"/>');
+      over.push('<circle cx="' + f(p.x) + '" cy="' + f(p.y) + '" r="' + f(R * .46) + '" fill="' + L.eau + '"/><circle cx="' + f(p.x) + '" cy="' + f(p.y) + '" r="4" fill="#8a8478"/>');
+    } else {
+      out.push(poly(R * .8, L.eau, ' stroke="' + (style === "ship" ? "#3a424c" : "#2a211b") + '" stroke-width="1.5"'));
+      for (const dx of [-8, -3, 2, 7]) over.push('<line x1="' + f(p.x + dx) + '" y1="' + f(p.y - R * .6) + '" x2="' + f(p.x + dx) + '" y2="' + f(p.y + R * .6) + '" stroke="' + (style === "ship" ? "#3a424c" : "#3a2e25") + '" stroke-width="1.4"/>');
+    }
+  }
+}
 
 // ---------------------------------------------------------------- État d'interface
 let G = null;
@@ -738,7 +812,7 @@ function briefFormat(){
     "Quand un combat éclate, ajoute à ta réponse un ordre de bataille pour Holotable, dans ce format exact :",
     "",
     "BATAILLE : <nom de la scène>",
-    "CARTE : espace | désert | forêt | neige",
+    "CARTE : espace | désert | forêt | neige | ville | cantina | coursive (intérieur d'un vaisseau)",
     "TOURS : <nombre de tours, 0 = jusqu'au bout>",
     "CAMP BLEU : <nom du camp des joueurs> (joueur)",
     "- <Nom du personnage> | <type d'unité> | PV <restants>/<maximum> | Mv <n> | Tir <n> | Portée <n> | Mêlée <n> | Déf <n>",
@@ -787,7 +861,7 @@ function briefPrompt(text){
     "- Pour chaque combattant, prends le type du catalogue le plus proche. Les personnages nommés gardent leur nom dans \"name\".",
     "- \"stats\" remplace des caractéristiques du type : mets-y ce que le texte permet d'établir, à l'échelle du catalogue. stats.hp est le maximum de PV ; pour un personnage blessé, ajoute stats.now, ses PV restants.",
     "- Un personnage sans type adapté prend le type \"hero\", avec une apparence \"look\" choisie parmi les figurines listées.",
-    "- biome : \"espace\" pour un combat spatial, sinon \"desert\", \"foret\" ou \"neige\" selon le lieu. Jamais d'unités spatiales au sol, ni l'inverse.",
+    "- biome : \"espace\" pour un combat spatial ; au sol, \"ville\" (rues, spatioport), \"cantina\" (bar, salle fermée), \"coursive\" (intérieur de vaisseau ou de station, abordage), sinon \"desert\", \"foret\" ou \"neige\" selon le paysage. Jamais d'unités spatiales au sol, ni l'inverse.",
     "- turnLimit : 12 par défaut, 0 si le combat doit aller jusqu'au bout.",
     "- summary : une phrase qui résume la situation. notes : ce que tu n'as pas pu représenter fidèlement, en phrases courtes. En français.",
     "",
@@ -1066,6 +1140,7 @@ function drawTerrain(){
       }
       continue;
     }
+    if (L.built) { drawBuilt(out, over, id, p, rnd, L); continue; }
     // Sol : teinte du terrain légèrement variée case par case.
     const jitter = (rnd() - 0.5) * 0.12;
     out.push('<polygon points="' + hexPoints(p.x, p.y, R + 0.6) + '" fill="' + terrainColor(id) + '" style="filter:brightness(' + (1 + jitter).toFixed(3) + ')"/>');
@@ -1105,7 +1180,7 @@ function drawTerrain(){
   }
   let extra = "";
   if (m.theater !== "space") {
-    extra = '<rect width="' + w + '" height="' + h + '" fill="#000" filter="url(#mottle)" opacity=".25"/>' +
+    extra = '<rect width="' + w + '" height="' + h + '" fill="#000" filter="url(#mottle)" opacity="' + (L.mottle || .25) + '"/>' +
             '<rect width="' + w + '" height="' + h + '" filter="url(#grain)"/>';
   }
   $("#L-ter").innerHTML = out.join("") + extra + over.join("");
@@ -1787,8 +1862,9 @@ function rollFormula(text){
 function onConsoleChange(ev){
   const el = ev.target, u = ui.sel != null ? E.byUid(G, ui.sel) : null;
   if (el.id === "ed-biome") {
-    const theater = E.BIOMES[el.value].theater;
-    if (theater === G.map.theater) { G.map.biome = el.value; buildBoard(); commit(); }
+    // Un plan bâti se régénère ; entre deux terrains naturels, seules les couleurs changent.
+    const theater = E.BIOMES[el.value].theater, built = E.BIOMES[el.value].gen || E.BIOMES[G.map.biome].gen;
+    if (theater === G.map.theater && !built) { G.map.biome = el.value; buildBoard(); commit(); }
     else { G.map = E.generateMap(el.value, Math.floor(Math.random() * 1e9)); ui.tool = "select"; buildBoard(); commit(); }
     return;
   }
